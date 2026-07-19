@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Container ID for the SourcePreferencesFragment (Phase 7).
+         Must be a stable resource ID so FragmentManager can find the view. -->
+    <item name="source_preferences_container" type="id" />
+</resources>

@@ -1,0 +1,27 @@
+package app.anikuta.domain.track.anime.interactor
+
+import logcat.LogPriority
+import app.anikuta.core.util.system.logcat
+import app.anikuta.domain.track.anime.model.AnimeTrack
+import app.anikuta.domain.track.anime.repository.AnimeTrackRepository
+
+class InsertAnimeTrack(
+    private val animetrackRepository: AnimeTrackRepository,
+) {
+
+    suspend fun await(track: AnimeTrack) {
+        try {
+            animetrackRepository.insertAnime(track)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e)
+        }
+    }
+
+    suspend fun awaitAll(tracks: List<AnimeTrack>) {
+        try {
+            animetrackRepository.insertAllAnime(tracks)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e)
+        }
+    }
+}

@@ -1,0 +1,22 @@
+import java.util.Date;
+
+CREATE TABLE anilist_cache(
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    cache_key TEXT NOT NULL UNIQUE,
+    cache_value TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    ttl_ms INTEGER NOT NULL
+);
+
+getCacheEntry:
+SELECT * FROM anilist_cache WHERE cache_key = :cache_key;
+
+upsertCacheEntry:
+INSERT OR REPLACE INTO anilist_cache(cache_key, cache_value, created_at, ttl_ms)
+VALUES (:cache_key, :cache_value, :created_at, :ttl_ms);
+
+deleteCacheEntry:
+DELETE FROM anilist_cache WHERE cache_key = :cache_key;
+
+clearCache:
+DELETE FROM anilist_cache;

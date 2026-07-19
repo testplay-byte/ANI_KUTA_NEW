@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Cache dir: where downloaded extension APKs are stored before being
+         handed to the system package installer. Used by ExtensionsViewModel
+         when launching ACTION_VIEW with the APK URI. -->
+    <cache-path name="ext_apks" path="." />
+</paths>

@@ -1,0 +1,62 @@
+# =============================================================================
+# Secrets — NEVER commit these
+# =============================================================================
+MEMORY/CREDENTIALS/github-token.txt
+MEMORY/CREDENTIALS/supabase-credentials.md
+MEMORY/CREDENTIALS/keystore/
+MEMORY/CREDENTIALS/*.env
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.env
+.env
+.env.*
+secrets.properties
+keystore.properties
+
+# =============================================================================
+# Built APKs (binaries — keep the folder, ignore the files)
+# =============================================================================
+BUILD-APK/*.apk
+BUILD-APK/**/*.apk
+*.aab
+
+# =============================================================================
+# Android / Gradle / Kotlin (for when app/ source is added)
+# =============================================================================
+# Gradle
+.gradle/
+build/
+*/build/
+**/build/
+
+# Local config (machine-specific)
+local.properties
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+*.kotlin_metadata
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+*.apk
+*.ap_
+*.dex
+*.class
+REFERENCE-EXTENSIONS/
+.kotlin/

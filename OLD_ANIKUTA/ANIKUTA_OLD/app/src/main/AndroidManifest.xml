@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required for download foreground service (Android 9+).
+         Without this, DownloadWorker.setForeground() crashes on API 28+.
+         Used by the download worker to keep downloads alive when the app
+         is backgrounded (Android 12+ kills background work after ~30s). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required for download foreground service type on Android 14+ (API 34+).
+         DownloadWorker uses FOREGROUND_SERVICE_TYPE_DATA_SYNC. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Required to install downloaded extension APKs on Android 8+ (API 26+).
+         Without this, ACTION_VIEW on a content:// URI to an .apk silently
+         fails. aniyomi declares the same permission. Safe for sideloaded apps;
+         Google Play restricts it but we don't distribute via Play. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Required to discover installed anime extensions on Android 11+ (API 30+).
+         Without this, PackageManager.getInstalledPackages() only returns packages
+         with a matching <queries> declaration, so installed extensions are invisible
+         and the source chain shows "zero sources available". aniyomi uses the same
+         permission. Safe for sideloaded apps; Google Play restricts it but we don't
+         distribute via Play. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Phase N: Required to re-schedule the release tracker after device reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Phase N: Required to request battery-optimization exemption so the
+         release tracker can run in the background reliably. Some OEMs (Xiaomi,
+         Huawei, Samsung) aggressively kill background apps without this. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Allow intent-based extension discovery on Android 11+ (package
+         visibility). The intent-based fallback in AnimeExtensionLoader uses
+         queryIntentActivities(Intent("tachiyomi.animeextension")). Without
+         this <queries> declaration, that query returns nothing on API 30+. -->
+    <queries>
+        <intent>
+            <action android:name="tachiyomi.animeextension" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="ANI-KUTA"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Anikuta">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Anikuta">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- AniList OAuth callback (Phase 6 task 6.7). Uses aniyomi's
+                 redirect URI because we use their client ID (5338). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aniyomi" android:host="anilist-auth" />
+            </intent-filter>
+        </activity>
+
+        <!-- MPV video player. Orientation set at runtime based on mode preference
+             (portrait for minimized, landscape for fullscreen). configChanges
+             prevents Activity recreation on orientation changes. -->
+        <activity
+            android:name=".player.PlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|fontScale"
+            android:screenOrientation="sensorPortrait"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.Anikuta" />
+
+        <!-- Global crash screen. Shown by AnikutaCrashHandler when the app crashes. -->
+        <activity
+            android:name=".error.ErrorActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Anikuta" />
+
+        <!-- FileProvider for sharing downloaded extension APKs with the system
+             package installer (ExtensionsViewModel.installExtension). The
+             authority is "${applicationId}.fileprovider" — matches the runtime
+             lookup `Context.packageName + ".fileprovider"`. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- WorkManager's foreground service — merged with the library's own
+             declaration to add the foregroundServiceType attribute. Without this,
+             calling setForeground() with FOREGROUND_SERVICE_TYPE_DATA_SYNC on
+             Android 14+ (API 34+) crashes with:
+             "foregroundServiceType 0x00000001 is not a subset of foregroundServiceType
+              attribute 0x00000000 in service element of manifest file"
+             The library declares the service without a type because it doesn't
+             know what type the app will use. We override it here. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <!-- Phase N: Re-schedules the release tracker after device boot or app update. -->
+        <receiver
+            android:name=".notification.BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

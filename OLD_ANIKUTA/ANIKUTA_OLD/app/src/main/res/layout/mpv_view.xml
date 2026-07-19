@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ANI-KUTA MPV player surface.
+
+  This layout exists so AnikutaMPVView can be inflated with a REAL
+  XmlBlock$Parser-backed AttributeSet. Compose's AndroidView factory gives
+  us no XML; building a fake AttributeSet from Xml.newPullParser() crashes
+  on construction (ClassCastException: XmlPullAttributes cannot be cast to
+  XmlBlock$Parser) because Resources.obtainStyledAttributes requires a
+  real resource parser. Inflating from this layout produces that parser
+  naturally. See AnikutaMPVView.kt doc for the full rationale.
+-->
+<app.anikuta.player.AnikutaMPVView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

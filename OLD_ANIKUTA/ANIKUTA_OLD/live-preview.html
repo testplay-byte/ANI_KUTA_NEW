@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANI-KUTA — Project Hub</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root { --bg: #0a0a0a; --card: #18181b; --border: #27272a; --fg: #e4e4e7; --muted: #71717a; --primary: #10b981; --amber: #f59e0b; --violet: #8b5cf6; --rose: #f43f5e; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; }
+.container { max-width: 800px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+h1 { font-size: 2.5rem; margin-bottom: 0.25rem; }
+.tagline { font-size: 1.2rem; color: var(--muted); margin-bottom: 2rem; }
+.stats { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; }
+.stat { padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.stat-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); }
+.stat-value { font-size: 1rem; font-weight: bold; margin-top: 2px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.card { display: block; padding: 1.5rem; border: 2px solid; border-radius: 12px; text-decoration: none; color: inherit; transition: transform 0.2s; }
+.card:hover { transform: scale(1.02); }
+.card-amber { border-color: var(--amber); }
+.card-violet { border-color: var(--violet); }
+.card h2 { margin-bottom: 0.5rem; font-size: 1.1rem; }
+.card p { font-size: 0.85rem; color: var(--muted); }
+.section { padding: 1.5rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1rem; background: var(--card); }
+.section h2 { margin-bottom: 0.75rem; font-size: 1.1rem; }
+.section ul { line-height: 1.8; padding-left: 1.5rem; }
+.section li { margin-bottom: 0.25rem; }
+.section code { background: #27272a; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
+.badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
+.badge-green { background: rgba(16,185,129,0.15); color: var(--primary); }
+.badge-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+a { color: var(--primary); }
+.footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ANI-KUTA</h1>
+  <p class="tagline">Anime streaming, reimagined.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Phase</div><div class="stat-value">6 Complete ✅</div></div>
+    <div class="stat"><div class="stat-label">Build Target</div><div class="stat-value">arm64-v8a</div></div>
+    <div class="stat"><div class="stat-label">min SDK</div><div class="stat-value">26 (8.0+)</div></div>
+    <div class="stat"><div class="stat-label">APK Size</div><div class="stat-value">~38 MB</div></div>
+    <div class="stat"><div class="stat-label">Latest Build</div><div class="stat-value">68c9e02</div></div>
+  </div>
+
+  <div class="cards">
+    <a class="card card-amber" href="https://github.com/testplay-byte/anikuta/actions/runs/latest">
+      <h2>🔨 Build Progress</h2>
+      <p>Phase 6 complete. All builds on GitHub Actions. Download the latest APK.</p>
+    </a>
+    <a class="card card-violet" href="https://github.com/testplay-byte/anikuta/blob/main/DOCS/PLAN/ROADMAP.md">
+      <h2>🎯 Project Plan</h2>
+      <p>Roadmap, designs, caching strategy, onboarding, decisions.</p>
+    </a>
+  </div>
+
+  <div class="section">
+    <h2>Phase 6 — App Functionality + Polish <span class="badge badge-green">Complete</span></h2>
+    <ul>
+      <li><strong>Settings reorganization:</strong> 7 subpages (General, Player, Extensions, Downloads, Tracking, About)</li>
+      <li><strong>Player UX:</strong> Loading overlay, resume "start over?" overlay (10s auto-dismiss)</li>
+      <li><strong>Extension management:</strong> Install/uninstall/update from within the app</li>
+      <li><strong>AniList tracking:</strong> OAuth login, progress sync, anime status</li>
+      <li><strong>Downloads:</strong> WorkManager queue, partial resumption, quality settings, offline playback</li>
+      <li><strong>Polish:</strong> Skeleton loading, error/empty states</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Architecture</h2>
+    <p>5-module Gradle project: <code>:app</code>, <code>:core</code>, <code>:data</code>, <code>:domain</code>, <code>:source-api</code></p>
+    <p style="margin-top:0.5rem;color:var(--muted)">Injekt DI · SQLDelight · MPV (ffmpeg-kit) · AniList GraphQL · Supabase cache · Material 3 Expressive · Compose BOM 2025.04.01 · Kotlin 2.2.0</p>
+  </div>
+
+  <div class="section">
+    <h2>Roadmap</h2>
+    <ul>
+      <li><span class="badge badge-green">Done</span> Phase 0: Foundation</li>
+      <li><span class="badge badge-green">Done</span> Phase 1: Skeleton + onboarding</li>
+      <li><span class="badge badge-green">Done</span> Phase 2: AniList + caching + home UI</li>
+      <li><span class="badge badge-green">Done</span> Phase 3: Detail page</li>
+      <li><span class="badge badge-green">Done</span> Phase 4: Video player (MPV)</li>
+      <li><span class="badge badge-green">Done</span> Phase 5: Library + History + Search + Source wiring</li>
+      <li><span class="badge badge-green">Done</span> Phase 6: App Functionality + Polish</li>
+      <li><span class="badge badge-amber">Next</span> Phase 7: Player fixes + feature polish</li>
+      <li>Phase 8: Polish + backup + production-ready</li>
+      <li>Phase 9 (last): 4 designs + theming</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Download APK</h2>
+    <p><a href="https://github.com/testplay-byte/anikuta/actions/runs/latest" style="font-weight:bold;font-size:1.1rem">Download latest APK from GitHub Actions →</a></p>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:0.5rem">Build #90 (68c9e02) · ~38 MB · ARM64-v8a · Android 8.0+</p>
+  </div>
+
+  <div class="footer">ANI-KUTA — Built with Next.js + Tailwind + shadcn/ui</div>
+</div>
+</body>
+</html>
