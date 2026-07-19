@@ -40,7 +40,7 @@ object AnimeMapper {
         artist = artist,
         author = author,
         description = description,
-        genre = genre?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
+        genre = genre?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList(),
         coverUrl = coverUrl,
         status = status.toInt(),
         thumbnailUrl = thumbnailUrl,
