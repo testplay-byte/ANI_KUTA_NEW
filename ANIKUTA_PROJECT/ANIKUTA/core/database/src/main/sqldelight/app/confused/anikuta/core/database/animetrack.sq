@@ -1,0 +1,40 @@
+-- animetrack.sq — Tracker bindings per anime
+
+CREATE TABLE animetrack (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    anime_id INTEGER NOT NULL,
+    tracker_id INTEGER NOT NULL,
+    remote_id INTEGER NOT NULL,
+    remote_url TEXT,
+    last_seen INTEGER NOT NULL DEFAULT 0,
+    score REAL NOT NULL DEFAULT 0,
+    status INTEGER NOT NULL DEFAULT 0,
+    total_episodes INTEGER NOT NULL DEFAULT 0,
+    display_score TEXT,
+    FOREIGN KEY (anime_id) REFERENCES animes(_id) ON DELETE CASCADE
+);
+
+selectByAnimeId:
+SELECT * FROM animetrack WHERE anime_id = :animeId;
+
+selectByAnimeIdAndTrackerId:
+SELECT * FROM animetrack WHERE anime_id = :animeId AND tracker_id = :trackerId;
+
+insert:
+INSERT INTO animetrack (
+    anime_id, tracker_id, remote_id, remote_url, last_seen,
+    score, status, total_episodes, display_score
+) VALUES (
+    :animeId, :trackerId, :remoteId, :remoteUrl, :lastSeen,
+    :score, :status, :totalEpisodes, :displayScore
+);
+
+update:
+UPDATE animetrack SET
+    remote_id = :remoteId, remote_url = :remoteUrl, last_seen = :lastSeen,
+    score = :score, status = :status, total_episodes = :totalEpisodes,
+    display_score = :displayScore
+WHERE _id = :id;
+
+delete:
+DELETE FROM animetrack WHERE _id = :id;

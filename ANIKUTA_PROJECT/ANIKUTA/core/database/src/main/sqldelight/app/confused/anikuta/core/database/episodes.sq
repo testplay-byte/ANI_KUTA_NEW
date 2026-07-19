@@ -1,0 +1,66 @@
+-- episodes.sq — Episode table (anime-specific fields included)
+
+CREATE TABLE episodes (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    anime_id INTEGER NOT NULL,
+    url TEXT,
+    name TEXT NOT NULL,
+    episode_number REAL NOT NULL,
+    scanlator TEXT,
+    seen INTEGER NOT NULL DEFAULT 0,
+    bookmark INTEGER NOT NULL DEFAULT 0,
+    last_second_seen INTEGER NOT NULL DEFAULT 0,
+    total_seconds INTEGER NOT NULL DEFAULT 0,
+    source_order INTEGER NOT NULL,
+    date_fetch INTEGER NOT NULL,
+    date_upload INTEGER,
+
+    -- Anime-specific fields
+    fillermark TEXT,
+    summary TEXT,
+    preview_url TEXT,
+
+    FOREIGN KEY (anime_id) REFERENCES animes(_id) ON DELETE CASCADE
+);
+
+selectByAnimeId:
+SELECT * FROM episodes WHERE anime_id = :animeId ORDER BY source_order;
+
+selectById:
+SELECT * FROM episodes WHERE _id = :id;
+
+selectByAnimeIdAndNumber:
+SELECT * FROM episodes WHERE anime_id = :animeId AND episode_number = :number;
+
+insert:
+INSERT INTO episodes (
+    anime_id, url, name, episode_number, scanlator, seen, bookmark,
+    last_second_seen, total_seconds, source_order, date_fetch, date_upload,
+    fillermark, summary, preview_url
+) VALUES (
+    :animeId, :url, :name, :episodeNumber, :scanlator, :seen, :bookmark,
+    :lastSecondSeen, :totalSeconds, :sourceOrder, :dateFetch, :dateUpload,
+    :fillermark, :summary, :previewUrl
+);
+
+update:
+UPDATE episodes SET
+    url = :url, name = :name, episode_number = :episodeNumber,
+    scanlator = :scanlator, seen = :seen, bookmark = :bookmark,
+    last_second_seen = :lastSecondSeen, total_seconds = :totalSeconds,
+    date_fetch = :dateFetch, date_upload = :dateUpload,
+    fillermark = :fillermark, summary = :summary, preview_url = :previewUrl
+WHERE _id = :id;
+
+updateSeen:
+UPDATE episodes SET seen = :seen, last_second_seen = :lastSecondSeen, total_seconds = :totalSeconds
+WHERE _id = :id;
+
+updateBookmark:
+UPDATE episodes SET bookmark = :bookmark WHERE _id = :id;
+
+delete:
+DELETE FROM episodes WHERE _id = :id;
+
+deleteByAnimeId:
+DELETE FROM episodes WHERE anime_id = :animeId;

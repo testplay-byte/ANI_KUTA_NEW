@@ -41,6 +41,11 @@ dependencies {
     // Core modules
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
+    implementation(projects.core.database)
+
+    // Data modules (for Koin wiring)
+    implementation(projects.data.anime)
+    implementation(projects.data.history)
 
     // Koin (ADR-023)
     implementation(platform(libs.koin.bom))
@@ -61,4 +66,5 @@ dependencies {
 
     // Testing
     testImplementation(libs.bundles.test)
+    testImplementation(kotlinx.coroutines.test)
 }

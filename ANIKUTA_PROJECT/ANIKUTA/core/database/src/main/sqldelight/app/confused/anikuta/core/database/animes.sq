@@ -1,0 +1,82 @@
+-- animes.sq — Anime table with status-tracking columns (ADR-024)
+
+CREATE TABLE animes (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    title TEXT NOT NULL,
+    artist TEXT,
+    author TEXT,
+    description TEXT,
+    genre TEXT,           -- comma-separated
+    cover_url TEXT,
+    status INTEGER NOT NULL,    -- 0=unknown, 1=ongoing, 2=completed, ...
+    thumbnail_url TEXT,
+    favorite INTEGER NOT NULL DEFAULT 0,
+    source_id INTEGER NOT NULL,
+    date_added INTEGER NOT NULL,
+    viewer_flags INTEGER NOT NULL DEFAULT 0,
+    next_update INTEGER NOT NULL DEFAULT 0,
+    update_strategy INTEGER NOT NULL DEFAULT 0,
+    cover_last_modified INTEGER NOT NULL DEFAULT 0,
+
+    -- Status-tracking columns (ADR-024)
+    release_date INTEGER,            -- when the anime was first released
+    last_refresh INTEGER NOT NULL DEFAULT 0,    -- last time refreshed from source
+    last_metadata_fetch INTEGER,     -- last time metadata was fetched (AniList/ext)
+    next_episode_check INTEGER       -- when to next check for new episodes (ADR-014)
+);
+
+selectAll:
+SELECT * FROM animes;
+
+selectById:
+SELECT * FROM animes WHERE _id = :id;
+
+selectFavorites:
+SELECT * FROM animes WHERE favorite = 1 ORDER BY title COLLATE NOCASE;
+
+selectBySource:
+SELECT * FROM animes WHERE source_id = :sourceId AND favorite = 1;
+
+searchByName:
+SELECT * FROM animes WHERE title LIKE '%' || :query || '%' AND favorite = 1;
+
+insert:
+INSERT INTO animes (
+    url, title, artist, author, description, genre, cover_url, status,
+    thumbnail_url, favorite, source_id, date_added, viewer_flags,
+    next_update, update_strategy, cover_last_modified,
+    release_date, last_refresh, last_metadata_fetch, next_episode_check
+) VALUES (
+    :url, :title, :artist, :author, :description, :genre, :coverUrl, :status,
+    :thumbnailUrl, :favorite, :sourceId, :dateAdded, :viewerFlags,
+    :nextUpdate, :updateStrategy, :coverLastModified,
+    :releaseDate, :lastRefresh, :lastMetadataFetch, :nextEpisodeCheck
+);
+
+update:
+UPDATE animes SET
+    url = :url, title = :title, artist = :artist, author = :author,
+    description = :description, genre = :genre, cover_url = :coverUrl,
+    status = :status, thumbnail_url = :thumbnailUrl,
+    favorite = :favorite, viewer_flags = :viewerFlags,
+    next_update = :nextUpdate, update_strategy = :updateStrategy,
+    cover_last_modified = :coverLastModified,
+    release_date = :releaseDate, last_refresh = :lastRefresh,
+    last_metadata_fetch = :lastMetadataFetch, next_episode_check = :nextEpisodeCheck
+WHERE _id = :id;
+
+updateFavorite:
+UPDATE animes SET favorite = :favorite, date_added = :dateAdded WHERE _id = :id;
+
+updateLastRefresh:
+UPDATE animes SET last_refresh = :lastRefresh WHERE _id = :id;
+
+updateLastMetadataFetch:
+UPDATE animes SET last_metadata_fetch = :lastMetadataFetch WHERE _id = :id;
+
+updateNextEpisodeCheck:
+UPDATE animes SET next_episode_check = :nextEpisodeCheck WHERE _id = :id;
+
+delete:
+DELETE FROM animes WHERE _id = :id;

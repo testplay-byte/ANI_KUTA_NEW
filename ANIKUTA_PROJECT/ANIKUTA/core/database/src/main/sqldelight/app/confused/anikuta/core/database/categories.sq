@@ -1,0 +1,25 @@
+-- categories.sq — Category table (shared manga/anime shape)
+
+CREATE TABLE categories (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category_order INTEGER NOT NULL DEFAULT 0,
+    flags INTEGER NOT NULL DEFAULT 0
+);
+
+selectAll:
+SELECT * FROM categories ORDER BY category_order;
+
+selectById:
+SELECT * FROM categories WHERE _id = :id;
+
+insert:
+INSERT INTO categories (name, category_order, flags)
+VALUES (:name, :order, :flags);
+
+update:
+UPDATE categories SET name = :name, category_order = :order, flags = :flags
+WHERE _id = :id;
+
+delete:
+DELETE FROM categories WHERE _id = :id;

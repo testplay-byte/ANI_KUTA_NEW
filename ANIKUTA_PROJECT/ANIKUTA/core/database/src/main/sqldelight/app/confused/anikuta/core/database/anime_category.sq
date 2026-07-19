@@ -1,0 +1,23 @@
+-- anime_category.sq — Junction table for anime ↔ category
+
+CREATE TABLE anime_category (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    anime_id INTEGER NOT NULL,
+    category_id INTEGER NOT NULL,
+    category_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (anime_id) REFERENCES animes(_id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(_id) ON DELETE CASCADE
+);
+
+selectByAnimeId:
+SELECT * FROM anime_category WHERE anime_id = :animeId;
+
+selectByCategoryId:
+SELECT * FROM anime_category WHERE category_id = :categoryId ORDER BY category_order;
+
+insert:
+INSERT INTO anime_category (anime_id, category_id, category_order)
+VALUES (:animeId, :categoryId, :order);
+
+deleteByAnimeId:
+DELETE FROM anime_category WHERE anime_id = :animeId;

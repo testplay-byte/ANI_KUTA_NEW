@@ -2,6 +2,8 @@ package app.confused.anikuta
 
 import android.app.Application
 import android.util.Log
+import app.confused.anikuta.di.databaseModule
+import app.confused.anikuta.di.repositoryModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 
@@ -12,10 +14,17 @@ class App : Application() {
         // Koin DI (ADR-023)
         startKoin {
             androidContext(this@App)
-            // modules will be added here as features are implemented
+            modules(
+                databaseModule,
+                repositoryModule,
+            )
         }
 
         // Logging (ADR-033) — tag-based, filterable via `adb logcat -s AnikutaApp:*`
-        Log.i("AnikutaApp", "ANIKUTA started")
+        Log.i(TAG, "ANIKUTA started — DI wired")
+    }
+
+    companion object {
+        private const val TAG = "AnikutaApp"
     }
 }

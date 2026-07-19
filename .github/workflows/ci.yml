@@ -44,6 +44,9 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Run unit tests
+        run: ./gradlew :data:anime:testDebugUnitTest --stacktrace
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

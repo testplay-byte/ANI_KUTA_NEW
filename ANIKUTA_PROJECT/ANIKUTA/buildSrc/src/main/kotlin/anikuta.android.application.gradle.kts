@@ -42,6 +42,11 @@ kotlin {
     }
 }
 
+// Use JUnit 5 (Jupiter) for unit tests
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
