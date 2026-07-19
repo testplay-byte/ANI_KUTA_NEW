@@ -1,12 +1,12 @@
 // ANIKUTA root build script
-// Plugins are declared here with apply false; modules apply them as needed.
+// Plugins declared with apply false; modules apply them via convention plugins.
 
 plugins {
-    alias(androidx.plugins.application) apply false
-    alias(androidx.plugins.library) apply false
-    alias(kotlinx.plugins.android) apply false
-    alias(kotlinx.plugins.compose.compiler) apply false
-    alias(kotlinx.plugins.serialization) apply false
+    id("com.android.application") version "8.9.1" apply false
+    id("com.android.library") version "8.9.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.0" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.2.0" apply false
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.0" apply false
 }
 
 tasks.register<Delete>("clean") {
