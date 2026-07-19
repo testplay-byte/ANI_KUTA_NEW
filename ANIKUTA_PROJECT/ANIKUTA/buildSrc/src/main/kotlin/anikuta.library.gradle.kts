@@ -44,4 +44,6 @@ tasks.withType<Test> {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // Coroutines BOM (version management for all kotlinx-coroutines-* modules)
+    implementation(platform("org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.10.1"))
 }
