@@ -1,0 +1,80 @@
+# ANIKUTA CI — builds the debug APK via GitHub Actions (ADR-003)
+#
+# Build policy (HARD RULE):
+#   - APKs are built EXCLUSIVELY via GitHub Actions.
+#   - No contributor (human or AI agent) is expected to build APKs locally.
+#
+# ABI: arm64-v8a only for now (ADR-032) — single APK, saves CI resources.
+# Native libs (MPV) not yet added; ABI splits disabled until then.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ANIKUTA_PROJECT/ANIKUTA
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: anikuta-debug-arm64-v8a
+          path: ANIKUTA_PROJECT/ANIKUTA/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+
+  repo-sanity:
+    name: Repository sanity check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify reference snapshots are present
+        run: |
+          test -f ANIYOMI_REFRENCE/ANIYOMI/README.md
+          test -f ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts
+          echo "Aniyomi reference snapshot OK."
+          test -f OLD_ANIKUTA/ANIKUTA_OLD/README.md
+          echo "Old ANIKUTA reference snapshot OK."
+
+      - name: Verify required docs exist
+        run: |
+          for f in README.md AGENTS.md ARCHITECTURE.md \
+                   DOCS/04-design-decisions.md DOCS/05-roadmap.md DOCS/06-build-and-ci.md \
+                   RULES/ai-agent-rules.md RULES/project-conventions.md \
+                   RULES/notifications.md RULES/session-handoff-template.md \
+                   AGENT_CONTEXT/START_HERE.md AGENT_CONTEXT/PROJECT_STARTUP.md \
+                   DESIGN_LANGUAGE/README.md \
+                   PLANNING/README.md PLANNING/PHASED_PLAN.md; do
+            test -f "$f" || { echo "MISSING: $f"; exit 1; }
+          done
+          echo "All required documentation present."

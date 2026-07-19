@@ -563,6 +563,78 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 **The architecture is now fully specified.** `ARCHITECTURE.md` can be finalized.
 
+---
+
+## ADRs from the Phase 1 go-ahead session
+
+## ADR-031 — Application ID: app.confused.anikuta
+
+- **Date:** Phase 1 go-ahead.
+- **Context:** Need an application ID / namespace for the app.
+- **Decision:** Use **`app.confused.anikuta`** as the application ID and root
+  package. The display name is **"ANIKUTA"**. The buildSrc convention plugins use
+  the **`anikuta.*`** namespace (clean separation from the reference's `mihon.*`).
+- **Consequences:**
+  - ✅ Clean, unique package name.
+  - ✅ `anikuta.*` buildSrc namespace is clearly ours, not copied from Aniyomi.
+  - ⚠️ Can be changed later if needed (before release).
+
+## ADR-032 — CI builds arm64-v8a ONLY (single APK)
+
+- **Date:** Phase 1 go-ahead.
+- **Context:** The owner has one test device (arm64-v8a). Building all ABIs wastes
+  CI resources during development.
+- **Decision:** CI builds **arm64-v8a only** — a single APK, not per-ABI splits.
+  No universal APK. This saves CI time and resources during the testing phase.
+  ABI splits can be re-enabled for release later.
+- **Consequences:**
+  - ✅ Faster CI builds, less resource usage.
+  - ✅ Matches the owner's test device.
+  - ⚠️ The APK won't install on non-arm64 devices. Accepted for now (testing phase).
+  - 📌 Re-enable full ABI splits + universal APK for production release (Phase 10).
+
+## ADR-033 — Logging: proper, filterable, not overwhelming
+
+- **Date:** Phase 1 go-ahead.
+- **Context:** The owner wants console logging that is useful but not noisy —
+  easily filtered to get necessary details. Aligns with `RULES/ai-agent-rules.md` §9.
+- **Decision:**
+  - Use **logcat** (com.squareup.logcat) as the logging library — lightweight,
+    tag-based, matches the reference.
+  - **Consistent log tags** per module (e.g., `AnikutaLib`, `AnikutaPlayer`,
+    `AnikutaDownload`, `AnikutaAnilist`) so output is easily filterable.
+  - **Log levels** used consistently: `DEBUG` (dev details), `INFO` (user actions),
+    `WARN` (potential issues), `ERROR` (failures).
+  - **NEVER log** sensitive data (tokens, passwords, PII) — Rule §9.
+  - **Not overwhelming** — only log meaningful actions, results, and errors. Not
+    every function call. Use DEBUG for verbose details (stripped in release builds).
+- **Consequences:**
+  - ✅ Debuggable without noise.
+  - ✅ Filterable by tag: `adb logcat -s AnikutaLib:* AnikutaPlayer:*`.
+  - ⚠️ Discipline required — every developer must use the right tag + level.
+
+## ADR-034 — Feature parity with hideable features (not omission)
+
+- **Date:** Phase 1 go-ahead.
+- **Context:** The owner wants ALL Aniyomi anime features implemented, with the
+  ability to HIDE features we don't want to use — NOT omit them from the start.
+  This reinforces ADR-018 (feature parity + simple mode).
+- **Decision:**
+  - Every Aniyomi anime feature is **implemented** (not skipped).
+  - Features the owner doesn't want visible are **hidden behind a feature-visibility
+    system** (toggleable in settings), NOT deleted from the codebase.
+  - This applies to: settings (ADR-018 simple mode), screens, and any feature the
+    owner chooses to hide.
+  - Hidden ≠ removed. The code exists and works; it's just not shown to the user
+    by default.
+- **Consequences:**
+  - ✅ Maximum flexibility — the owner can toggle features on/off without re-coding.
+  - ✅ Feature parity is real, not approximate.
+  - ⚠️ More code to maintain (hidden features still need to compile + work).
+    Accepted — this is the cost of flexibility.
+
+---
+
 ## How to add a new ADR
 
 1. Use the next free `ADR-NNN` number.

@@ -1,0 +1,29 @@
+# ANIKUTA .gitignore
+
+# Build outputs
+**/build/
+**/.gradle/
+**/captures/
+
+# IDE
+*.iml
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# Local config
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.keystore
+*.jks
+*.p12
+.env
+google-services.json
+
+# Logs
+*.log
