@@ -13,14 +13,14 @@ android {
 }
 
 dependencies {
-    implementation(platform(compose.bom))
-    implementation(compose.foundation)
-    implementation(compose.material3.core)
-    implementation(compose.material.icons)
-    implementation(compose.runtime)
-    implementation(compose.ui.tooling.preview)
-    implementation(compose.ui.util)
-    debugImplementation(compose.ui.tooling)
+    implementation(platform("androidx.compose:compose-bom:2025.03.00"))
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.ui:ui-util")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
-    implementation(androidx.activity)
+    implementation("androidx.activity:activity-compose:1.10.1")
 }
