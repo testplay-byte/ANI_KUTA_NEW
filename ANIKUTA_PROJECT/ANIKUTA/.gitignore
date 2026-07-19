@@ -18,12 +18,16 @@ local.properties
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets — release keystores never committed
 *.keystore
 *.jks
 *.p12
 .env
 google-services.json
+
+# EXCEPTION: debug keystore IS committed so CI builds are consistently signed
+# (the owner can update without uninstalling). This is debug-only, NOT release.
+!anikuta-debug.keystore
 
 # Logs
 *.log

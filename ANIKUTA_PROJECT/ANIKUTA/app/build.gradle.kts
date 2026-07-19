@@ -12,10 +12,23 @@ android {
         }
     }
 
+    // Stable debug signing — so CI builds can update over previous versions
+    // without uninstalling (the owner's request). This is a debug-only keystore
+    // committed to the repo; NOT for release.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("anikuta-debug.keystore")
+            storePassword = "android"
+            keyAlias = "anikuta-debug"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
+            signingConfig = signingConfigs.getByName("debug")
         }
         getByName("release") {
             isMinifyEnabled = false
