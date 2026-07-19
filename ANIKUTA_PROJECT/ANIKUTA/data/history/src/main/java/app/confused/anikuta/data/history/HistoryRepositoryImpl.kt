@@ -3,8 +3,8 @@ package app.confused.anikuta.data.history
 import app.confused.anikuta.core.common.model.History
 import app.confused.anikuta.core.common.repository.HistoryRepository
 import app.confused.anikuta.core.database.AnikutaDatabase
-import app.cash.sqldelight.coroutines.extensions.asFlow
-import app.cash.sqldelight.coroutines.extensions.mapToList
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 

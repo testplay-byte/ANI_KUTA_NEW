@@ -3,11 +3,11 @@ package app.confused.anikuta.data.anime
 import app.confused.anikuta.core.common.model.Episode
 import app.confused.anikuta.core.common.repository.EpisodeRepository
 import app.confused.anikuta.core.database.AnikutaDatabase
-import app.cash.sqldelight.coroutines.extensions.asFlow
-import app.cash.sqldelight.coroutines.extensions.mapToList
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 
 class EpisodeRepositoryImpl(
     private val database: AnikutaDatabase,
@@ -21,8 +21,7 @@ class EpisodeRepositoryImpl(
     override fun observeById(id: Long): Flow<Episode?> =
         database.episodesQueries.selectById(id, EpisodeMapper::map)
             .asFlow()
-            .mapToList(Dispatchers.IO)
-            .map { it.firstOrNull() }
+            .mapToOneOrNull(Dispatchers.IO)
 
     override suspend fun getByAnimeId(animeId: Long): List<Episode> =
         database.episodesQueries.selectByAnimeId(animeId, EpisodeMapper::map)

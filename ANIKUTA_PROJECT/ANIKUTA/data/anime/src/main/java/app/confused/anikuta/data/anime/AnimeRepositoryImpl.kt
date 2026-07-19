@@ -3,11 +3,11 @@ package app.confused.anikuta.data.anime
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.database.AnikutaDatabase
-import app.cash.sqldelight.coroutines.extensions.asFlow
-import app.cash.sqldelight.coroutines.extensions.mapToList
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import android.util.Log
 
 /**
@@ -35,8 +35,7 @@ class AnimeRepositoryImpl(
     override fun observeById(id: Long): Flow<Anime?> =
         database.animesQueries.selectById(id, AnimeMapper::map)
             .asFlow()
-            .mapToList(Dispatchers.IO)
-            .map { it.firstOrNull() }
+            .mapToOneOrNull(Dispatchers.IO)
 
     override fun observeBySource(sourceId: Long): Flow<List<Anime>> =
         database.animesQueries.selectBySource(sourceId, AnimeMapper::map)
