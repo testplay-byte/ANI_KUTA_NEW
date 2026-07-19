@@ -6,6 +6,7 @@ Operating rules for AI agents (and humans) working on ANIKUTA. These are
 | File | Purpose |
 |---|---|
 | [agent-conventions.md](agent-conventions.md) | Hard conventions every agent must follow. |
+| [notifications.md](notifications.md) | ntfy.sh task-completion notification rule (topic `TASKISDONE`). **Mandatory on every task.** |
 | [session-handoff-template.md](session-handoff-template.md) | Template for leaving a note for the next agent. |
 
 ## Session handoff notes

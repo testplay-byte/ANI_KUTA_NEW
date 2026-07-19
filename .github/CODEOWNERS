@@ -11,8 +11,9 @@
 # ── The actual project ──
 /ANIKUTA_PROJECT/     @testplay-byte
 
-# ── Reference snapshot (frozen — changes here should be rare & deliberate) ──
+# ── Reference snapshots (frozen — changes here should be rare & deliberate) ──
 /ANIYOMI_REFRENCE/    @testplay-byte
+/OLD_ANIKUTA/         @testplay-byte
 
 # ── CI / build pipelines ──
 /.github/             @testplay-byte

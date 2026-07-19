@@ -74,3 +74,11 @@ Before changing anything, read in this order:
 
 - The owner prefers questions over silent assumptions. If a decision is
   load-bearing and not documented, ask before proceeding.
+
+## 11. ALWAYS send a task-completion notification (MANDATORY)
+
+- **Every** task completion — small or big — MUST trigger a notification via
+  ntfy.sh to topic `TASKISDONE`. See `notifications.md` for the exact format.
+- Color: 🟩 success / 🟥 error / 🟦 stopped-needs-input / 🟧 processing.
+- Format: 8 emojis (same color) on line 1, blank line, then the message.
+- This is non-negotiable. An agent that forgets to notify has not finished the task.

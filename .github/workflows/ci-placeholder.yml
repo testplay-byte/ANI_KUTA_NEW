@@ -32,11 +32,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify reference snapshot is present
+      - name: Verify reference snapshots are present
         run: |
           test -f ANIYOMI_REFRENCE/ANIYOMI/README.md
           test -f ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts
-          echo "Reference snapshot OK."
+          echo "Aniyomi reference snapshot OK."
+          test -f OLD_ANIKUTA/ANIKUTA_OLD/README.md
+          test -f OLD_ANIKUTA/ANIKUTA_OLD/settings.gradle.kts
+          echo "Old ANIKUTA reference snapshot OK."
 
       - name: Verify project skeleton is present
         run: |
@@ -49,7 +52,8 @@ jobs:
                    docs/01-project-overview.md docs/02-target-architecture.md \
                    docs/03-reference-module-map.md docs/04-design-decisions.md \
                    docs/05-roadmap.md docs/06-build-and-ci.md \
-                   rules/agent-conventions.md rules/session-handoff-template.md; do
+                   rules/agent-conventions.md rules/notifications.md \
+                   rules/session-handoff-template.md; do
             test -f "$f" || { echo "MISSING: $f"; exit 1; }
           done
           echo "All required documentation present."

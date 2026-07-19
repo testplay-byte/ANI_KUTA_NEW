@@ -9,9 +9,10 @@
 
 This is the **monorepo** that holds **everything** related to the ANIKUTA project:
 
-1. A **read-only reference snapshot** of the original Aniyomi source code (for study, comparison, and porting).
-2. Our **actual project**, `ANIKUTA`, which is being built from scratch using Aniyomi as a conceptual foundation — not as a fork.
-3. **Documentation, design decisions, AI-agent rules, and session handoff notes** so the work can be continued by any new contributor (human or AI agent) without losing context.
+1. A **read-only reference snapshot** of the original Aniyomi source code (`ANIYOMI_REFRENCE/`) — for study, comparison, and porting.
+2. A **read-only snapshot of our previous ANIKUTA attempt** (`OLD_ANIKUTA/`) — the earlier project that reached a working state but had structural issues. We mine it for prior research and lessons learned, but rebuild fresh.
+3. Our **actual new project**, `ANIKUTA` (`ANIKUTA_PROJECT/`), being built from scratch using Aniyomi as a conceptual foundation — not as a fork.
+4. **Documentation, design decisions, AI-agent rules, and session handoff notes** so the work can be continued by any new contributor (human or AI agent) without losing context.
 
 > ⚠️ **This is NOT a fork of Aniyomi.** The Aniyomi source lives under `ANIYOMI_REFRENCE/` purely as a reference. All new work happens under `ANIKUTA_PROJECT/`.
 
@@ -28,8 +29,10 @@ ANI_KUTA_NEW/                       ← repository root (kept clean & navigable)
 ├── .github/
 │   ├── CODEOWNERS
 │   └── workflows/                  ← CI / build pipelines (GitHub Actions ONLY — no local APK builds)
-├── ANIYOMI_REFRENCE/               ← READ-ONLY reference snapshot
+├── ANIYOMI_REFRENCE/               ← READ-ONLY reference: original Aniyomi source
 │   └── ANIYOMI/                    ← full Aniyomi source (no .git history; see its README)
+├── OLD_ANIKUTA/                    ← READ-ONLY reference: our previous ANIKUTA attempt
+│   └── ANIKUTA_OLD/                ← the old project (source-only); has prior Aniyomi analysis
 ├── ANIKUTA_PROJECT/                ← OUR project (all new work lives here)
 │   └── ANIKUTA/                    ← the actual app codebase (skeleton for now)
 ├── docs/                           ← architecture, design decisions, roadmap, reference map
@@ -41,6 +44,7 @@ ANI_KUTA_NEW/                       ← repository root (kept clean & navigable)
 │   └── 06-build-and-ci.md
 └── rules/                          ← AI-agent operating rules & session handoff notes
     ├── agent-conventions.md
+    ├── notifications.md            ← ntfy.sh task-completion notification rule
     └── session-handoff-template.md
 ```
 
@@ -52,9 +56,11 @@ ANI_KUTA_NEW/                       ← repository root (kept clean & navigable)
 
 What is done:
 - ✅ Repository created and structured.
-- ✅ Aniyomi reference source downloaded and placed under `ANIYOMI_REFRENCE/ANIYOMI/`.
+- ✅ Aniyomi reference source downloaded → `ANIYOMI_REFRENCE/ANIYOMI/`.
+- ✅ Old ANIKUTA project snapshot downloaded → `OLD_ANIKUTA/ANIKUTA_OLD/` (prior work + Aniyomi subsystem analysis).
 - ✅ Documentation skeleton (`docs/`) and AI-agent rules (`rules/`) in place.
 - ✅ Build policy established: **GitHub Actions only.** No APK is ever built locally.
+- ✅ ntfy.sh task-completion notification rule established.
 
 What is NOT done yet (deliberately — to be decided next):
 - ❌ The actual `ANIKUTA` app codebase (only a placeholder README exists for now).
