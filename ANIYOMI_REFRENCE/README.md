@@ -8,8 +8,20 @@ This directory holds a **frozen, read-only point-in-time snapshot** of the origi
 
 ```
 ANIYOMI_REFRENCE/
-└── ANIYOMI/            ← full Aniyomi source tree (no .git history)
+├── ANIYOMI/            ← full Aniyomi source tree (no .git history)
+└── DOCUMENTATION/      ← comprehensive analysis of the Aniyomi source (read this!)
 ```
+
+## The DOCUMENTATION folder ⭐
+
+`DOCUMENTATION/` holds a complete, self-contained analysis of the Aniyomi
+reference — **64 documents, ~21,400 lines** covering every module, subsystem,
+data model, user flow, UI screen, and key file. Start at
+[`DOCUMENTATION/README.md`](DOCUMENTATION/README.md) for the navigation index.
+
+Read the docs instead of reverse-engineering the source. Every doc cross-links
+to the actual source files (paths like `../ANIYOMI/app/src/main/java/...`) so you
+can jump between explanation and code.
 
 ## Rules
 
