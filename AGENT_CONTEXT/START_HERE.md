@@ -37,29 +37,37 @@ It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 
 ## Current phase
 
-**Phase 0b (Design & Planning)** — see `../DOCS/05-roadmap.md`.
+**Phase 0b (Design & Planning) is COMPLETE.** All decisions recorded (ADRs 001–030).
+`ARCHITECTURE.md` is finalized. Ready for **Phase 1** (scaffold the Gradle project)
+pending the owner's go-ahead.
 
-We are finalizing the architecture and design language BEFORE writing app code.
-The `ANIKUTA_PROJECT/ANIKUTA/` folder is still a skeleton.
+See [`../PLANNING/PHASED_PLAN.md`](../PLANNING/PHASED_PLAN.md) for the full
+10-phase implementation plan.
 
 ## What's been done so far
 
 - ✅ Repo structured: `ANIYOMI_REFRENCE/` (reference + 68-doc analysis),
-  `OLD_ANIKUTA/` (prior attempt), `ANIKUTA_PROJECT/` (our project, skeleton).
+  `OLD_ANIKUTA/` (prior attempt + screen analysis), `ANIKUTA_PROJECT/` (skeleton).
 - ✅ Rules established (`RULES/ai-agent-rules.md` — 14 sections).
 - ✅ Aniyomi reference fully documented (`ANIYOMI_REFRENCE/DOCUMENTATION/`).
 - ✅ Vision clarified → 14 ADRs (009–022) in `DOCS/04`.
-- ✅ Design language docs being created (`DESIGN_LANGUAGE/`).
-- ✅ Old ANIKUTA key screens analyzed (`OLD_ANIKUTA/ANALYSIS/`).
-- ✅ Planning folders created (`PLANNING/`).
+- ✅ Design language docs complete (`DESIGN_LANGUAGE/` — 12 principles, 9 components,
+  themes, 10 per-screen specs).
+- ✅ Old ANIKUTA key screens analyzed (`OLD_ANIKUTA/ANALYSIS/` — 4 files).
+- ✅ Episode metadata module spec (`PLANNING/01-feature-specs/episode-metadata-module.md`).
+- ✅ Module architecture draft (`PLANNING/04-module-architecture/`).
+- ✅ **All open decisions resolved** → ADRs 023–030 (Koin, SQLDelight, Compose-first,
+  SDK 26/36, Moko English-only, gzipped protobuf backup, Aniyomi extension compat,
+  raw HTTP AniList client).
+- ✅ `ARCHITECTURE.md` **finalized** — the single source of truth.
+- ✅ Phased implementation plan (`PLANNING/PHASED_PLAN.md` — 10 phases).
+- ✅ Agent onboarding (`AGENT_CONTEXT/START_HERE.md` + `PROJECT_STARTUP.md`).
 
 ## What's NOT done yet
 
-- ❌ `ARCHITECTURE.md` is a stub — needs finalizing (module list, DI, persistence,
-  player embedding approach).
-- ❌ Open decisions in `DOCS/04` (DI framework, persistence, SDK, etc.).
-- ❌ Any actual ANIKUTA app code (Phase 1, after architecture is finalized).
-- ❌ Episode metadata source (the owner will specify).
+- ❌ Any actual ANIKUTA app code (Phase 1 starts the scaffolding).
+- ❌ The Gradle project under `ANIKUTA_PROJECT/ANIKUTA/` (still a placeholder README).
+- ❌ All Phase 1–10 implementation.
 
 ## Where things live (cheat sheet)
 

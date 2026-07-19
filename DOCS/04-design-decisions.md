@@ -412,32 +412,156 @@ supersede the corresponding open questions listed at the bottom of this file.
 
 ---
 
-## Open decisions (updated after Phase 0b vision clarification)
+## ADRs from the architecture-decision session (Phase 0b finalization)
 
-The following were **resolved** by ADRs 009–022 above and are checked off:
+The following decisions resolve the remaining open questions. The architecture is
+now fully specified and `ARCHITECTURE.md` can be finalized.
 
-- [x] ~Module granularity & final module list~ → partially resolved (anime+manga
-  structure per ADR-009); final module list pending `ARCHITECTURE.md`.
-- [x] ~Which Aniyomi features are hidden/deferred initially~ → manga hidden
-  (ADR-009); settings simplifiable (ADR-018).
-- [x] ~Player & reader implementation approach~ → watch page with embedded
-  mini-player (ADR-012); player spec pending.
-- [x] ~Source/extension system shape~ → extension-based like Aniyomi, two
-  categories (ADR-016).
+## ADR-023 — DI framework: Koin
 
-Still open (to be resolved in the architecture-planning phase):
+- **Date:** Phase 0b (architecture finalization).
+- **Context:** Need to choose a DI framework. Options: Koin (pure Kotlin, no
+  codegen), Hilt (compile-safe, codegen), Injekt (what Aniyomi uses — niche).
+- **Decision:** Use **Koin**. It's Kotlin-first, Compose-friendly, no codegen, and
+  simple. We will **properly isolate the DI setup** from the reference project's
+  Injekt — our Koin modules are defined fresh in `:app` + per-feature `di/`
+  packages, not copied from Aniyomi.
+- **Consequences:**
+  - ✅ Simple, readable DI setup. No annotation processing.
+  - ✅ Compose integration via `koin-androidx-compose`.
+  - ⚠️ Runtime errors (no compile-time graph validation). Mitigated by Koin's
+    `verify()` test that checks the graph at test time.
+  - 📌 The extension system does NOT force Injekt on us — extensions implement
+    the `:source-api` interface, not DI. So Koin is safe.
 
-- [ ] DI framework (Injekt/Koin vs Hilt vs Metro).
-- [ ] Persistence (SQLDelight vs Room).
-- [ ] Compose-only vs mixed Views (watch page implies Compose-hosts-MPV; confirm).
-- [ ] Min/target SDK.
-- [ ] Localization tooling (Moko Resources vs stock).
-- [ ] Backup format & Aniyomi-backup compatibility.
-- [ ] Final module list + dependency graph (→ `ARCHITECTURE.md`).
-- [ ] Player embedding approach (Compose host vs Activity) — see ADR-012.
-- [ ] Episode metadata source (the owner will specify — see ADR per-episode
-  metadata).
-- [ ] Design language specifics (→ `DESIGN_LANGUAGE/`).
+## ADR-024 — Persistence: SQLDelight (with status-tracking columns)
+
+- **Date:** Phase 0b.
+- **Context:** Need a database. Options: SQLDelight (matches reference, KMP),
+  Room (mainstream, IDE support). The owner had **MPV/subtitle errors** in the
+  previous project that were "cumbersome" — these were likely related to state
+  management, not the DB, but we choose the most reliable approach.
+- **Decision:** Use **SQLDelight** (matches the reference, KMP-friendly).
+  The schema **must include status-tracking columns** on the anime/episode tables:
+  - `release_date` — when the anime/episode was released.
+  - `last_refresh` — last time the library entry was refreshed from the source.
+  - `last_metadata_fetch` — last time metadata was fetched (AniList/extension).
+  - `next_episode_check` — when to next check for a new episode (for ADR-014).
+  These support the notification/auto-download features and let us debug stale data.
+- **Consequences:**
+  - ✅ Matches reference (already documented in `ANIYOMI_REFRENCE/DOCUMENTATION/`).
+  - ✅ KMP-friendly (future-proofs for potential desktop).
+  - ✅ Status columns enable robust notification scheduling + debugging.
+  - ⚠️ Less IDE support than Room. Accepted.
+  - 📌 The MPV/subtitle issues from the old project will be handled carefully in
+    the player module (ADR-012) — proper lifecycle, single MPV instance, subtitle
+    track management. See `DESIGN_LANGUAGE/04-screens/player.md`.
+
+## ADR-025 — Compose-first; AndroidView for MPV only
+
+- **Date:** Phase 0b.
+- **Context:** How much Compose vs legacy Views? The watch page (ADR-012) and
+  player need MPV, which is a View.
+- **Decision:** **Compose-first** for everything. The only `AndroidView` interop
+  is the MPV player surface. The watch page's mini-player and the fullscreen
+  player share a single MPV instance (maximize = swap Compose overlay, not
+  recreate the surface — per the old project's working approach).
+- **Consequences:**
+  - ✅ Modern, consistent UI. Matches the old project's working approach.
+  - ✅ No legacy Views to maintain (except the MPV wrapper).
+  - ⚠️ MPV lifecycle management is critical — the old project's subtitle issues
+    were likely from improper MPV state handling. We handle this carefully.
+  - 📌 See `DESIGN_LANGUAGE/04-screens/watch-page.md` and `player.md`.
+
+## ADR-026 — Min SDK 26, Target SDK 36
+
+- **Date:** Phase 0b.
+- **Context:** Need to set Android SDK levels.
+- **Decision:** **MIN SDK 26** (Android 8.0) — covers ~95% of active devices.
+  **TARGET SDK 36** (Android 16) — current latest. Same as Aniyomi.
+- **Consequences:**
+  - ✅ Broad device support + latest Android features.
+  - ⚠️ Some blur effects (`Modifier.blur`) require API 31+ — graceful fallback
+    for API 26-30 (alpha-only, per the old project's approach).
+
+## ADR-027 — Localization: Moko Resources, English-only initially
+
+- **Date:** Phase 0b.
+- **Context:** Need a localization system. Options: Moko Resources (KMP,
+  type-safe), stock Android strings.
+- **Decision:** Use **Moko Resources** (matches reference, KMP, type-safe).
+  **English-only for starters** — no other locales shipped initially. The
+  structure supports adding locales later without code changes.
+- **Consequences:**
+  - ✅ Type-safe string access (`MR.strings.foo` / `AYMR.strings.foo`).
+  - ✅ KMP-friendly.
+  - ✅ Adding locales later = just adding `strings.xml` files.
+  - ⚠️ English-only means non-English users see English until we add locales.
+    Accepted for Phase 1.
+
+## ADR-028 — Backup format: gzipped protobuf (own schema)
+
+- **Date:** Phase 0b.
+- **Context:** Need a backup format.
+- **Decision:** **Gzipped protobuf** with our **own schema** (not Aniyomi's
+  `.tachibk` format — we define our own `.anikuta` backup). Compact, fast, proven.
+  We can restore our own backups; Aniyomi backup compat is NOT a goal.
+- **Consequences:**
+  - ✅ Compact, fast, schema is ours to evolve.
+  - ✅ Easy to change later if needed.
+  - ⚠️ Users can't import Aniyomi backups (we'd need a converter if ever wanted).
+  - 📌 No encryption initially (matches Aniyomi). Can add later.
+
+## ADR-029 — Extension compatibility: keep Aniyomi extension format exactly
+
+- **Date:** Phase 0b.
+- **Context:** Should we keep Aniyomi extension compat or design our own model?
+- **Decision:** **Keep Aniyomi extension compatibility exactly as-is.** Existing
+  Aniyomi anime extensions work out of the box. We can **add our own capabilities**
+  (per ADR-022) via the source-api without breaking compat — extensions declare
+  what they support; the app renders UI for declared capabilities.
+- **Consequences:**
+  - ✅ Instant extension ecosystem (existing Aniyomi anime extensions work).
+  - ✅ Custom extensions can add features via capability declarations.
+  - ⚠️ Locked into the source-api shape (acceptable — it's well-designed).
+  - 📌 See `ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md` for the contract.
+
+## ADR-030 — AniList client: raw HTTP + kotlinx-serialization (swappable)
+
+- **Date:** Phase 0b.
+- **Context:** How to talk to AniList's GraphQL API? Options: raw HTTP +
+  kotlinx-serialization (lighter), Apollo GraphQL (type-safe, codegen).
+- **Decision:** **Raw HTTP + kotlinx-serialization** for starters. Kept in a
+  **separate `:core:anilist` module** so it's swappable — if we later want Apollo
+  or a different approach, we change only that module. The module exposes an
+  `AniListRepository` interface; the rest of the app doesn't know the implementation.
+- **Consequences:**
+  - ✅ Lighter weight (no Apollo codegen dependency).
+  - ✅ Uses existing OkHttp + serialization stack.
+  - ✅ Swappable — isolated in `:core:anilist`.
+  - ⚠️ Less type-safe than Apollo (manual schema mapping). Mitigated by careful
+    data classes + tests.
+
+---
+
+## Open decisions (FINAL — all resolved)
+
+All previously-open decisions are now resolved by ADRs 009–030:
+
+- [x] ~DI framework~ → Koin (ADR-023).
+- [x] ~Persistence~ → SQLDelight with status columns (ADR-024).
+- [x] ~Compose-only vs mixed Views~ → Compose-first, AndroidView for MPV (ADR-025).
+- [x] ~Min/target SDK~ → 26 / 36 (ADR-026).
+- [x] ~Localization tooling~ → Moko Resources, English-only initially (ADR-027).
+- [x] ~Backup format~ → gzipped protobuf, own schema (ADR-028).
+- [x] ~Final module list + dependency graph~ → see `ARCHITECTURE.md` + `PLANNING/04`.
+- [x] ~Player embedding approach~ → single MPV instance, Compose overlay swap (ADR-025).
+- [x] ~Episode metadata source~ → old project's 4-source method, pluggable module (ADR-022 + `PLANNING/01-feature-specs/episode-metadata-module.md`).
+- [x] ~Design language specifics~ → see `DESIGN_LANGUAGE/`.
+- [x] ~Extension compatibility~ → keep Aniyomi format (ADR-029).
+- [x] ~AniList client~ → raw HTTP + serialization, swappable (ADR-030).
+
+**The architecture is now fully specified.** `ARCHITECTURE.md` can be finalized.
 
 ## How to add a new ADR
 
