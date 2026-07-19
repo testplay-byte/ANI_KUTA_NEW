@@ -102,11 +102,11 @@ object DataModule {
 | Used by | Tachiyomi/Mihon/Aniyomi | Many Google apps | Many Kotlin apps | Some |
 
 When porting to ANIKUTA, decide whether to keep Injekt (lowest churn, retains
-extension-compat) or migrate (see `../../../../docs/04-design-decisions.md` open
+extension-compat) or migrate (see `../../../docs/04-design-decisions.md` open
 question on DI).
 
 ## See also
 
 - [`01-architecture-overview.md`](01-architecture-overview.md)
 - `../../02-modules/app.md` — where `App.kt` lives.
-- `../../../../docs/04-design-decisions.md` — open DI decision for ANIKUTA.
+- `../../../docs/04-design-decisions.md` — open DI decision for ANIKUTA.

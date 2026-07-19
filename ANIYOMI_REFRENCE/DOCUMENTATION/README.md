@@ -44,6 +44,7 @@ Every doc cross-references the actual source files with relative paths like
 | [`03-module-map.md`](00-overview/03-module-map.md) | All Gradle modules, their roles, and dependency graph. |
 | [`04-build-system.md`](00-overview/04-build-system.md) | Gradle config, version catalogs, build types, flavors, ABI splits, buildSrc. |
 | [`05-project-conventions.md`](00-overview/05-project-conventions.md) | Naming, package layout, code style, the dual manga/anime pattern. |
+| [`06-dual-manga-anime-pattern.md`](00-overview/06-dual-manga-anime-pattern.md) | Consolidated guide to the pervasive manga↔anime duplication (package mappings, divergences, maintenance rule). |
 
 ### `01-architecture/` — Cross-cutting patterns
 | File | What it covers |
@@ -130,6 +131,13 @@ Every doc cross-references the actual source files with relative paths like
 | [`file-index.md`](07-reference/file-index.md) | "Where do I find X?" — key file locator. |
 | [`glossary.md`](07-reference/glossary.md) | Terms (source, extension, entry, chapter, episode, tracker, etc.). |
 | [`cross-reference-matrix.md`](07-reference/cross-reference-matrix.md) | Subsystem × Module × Key-file matrix. |
+
+### `08-guides/` — Procedural recipes
+| File | What it covers |
+|---|---|
+| [`README.md`](08-guides/README.md) | Index. |
+| [`how-to-add-features.md`](08-guides/how-to-add-features.md) | Recipes: add a screen, DB table/migration, preference, string, tracker, source, theme. |
+| [`troubleshooting.md`](08-guides/troubleshooting.md) | Common build/runtime issues + verified fixes (incl. a "not a bug" list). |
 
 ---
 
