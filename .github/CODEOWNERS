@@ -7,8 +7,11 @@
 /README.md            @testplay-byte
 /AGENTS.md            @testplay-byte
 
-# ── Project documentation & AI-agent rules ──
+# ── Project documentation, planning, design language, agent context ──
 /DOCS/                @testplay-byte
+/PLANNING/            @testplay-byte
+/DESIGN_LANGUAGE/     @testplay-byte
+/AGENT_CONTEXT/       @testplay-byte
 /RULES/               @testplay-byte
 
 # ── The actual project ──

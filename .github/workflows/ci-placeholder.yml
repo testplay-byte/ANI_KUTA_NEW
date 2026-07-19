@@ -51,16 +51,20 @@ jobs:
           test -f ANIKUTA_PROJECT/ANIKUTA/README.md
           echo "ANIKUTA skeleton OK."
 
-      - name: Verify required root + DOCS + RULES files exist
+      - name: Verify required root + DOCS + RULES + new folders exist
         run: |
           for f in README.md AGENTS.md ARCHITECTURE.md \
                    DOCS/01-project-overview.md DOCS/02-target-architecture.md \
                    DOCS/03-reference-module-map.md DOCS/04-design-decisions.md \
                    DOCS/05-roadmap.md DOCS/06-build-and-ci.md \
                    RULES/ai-agent-rules.md RULES/project-conventions.md \
-                   RULES/notifications.md RULES/session-handoff-template.md; do
+                   RULES/notifications.md RULES/session-handoff-template.md \
+                   AGENT_CONTEXT/START_HERE.md \
+                   DESIGN_LANGUAGE/README.md \
+                   PLANNING/README.md; do
             test -f "$f" || { echo "MISSING: $f"; exit 1; }
           done
+          test -d OLD_ANIKUTA/ANALYSIS || { echo "MISSING: OLD_ANIKUTA/ANALYSIS/"; exit 1; }
           echo "All required documentation present."
 
   # ── TODO (Phase 1): add a build job that compiles ANIKUTA_PROJECT/ANIKUTA ──

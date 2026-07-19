@@ -34,16 +34,20 @@ ANI_KUTA_NEW/                       ← repository root (kept clean & navigable)
 │   ├── ANIYOMI/                    ← full Aniyomi source (no .git history; see its README)
 │   └── DOCUMENTATION/              ← 68-doc analysis of the Aniyomi source (read this!)
 ├── OLD_ANIKUTA/                    ← READ-ONLY reference: our previous ANIKUTA attempt
-│   └── ANIKUTA_OLD/                ← the old project (source-only); has prior Aniyomi analysis
+│   ├── ANIKUTA_OLD/                ← the old project (source-only); has prior Aniyomi analysis
+│   └── ANALYSIS/                   ← analysis of the old project's key screens (design references)
 ├── ANIKUTA_PROJECT/                ← OUR project (all new work lives here)
 │   └── ANIKUTA/                    ← the actual app codebase (skeleton for now)
-├── DOCS/                           ← architecture draft, design decisions, roadmap, reference map
+├── DOCS/                           ← architecture draft, design decisions (ADRs), roadmap
 │   ├── 01-project-overview.md
 │   ├── 02-target-architecture.md
 │   ├── 03-reference-module-map.md
-│   ├── 04-design-decisions.md
+│   ├── 04-design-decisions.md      ← ADRs 001–022 (vision + project decisions)
 │   ├── 05-roadmap.md
 │   └── 06-build-and-ci.md
+├── PLANNING/                       ← detailed specs (feature specs, screen specs, data model, module architecture)
+├── DESIGN_LANGUAGE/                ← the ANIKUTA design language spec (principles, components, themes, per-screen)
+├── AGENT_CONTEXT/                  ← ⭐ onboarding checkpoint for new AI agents (read START_HERE.md first)
 └── RULES/                          ← AI-agent operating rules & session handoff notes
     ├── ai-agent-rules.md           ← the comprehensive general ruleset (14 sections)
     ├── project-conventions.md      ← ANIKUTA-specific rules (reference boundary, CI-only, etc.)
@@ -56,23 +60,30 @@ ANI_KUTA_NEW/                       ← repository root (kept clean & navigable)
 
 ## Current status
 
-**Phase 0 — Repository foundation.** Phase 0b (design) is next.
+**Phase 0b — Design & Planning** (in progress). See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md).
 
 What is done:
 - ✅ Repository created and structured.
 - ✅ Aniyomi reference source downloaded → `ANIYOMI_REFRENCE/ANIYOMI/`.
 - ✅ Aniyomi reference fully documented → `ANIYOMI_REFRENCE/DOCUMENTATION/` (68 docs, ~21,900 lines).
-- ✅ Old ANIKUTA project snapshot downloaded → `OLD_ANIKUTA/ANIKUTA_OLD/` (prior work + Aniyomi subsystem analysis).
+- ✅ Old ANIKUTA project snapshot downloaded → `OLD_ANIKUTA/ANIKUTA_OLD/`.
+- ✅ Old ANIKUTA key screens analyzed → `OLD_ANIKUTA/ANALYSIS/` (design references).
 - ✅ Project docs (`DOCS/`) and AI-agent rules (`RULES/`) in place.
-- ✅ `ARCHITECTURE.md` stub created (will be finalized in the design phase).
+- ✅ `ARCHITECTURE.md` stub created (will be finalized in this phase).
 - ✅ Build policy established: **GitHub Actions only.** No APK is ever built locally.
 - ✅ ntfy.sh task-completion notification rule established.
 - ✅ Comprehensive AI agent ruleset established (`RULES/ai-agent-rules.md`).
+- ✅ Vision clarified → 14 ADRs (009–022) in `DOCS/04-design-decisions.md`.
+- ✅ Design language docs started → `DESIGN_LANGUAGE/` (principles, components, themes, bottom-nav, watch-page).
+- ✅ Planning folders created → `PLANNING/` (feature specs, screen specs, data model, module architecture).
+- ✅ Agent onboarding checkpoint → `AGENT_CONTEXT/START_HERE.md`.
 
 What is NOT done yet (deliberately — to be decided next):
 - ❌ The actual `ANIKUTA` app codebase (only a placeholder README exists for now).
-- ❌ Final architecture & module breakdown for ANIKUTA (the `ARCHITECTURE.md` stub will be filled in).
-- ❌ Feature scope (which Aniyomi features to keep / hide / rework).
+- ❌ `ARCHITECTURE.md` finalization (module list, DI, persistence, player embedding).
+- ❌ Remaining open decisions in `DOCS/04` (DI framework, persistence, SDK, etc.).
+- ❌ Episode metadata source (the owner will specify).
+- ❌ Remaining per-screen design specs in `DESIGN_LANGUAGE/04-screens/`.
 
 See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full plan.
 

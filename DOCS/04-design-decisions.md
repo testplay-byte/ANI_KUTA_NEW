@@ -140,21 +140,304 @@
 
 ---
 
-## Open decisions (to be made in the design phase — Phase 0b)
+## ADRs from the vision-clarification session (Phase 0b)
 
-These are *not yet decided*. Listed here so they are not forgotten. Each becomes
-an ADR when decided.
+The following decisions were made during the owner's vision briefing. They
+supersede the corresponding open questions listed at the bottom of this file.
 
-- [ ] Module granularity & final module list (see `02-target-architecture.md`).
-- [ ] DI framework (Injekt/Koin vs Hilt vs Metro vs …).
-- [ ] Persistence (SQLDelight vs Room vs …).
-- [ ] Source/extension system shape (Aniyomi-compatible vs first-party-only).
-- [ ] Compose-only vs mixed Views.
+## ADR-009 — Anime-first; manga deferred but architecture-ready
+
+- **Date:** Phase 0b (vision clarification).
+- **Context:** The owner wants to focus on anime first, with manga coming later.
+  The reference (Aniyomi) shows the dual manga/anime pattern is pervasive.
+- **Decision:** Build the module architecture to hold **both** anime and manga
+  from day 1 (so we don't paint ourselves into a corner), but only **implement**
+  anime in Phase 1. Manga modules exist as scaffolding and are **hidden behind
+  the UI** (toggleable off) until a later phase.
+- **Consequences:**
+  - ✅ No rework when manga arrives — the structure already accommodates it.
+  - ✅ The user can toggle manga visibility in settings (it's hidden by default).
+  - ⚠️ Slightly more upfront structure (some empty manga modules). Accepted.
+  - 📌 See `../../RULES/ai-agent-rules.md` §4 (modularity) for the module pattern.
+
+## ADR-010 — AniList as a co-primary data source (not just a tracker)
+
+- **Date:** Phase 0b.
+- **Context:** In Aniyomi, AniList is only a progress tracker. In ANIKUTA,
+  AniList feeds: Home (discovery/trending), MY (personalized dashboard),
+  anime/episode metadata, and (optionally) tracker sync.
+- **Decision:** AniList is a **first-class data layer** with its own
+  `AniListRepository`, alongside source/extension repositories. A
+  `MetadataResolver` merges/falls-back between AniList and extension data per
+  ADR-011. AniList is also one of the available trackers (per ADR-013).
+- **Consequences:**
+  - ✅ Home and MY screens have rich data without requiring extensions.
+  - ✅ Metadata is richer than extensions alone provide.
+  - ⚠️ More complex data model (two sources for the same concept). Mitigated by
+    the MetadataResolver (ADR-011).
+  - ⚠️ AniList API rate limits (90 req/min) must be respected — needs caching.
+
+## ADR-011 — Dual metadata source with user preference + automatic fallback
+
+- **Date:** Phase 0b.
+- **Context:** The user wants to choose their preferred metadata source (AniList
+  vs extension) for anime info (cover, title, description, stats). If the
+  preferred source lacks data, fall back to the other; if both lack it, skip.
+- **Decision:**
+  - A global setting: preferred metadata source = `ANILIST` | `EXTENSION`.
+  - A `MetadataResolver` component resolves each metadata field by trying the
+    preferred source first, then the alternative, then skipping.
+  - The preference is **global** (one setting for all anime), not per-anime.
+- **Consequences:**
+  - ✅ User gets consistent metadata from their preferred source.
+  - ✅ Graceful degradation when one source is incomplete.
+  - ⚠️ The resolver must track per-field provenance (which source filled which
+    field) for debugging and for re-resolution when the preference changes.
+
+## ADR-012 — Watch page: YouTube-style (minimized player + episodes below, maximizable)
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants a "watch page" between the details page and the
+  fullscreen player. The player sits at the top (minimized), episodes + episode
+  description below. The user can maximize the player to fullscreen. This is
+  YouTube-like behavior.
+- **Decision:** Implement a `WatchScreen` (Voyager/Compose) that:
+  - Hosts an **embedded mini-player** at the top (MPV wrapped in Compose).
+  - Shows the current episode's description below the player.
+  - Shows the episode list below that.
+  - Has a **maximize** control that transitions to a fullscreen `PlayerActivity`
+    (or a fullscreen Compose overlay — to be decided in the player architecture
+    spec).
+- **Consequences:**
+  - ✅ Matches the owner's vision exactly.
+  - ✅ User can browse episodes while the player runs (mini-player).
+  - ⚠️ Embedding MPV (a View) in Compose with proper lifecycle/PiP is
+    non-trivial. The old ANIKUTA project has a working implementation — study it
+    (see `DESIGN_LANGUAGE/04-screens/watch-page.md` once written).
+  - ⚠️ This is a structural departure from Aniyomi (which has no watch page).
+  - 📌 The exact player-embedding approach will be decided in the player
+    architecture spec (`PLANNING/02-screen-specs/watch-page.md`).
+
+## ADR-013 — AniList: public API primary, authentication enhances
+
+- **Date:** Phase 0b.
+- **Context:** AniList feeds Home, MY, and metadata. Should auth be required?
+- **Decision:** Use the **public AniList API** (GraphQL, no auth) as the primary
+  mode — works for trending, seasonal, basic metadata. **Authentication
+  (OAuth)** is optional and **enhances** the experience (personalized MY feed,
+  user's list, tracker sync). The app is fully functional without an AniList
+  account.
+- **Consequences:**
+  - ✅ Lower friction — no account required to use the app.
+  - ✅ Auth enhances rather than gates — matches modern app patterns.
+  - ⚠️ Two modes to support (public vs authenticated). Mitigated by a clean
+    `AniListRepository` that transparently adds auth headers when available.
+
+## ADR-014 — Episode release notifications: dual mode (AniList scheduled / extension verified)
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants episode-release notifications with two modes:
+  1. **By AniList:** at the scheduled release time, notify without verification.
+  2. **By extension:** at the scheduled time, check the source; if not yet
+     released, recheck in 10 min, then 20 min, until released.
+  The release time comes from AniList if the extension doesn't provide one;
+  after the first release, the average interval is used for scheduling.
+  User can configure sub vs dub, and opt in/out per-anime. Global setting with
+  per-series override.
+- **Decision:**
+  - A `NotificationScheduler` (WorkManager) that supports both modes.
+  - Mode is configurable globally and per-series (per-series overrides global).
+  - Sub/dub preference: user picks which to be notified about.
+  - AniList mode: fire-and-forget at the scheduled time.
+  - Extension mode: poll at the scheduled time, retry with backoff (10 min, 20
+    min) until the episode appears.
+  - Release-time source: AniList first; after first release, use average
+    interval for subsequent episodes.
+- **Consequences:**
+  - ✅ Flexible — user picks the mode that suits their sources.
+  - ⚠️ Extension mode is battery-sensitive (polling). Mitigated by the
+    10/20-min backoff and only checking anime whose scheduled time has arrived.
+  - ⚠️ Needs a reliable "scheduled release time" data point. AniList provides
+    this; extension may not.
+  - 📌 Detailed spec in `PLANNING/01-feature-specs/episode-notifications.md`.
+
+## ADR-015 — Custom M3-inspired design language (not stock Material 3 Expressive)
+
+- **Date:** Phase 0b.
+- **Context:** The owner finds stock Material 3 Expressive insufficient and has
+  specific design preferences (documented in `DESIGN_LANGUAGE/`). The old ANIKUTA
+  project has screens the owner likes and wants to use as design references.
+- **Decision:**
+  - Create a **custom design language** inspired by M3 but with the owner's
+    specific preferences (documented in `DESIGN_LANGUAGE/`).
+  - The design language covers: layout principles, components, color, typography,
+    motion, and per-screen specs.
+  - Multiple theme options (color palettes) are user-selectable.
+  - The old ANIKUTA project's screens are the **primary design reference** (only
+    the screens the owner explicitly flagged — see `DESIGN_LANGUAGE/`).
+- **Consequences:**
+  - ✅ The app looks and feels unique, not stock.
+  - ✅ Clear design spec prevents inconsistency.
+  - ⚠️ More design upfront work. Accepted — the `DESIGN_LANGUAGE/` folder is
+    that work.
+  - 📌 See `DESIGN_LANGUAGE/` for the full spec.
+
+## ADR-016 — Extension categories: video / image-manga (no series/movies split)
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants extensions sorted into two top-level categories:
+  video extensions and image/manga extensions. The future series/movies split is
+  deferred (and may live on the anime entry, not the extension).
+- **Decision:**
+  - Two extension categories: **Video** and **Image/Manga**.
+  - The extensions UI shows both categories, with an anime/manga toggle at the
+    top (mirroring the old ANIKUTA project's extensions settings page).
+  - No series/movies sub-classification for now. If added later, it classifies
+    the **anime entry** (via AniList metadata), not the extension.
+- **Consequences:**
+  - ✅ Simple, clear categorization.
+  - ✅ Future series/movies split doesn't require extension changes.
+  - 📌 See `DESIGN_LANGUAGE/04-screens/extensions-settings.md`.
+
+## ADR-017 — Bottom nav: configurable (3–7 tabs, rearrange, fixed "More")
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants a configurable bottom nav. The reference's bottom
+  nav is ugly and bad — needs a complete redo (floating bar style).
+- **Decision:**
+  - Bottom nav has **3–7 tabs** (min 3, max ~7).
+  - The user can **rearrange** tabs.
+  - One tab is always fixed: the **"More"** tab (name TBD). This cannot be
+    removed or repositioned by the user.
+  - The bar is a **floating** design (not edge-to-edge), per the owner's
+    preference.
+  - Available tabs include: Home, Library, Updates, History, Browse, MY, More.
+    The user picks which to show and in what order.
+- **Consequences:**
+  - ✅ Highly customizable.
+  - ✅ The floating-bar redesign fixes the reference's ugly bottom nav.
+  - ⚠️ Some tabs conflict if both shown (e.g., Home + Browse both do discovery).
+    Mitigated by letting the user choose.
+  - 📌 See `DESIGN_LANGUAGE/04-screens/bottom-nav.md`.
+
+## ADR-018 — Feature parity with customizable defaults + simple mode
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants all original Aniyomi anime features to work, but
+  with the ability to: (a) customize default settings, (b) hide settings to
+  simplify, (c) offer a "simple mode" where most settings are hidden.
+- **Decision:**
+  - All Aniyomi anime settings are implemented (feature parity).
+  - A **settings-visibility system** lets the owner hide specific settings from
+    users.
+  - A **simple mode** toggle hides most advanced settings, showing only
+    essentials.
+  - The owner can set **custom defaults** for settings (so the app's out-of-box
+    experience matches the owner's preferences).
+- **Consequences:**
+  - ✅ Power users get all options; casual users get simplicity.
+  - ⚠️ Every setting needs a "simple-mode-visible" flag. Accepted overhead.
+  - 📌 See `PLANNING/01-feature-specs/settings-system.md` (to be written).
+
+## ADR-019 — Trackers: AniList is one of several; user picks
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants multiple trackers (like Aniyomi's 11). AniList is
+  also a co-primary data source (ADR-010) AND a tracker.
+- **Decision:**
+  - Implement multiple trackers (MAL, AniList, Shikimori, Bangumi, Simkl, etc.).
+  - AniList serves a **dual role**: data source (ADR-010) AND tracker. If the
+    user links their AniList account, it can be used for both.
+  - The user picks which tracker(s) to use per anime (or globally).
+- **Consequences:**
+  - ✅ Flexibility for users on different tracker platforms.
+  - ⚠️ AniList's dual role must be clear in the UI (data source vs tracker).
+  - 📌 Tracker architecture spec in `PLANNING/01-feature-specs/trackers.md`.
+
+## ADR-020 — Auto-download new episodes (preference-matched)
+
+- **Date:** Phase 0b.
+- **Context:** When a new episode releases and matches the user's preferences
+  (audio version, etc.), auto-download it.
+- **Decision:**
+  - A global setting (on/off) with **per-series override** (opt in/out per
+    anime, like notifications per ADR-014).
+  - Preferences include: audio version (sub/dub), quality (if configurable).
+  - Triggered by the same release-detection pipeline as notifications (ADR-014).
+  - Download uses the download manager (feature parity with Aniyomi).
+- **Consequences:**
+  - ✅ "Download and watch later" workflow.
+  - ⚠️ Storage and battery sensitive. Mitigated by per-series opt-in and
+    Wi-Fi-only default.
+  - 📌 Spec in `PLANNING/01-feature-specs/auto-download.md`.
+
+## ADR-021 — MY screen (customizable name)
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants a personalized dashboard screen. The name "MYANI"
+  was voice-to-text; the actual name is "MY" and is user-customizable in
+  settings.
+- **Decision:**
+  - A `MyScreen` (Voyager/Compose) that shows: user's watch status, release
+    schedule for tracked anime, recommendations — based on library + AniList.
+  - The screen's tab name is user-customizable (default: "MY").
+  - The screen is **toggleable** (can be hidden from the bottom nav per ADR-017).
+- **Consequences:**
+  - ✅ Personalized experience.
+  - ⚠️ Requires AniList auth for full personalization (ADR-013). Without auth,
+    shows general recommendations + library-based schedule.
+  - 📌 Spec in `PLANNING/02-screen-specs/my-screen.md`.
+
+## ADR-022 — Extensible architecture: add features to any screen without rework
+
+- **Date:** Phase 0b.
+- **Context:** The owner wants the freedom to add unique features to any screen
+  later, and to handle new extension features, without rework.
+- **Decision:**
+  - Follow `RULES/ai-agent-rules.md` §4 (modularity) + §8 (future-proofing):
+    loose coupling, single entry point per module, clear data contracts.
+  - Each screen has a **feature-slot system**: the screen defines extension
+    points where additional UI/features can be plugged in without modifying the
+    screen's core.
+  - Extension features are handled via a **capability declaration** system:
+    extensions declare what features they support; the app renders UI for
+    declared capabilities. New extension features = new capability declarations,
+    not app changes.
+- **Consequences:**
+  - ✅ The owner can add features later without rework.
+  - ✅ New extension features are handled declaratively.
+  - ⚠️ Upfront design discipline (define contracts, extension points). Accepted.
+  - 📌 See `ARCHITECTURE.md` (to be finalized) for the module + extension-point
+    layout.
+
+---
+
+## Open decisions (updated after Phase 0b vision clarification)
+
+The following were **resolved** by ADRs 009–022 above and are checked off:
+
+- [x] ~Module granularity & final module list~ → partially resolved (anime+manga
+  structure per ADR-009); final module list pending `ARCHITECTURE.md`.
+- [x] ~Which Aniyomi features are hidden/deferred initially~ → manga hidden
+  (ADR-009); settings simplifiable (ADR-018).
+- [x] ~Player & reader implementation approach~ → watch page with embedded
+  mini-player (ADR-012); player spec pending.
+- [x] ~Source/extension system shape~ → extension-based like Aniyomi, two
+  categories (ADR-016).
+
+Still open (to be resolved in the architecture-planning phase):
+
+- [ ] DI framework (Injekt/Koin vs Hilt vs Metro).
+- [ ] Persistence (SQLDelight vs Room).
+- [ ] Compose-only vs mixed Views (watch page implies Compose-hosts-MPV; confirm).
 - [ ] Min/target SDK.
 - [ ] Localization tooling (Moko Resources vs stock).
-- [ ] Player & reader implementation approach.
-- [ ] Which Aniyomi features are hidden/deferred initially.
 - [ ] Backup format & Aniyomi-backup compatibility.
+- [ ] Final module list + dependency graph (→ `ARCHITECTURE.md`).
+- [ ] Player embedding approach (Compose host vs Activity) — see ADR-012.
+- [ ] Episode metadata source (the owner will specify — see ADR per-episode
+  metadata).
+- [ ] Design language specifics (→ `DESIGN_LANGUAGE/`).
 
 ## How to add a new ADR
 
