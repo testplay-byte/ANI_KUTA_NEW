@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────
+# ANI_KUTA_NEW — root .gitignore
+# This repo holds BOTH a frozen reference snapshot (ANIYOMI_REFRENCE/)
+# AND our live project (ANIKUTA_PROJECT/). The reference is committed
+# in full; only build artifacts & secrets are ignored.
+# ─────────────────────────────────────────────────────────────
+
+# ── Secrets / credentials ──
+*.keystore
+*.jks
+*.p12
+*.pem
+secrets/
+.env
+.env.*
+!.env.example
+google-services.json
+**/credentials.json
+
+# ── OS / editor cruft ──
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ── Android / Gradle build outputs (should never be committed) ──
+# These patterns apply to ANIKUTA_PROJECT/ANIKUTA once it builds.
+**/build/
+**/.gradle/
+**/captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+local.properties
+
+# ── Kotlin / Java ──
+*.hprof
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Node / tooling (if any docs tooling is added later) ──
+node_modules/
+
+# ── NOTE: ANIYOMI_REFRENCE/ is committed in full (source only, no .git).
+#    Its own .gitignore (inside ANIYOMI_REFRENCE/ANIYOMI/.gitignore) handles
+#    Android-specific ignores should anyone accidentally build there.
+#    Do NOT build inside the reference folder.

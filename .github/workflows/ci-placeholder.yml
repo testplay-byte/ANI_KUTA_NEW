@@ -1,0 +1,77 @@
+# CI placeholder — ANIKUTA build pipeline
+#
+# IMPORTANT: This workflow is a PLACEHOLDER. It does not build an APK yet
+# because the ANIKUTA app codebase does not exist yet (Phase 0).
+#
+# Build policy (HARD RULE):
+#   - APKs are built EXCLUSIVELY via GitHub Actions.
+#   - No contributor (human or AI agent) is expected to build APKs locally.
+#
+# This workflow will be expanded in Phase 1 once ANIKUTA_PROJECT/ANIKUTA has
+# a real Gradle project. See docs/06-build-and-ci.md for the plan.
+
+name: CI (placeholder)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-sanity:
+    name: Repository sanity check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify reference snapshot is present
+        run: |
+          test -f ANIYOMI_REFRENCE/ANIYOMI/README.md
+          test -f ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts
+          echo "Reference snapshot OK."
+
+      - name: Verify project skeleton is present
+        run: |
+          test -f ANIKUTA_PROJECT/ANIKUTA/README.md
+          echo "ANIKUTA skeleton OK."
+
+      - name: Verify required docs exist
+        run: |
+          for f in README.md AGENTS.md \
+                   docs/01-project-overview.md docs/02-target-architecture.md \
+                   docs/03-reference-module-map.md docs/04-design-decisions.md \
+                   docs/05-roadmap.md docs/06-build-and-ci.md \
+                   rules/agent-conventions.md rules/session-handoff-template.md; do
+            test -f "$f" || { echo "MISSING: $f"; exit 1; }
+          done
+          echo "All required documentation present."
+
+  # ── TODO (Phase 1): add a build job that compiles ANIKUTA_PROJECT/ANIKUTA ──
+  # build-anikuta:
+  #   name: Build ANIKUTA (debug)
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up JDK
+  #       uses: actions/setup-java@v4
+  #       with:
+  #         distribution: temurin
+  #         java-version: '17'
+  #     - name: Set up Gradle
+  #       uses: gradle/actions/setup-gradle@v4
+  #     - name: Build debug APK
+  #       working-directory: ANIKUTA_PROJECT/ANIKUTA
+  #       run: ./gradlew assembleDebug
+  #     - name: Upload APK
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: anikuta-debug
+  #         path: ANIKUTA_PROJECT/ANIKUTA/app/build/outputs/apk/debug/*.apk

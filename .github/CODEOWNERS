@@ -1,0 +1,18 @@
+# CODEOWNERS for ANI_KUTA_NEW
+# These are the default owners for changes in each area.
+# (Replace the @handle placeholder with the real owner when known.)
+
+# ── Root documentation & agent rules ──
+/README.md            @testplay-byte
+/AGENTS.md            @testplay-byte
+/docs/                @testplay-byte
+/rules/               @testplay-byte
+
+# ── The actual project ──
+/ANIKUTA_PROJECT/     @testplay-byte
+
+# ── Reference snapshot (frozen — changes here should be rare & deliberate) ──
+/ANIYOMI_REFRENCE/    @testplay-byte
+
+# ── CI / build pipelines ──
+/.github/             @testplay-byte
