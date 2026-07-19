@@ -267,7 +267,7 @@ View systems exist for hard technical reasons (sub-sampling image tiling;
 libmpv surface lifecycle), not for preference.
 
 For ANIKUTA, the open question (record this as a decision in
-`docs/04-design-decisions.md` when that file exists) is whether to:
+`DOCS/04-design-decisions.md` when that file exists) is whether to:
 
 1. **Stay View-based for the reader/player**, porting the Subsampling
    Scale ImageView + `AniyomiMPVView` pattern verbatim. Lowest risk; keeps

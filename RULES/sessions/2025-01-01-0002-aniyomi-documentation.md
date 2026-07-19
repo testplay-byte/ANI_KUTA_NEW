@@ -83,7 +83,7 @@ every part of the reference project from the docs alone.
   owner's direction**.
 - When directed, the documentation just produced is the perfect base for design
   decisions: every subsystem's architecture, data model, and flow is documented.
-  The open decisions in `docs/04-design-decisions.md` can now be resolved by
+  The open decisions in `DOCS/04-design-decisions.md` can now be resolved by
   referencing these docs.
 
 ## Pointers (files to read first)

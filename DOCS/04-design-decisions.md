@@ -15,7 +15,7 @@
   cross-contamination.
 - **Decision:** Use a single repository `ANI_KUTA_NEW` with two top-level trees:
   `ANIYOMI_REFRENCE/` (frozen reference) and `ANIKUTA_PROJECT/` (live project).
-  Keep the root clean for navigation + `docs/` + `rules/`.
+  Keep the root clean for navigation + `DOCS/` + `RULES/`.
 - **Consequences:**
   - ✅ A new agent reads the root, immediately understands layout.
   - ✅ Reference can never be confused with our code.
@@ -86,12 +86,12 @@
   prior context. Continuity depends on documentation.
 - **Decision:**
   - Root `README.md` + `AGENTS.md` are the entry points.
-  - `docs/04-design-decisions.md` (this file) is the decision log.
-  - `docs/05-roadmap.md` tracks phase/progress.
-  - `rules/` holds operating conventions + session handoff notes.
+  - `DOCS/04-design-decisions.md` (this file) is the decision log.
+  - `DOCS/05-roadmap.md` tracks phase/progress.
+  - `RULES/` holds operating conventions + session handoff notes.
   - Every Gradle module in `ANIKUTA_PROJECT/ANIKUTA/` ships a `README.md`.
 - **Consequences:**
-  - ✅ Any agent can resume work by reading root + `rules/` + latest session note.
+  - ✅ Any agent can resume work by reading root + `RULES/` + latest session note.
   - ⚠️ Documentation overhead per change — accepted as the cost of continuity.
 
 ## ADR-007 — Second read-only reference: the OLD ANIKUTA project
@@ -128,15 +128,15 @@
   red=error, blue=stopped/needs-input, orange=processing).
 - **Decision:** Every agent MUST send an ntfy.sh notification on task completion
   (and optionally on starting a long task). The exact format, colors, and curl
-  command are specified in `rules/notifications.md`. This is a hard rule, added
-  to `AGENTS.md` §4 and `rules/agent-conventions.md`.
+  command are specified in `RULES/notifications.md`. This is a hard rule, added
+  to `AGENTS.md` §4 and `RULES/agent-conventions.md`.
 - **Consequences:**
   - ✅ Owner gets push notifications for every task outcome without polling.
   - ✅ Color coding communicates outcome at a glance.
   - ⚠️ Agents must remember to send the notification even on small tasks.
     Mitigated by documenting it as a hard rule in multiple places.
   - ⚠️ The ntfy.sh topic is public (no auth). Do not include secrets in the
-    message body. Documented in `rules/notifications.md`.
+    message body. Documented in `RULES/notifications.md`.
 
 ---
 

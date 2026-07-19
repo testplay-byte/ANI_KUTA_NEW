@@ -5,7 +5,7 @@ These complement the analytical docs (00–07) with step-by-step recipes.
 
 > ⚠️ **Scope note:** These guides describe the **Aniyomi reference** as it exists
 > in our snapshot — they are study aids, not a mandate for ANIKUTA. When building
-> ANIKUTA, record your own approach in `../../../docs/04-design-decisions.md`.
+> ANIKUTA, record your own approach in `../../../DOCS/04-design-decisions.md`.
 
 | File | What it covers |
 |---|---|

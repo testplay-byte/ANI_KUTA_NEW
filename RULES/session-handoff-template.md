@@ -34,7 +34,7 @@
 
 ## Decisions made (and where they're recorded)
 
-<!-- Any ADRs added or decisions made. Link to docs/04-design-decisions.md entries. -->
+<!-- Any ADRs added or decisions made. Link to DOCS/04-design-decisions.md entries. -->
 
 -
 -

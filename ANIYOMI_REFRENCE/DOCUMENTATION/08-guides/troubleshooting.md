@@ -4,7 +4,7 @@
 > causes and fixes. Values cited here were checked against the actual snapshot
 > (not assumed).
 
-> ⚠️ Reminder: per `../../../docs/06-build-and-ci.md`, ANIKUTA is built via
+> ⚠️ Reminder: per `../../../DOCS/06-build-and-ci.md`, ANIKUTA is built via
 > GitHub Actions only — never locally. The issues below are relevant when
 > studying the reference or when CI fails.
 
@@ -125,9 +125,9 @@
 
 ### CI sanity job fails with "MISSING: <file>"
 - **Cause:** The `ci-placeholder.yml` workflow verifies required files exist
-  (both reference snapshots, the ANIKUTA skeleton, and a list of docs/rules files).
+  (both reference snapshots, the ANIKUTA skeleton, and a list of DOCS/RULES files).
 - **Fix:** Don't delete required files, or update the workflow's file list if a
-  doc was intentionally renamed. See `../../../docs/06-build-and-ci.md`.
+  doc was intentionally renamed. See `../../../DOCS/06-build-and-ci.md`.
 
 ## Things that are NOT bugs (common false alarms)
 
@@ -146,4 +146,4 @@
 
 - [`how-to-add-features.md`](how-to-add-features.md)
 - `../01-architecture/06-error-handling.md` — the app's own error handling.
-- `../../../docs/06-build-and-ci.md` — ANIKUTA's build policy (CI-only).
+- `../../../DOCS/06-build-and-ci.md` — ANIKUTA's build policy (CI-only).

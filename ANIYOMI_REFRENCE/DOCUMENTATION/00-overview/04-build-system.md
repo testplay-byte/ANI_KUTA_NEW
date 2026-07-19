@@ -142,10 +142,10 @@ Upstream Aniyomi's own workflows live at `../ANIYOMI/.github/workflows/`:
 
 > **Note:** We do **not** use upstream's CI. ANIKUTA has its own CI at the repo
 > root `.github/workflows/`. The upstream workflows are kept only because they
-> came with the reference snapshot. See `../../../../docs/06-build-and-ci.md`.
+> came with the reference snapshot. See `../../../../DOCS/06-build-and-ci.md`.
 
 ## See also
 
 - [`03-module-map.md`](03-module-map.md) — what gets built.
 - `../../02-modules/` — per-module `build.gradle.kts` details.
-- `../../../../docs/06-build-and-ci.md` — OUR build policy (not Aniyomi's).
+- `../../../../DOCS/06-build-and-ci.md` — OUR build policy (not Aniyomi's).

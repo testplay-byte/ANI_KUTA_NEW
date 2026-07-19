@@ -11,7 +11,7 @@
 
 - Pulled latest repo state (was already up to date on `main`).
 - Sent an "orange/processing" ntfy.sh notification to confirm the rule works.
-- Wrote `rules/notifications.md` documenting the mandatory notification rule
+- Wrote `RULES/notifications.md` documenting the mandatory notification rule
   (topic, format, color semantics: 🟩/🟥/🟦/🟧, examples).
 - Downloaded the old ANIKUTA source tarball (`archive/refs/heads/main.tar.gz`,
   source-only, no `.git`).
@@ -24,17 +24,17 @@
 - Updated `AGENTS.md` (cheat sheet row, hard rule #1 now covers both references,
   hard rule #8 added for notifications, §5 rewritten to cover both references).
 - Added ADR-007 (second read-only reference) and ADR-008 (ntfy notifications) to
-  `docs/04-design-decisions.md`.
-- Updated `rules/README.md` and `rules/agent-conventions.md` (new rule #11) to
+  `DOCS/04-design-decisions.md`.
+- Updated `RULES/README.md` and `RULES/agent-conventions.md` (new rule #11) to
   reference `notifications.md`.
 - Updated `.github/CODEOWNERS` and `.github/workflows/ci-placeholder.yml` to
-  cover the new reference + the new `rules/notifications.md` doc.
+  cover the new reference + the new `RULES/notifications.md` doc.
 
 ## What is DONE
 
 - ntfy.sh notification rule persisted and demonstrated (sent a real notification).
 - Old ANIKUTA project saved as a read-only reference, fully documented.
-- All navigation docs (root README, AGENTS.md, rules/) updated to point at it.
+- All navigation docs (root README, AGENTS.md, RULES/) updated to point at it.
 - CI sanity job updated to verify both references + the notifications doc.
 
 ## What is NOT done
@@ -53,13 +53,13 @@
   already did per-subsystem Aniyomi analysis. We can review/validate it rather
   than redo it from scratch.
 - Also read `OLD_ANIKUTA/ANIKUTA_OLD/DOCS/ENGINEERING/MODULARIZATION-ASSESSMENT.md`
-  for lessons learned before finalizing our `docs/02-target-architecture.md`.
+  for lessons learned before finalizing our `DOCS/02-target-architecture.md`.
 
 ## Pointers (files to read first)
 
 - `/OLD_ANIKUTA/README.md` — the new reference's rules + provenance.
-- `/rules/notifications.md` — the mandatory notification rule.
-- `/docs/04-design-decisions.md` — ADR-007 and ADR-008 (new).
+- `/RULES/notifications.md` — the mandatory notification rule.
+- `/DOCS/04-design-decisions.md` — ADR-007 and ADR-008 (new).
 - `/AGENTS.md` — updated cheat sheet + hard rules.
 
 ## Dev environment notes

@@ -8,7 +8,7 @@
 #   - No contributor (human or AI agent) is expected to build APKs locally.
 #
 # This workflow will be expanded in Phase 1 once ANIKUTA_PROJECT/ANIKUTA has
-# a real Gradle project. See docs/06-build-and-ci.md for the plan.
+# a real Gradle project. See DOCS/06-build-and-ci.md for the plan.
 
 name: CI (placeholder)
 
@@ -41,19 +41,24 @@ jobs:
           test -f OLD_ANIKUTA/ANIKUTA_OLD/settings.gradle.kts
           echo "Old ANIKUTA reference snapshot OK."
 
+      - name: Verify Aniyomi documentation is present
+        run: |
+          test -f ANIYOMI_REFRENCE/DOCUMENTATION/README.md
+          echo "Aniyomi reference documentation OK."
+
       - name: Verify project skeleton is present
         run: |
           test -f ANIKUTA_PROJECT/ANIKUTA/README.md
           echo "ANIKUTA skeleton OK."
 
-      - name: Verify required docs exist
+      - name: Verify required root + DOCS + RULES files exist
         run: |
-          for f in README.md AGENTS.md \
-                   docs/01-project-overview.md docs/02-target-architecture.md \
-                   docs/03-reference-module-map.md docs/04-design-decisions.md \
-                   docs/05-roadmap.md docs/06-build-and-ci.md \
-                   rules/agent-conventions.md rules/notifications.md \
-                   rules/session-handoff-template.md; do
+          for f in README.md AGENTS.md ARCHITECTURE.md \
+                   DOCS/01-project-overview.md DOCS/02-target-architecture.md \
+                   DOCS/03-reference-module-map.md DOCS/04-design-decisions.md \
+                   DOCS/05-roadmap.md DOCS/06-build-and-ci.md \
+                   RULES/ai-agent-rules.md RULES/project-conventions.md \
+                   RULES/notifications.md RULES/session-handoff-template.md; do
             test -f "$f" || { echo "MISSING: $f"; exit 1; }
           done
           echo "All required documentation present."

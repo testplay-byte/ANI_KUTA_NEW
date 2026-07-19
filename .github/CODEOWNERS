@@ -2,11 +2,14 @@
 # These are the default owners for changes in each area.
 # (Replace the @handle placeholder with the real owner when known.)
 
-# ── Root documentation & agent rules ──
+# ── Root: single source of truth + orientation ──
+/ARCHITECTURE.md      @testplay-byte
 /README.md            @testplay-byte
 /AGENTS.md            @testplay-byte
-/docs/                @testplay-byte
-/rules/               @testplay-byte
+
+# ── Project documentation & AI-agent rules ──
+/DOCS/                @testplay-byte
+/RULES/               @testplay-byte
 
 # ── The actual project ──
 /ANIKUTA_PROJECT/     @testplay-byte

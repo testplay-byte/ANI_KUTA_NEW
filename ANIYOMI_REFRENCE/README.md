@@ -52,7 +52,7 @@ snapshot, the procedure is:
 1. Download the new tarball from upstream.
 2. Replace the contents of `ANIYOMI/` entirely.
 3. Commit with message: `chore(reference): refresh Aniyomi snapshot to <upstream commit sha>`.
-4. Record the change in `docs/04-design-decisions.md`.
+4. Record the change in `DOCS/04-design-decisions.md`.
 
 Do **not** attempt to `git pull` upstream into this folder — it is not a submodule
 and has no `.git` of its own by design.

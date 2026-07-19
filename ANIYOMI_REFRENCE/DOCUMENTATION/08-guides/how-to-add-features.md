@@ -4,7 +4,7 @@
 > All paths and class names **verified against the snapshot** at `../ANIYOMI/`.
 >
 > These describe how Aniyomi does it — useful when studying or porting. ANIKUTA
-> may choose differently (record in `../../../docs/04-design-decisions.md`).
+> may choose differently (record in `../../../DOCS/04-design-decisions.md`).
 
 ## 1. Add a new Voyager screen (Compose)
 
@@ -35,7 +35,7 @@ Aniyomi uses **Voyager** for Compose navigation. A screen = `Screen` + `ScreenMo
    Aniyomi-specific strings) or `i18n/...` (for shared ones). Reference via
    `AYMR.strings.foo_title` / `MR.strings.foo_title`.
 5. **Register any DI deps** in the relevant `*Module` called from `App.kt`.
-6. **Build via CI** (never locally — see `../../../../docs/06-build-and-ci.md`).
+6. **Build via CI** (never locally — see `../../../../DOCS/06-build-and-ci.md`).
 
 > See `../01-architecture/04-navigation.md` for the Voyager model and
 > `../06-ui/screens.md` for the screen catalog.

@@ -47,4 +47,4 @@ with our own architecture, design, and feature priorities.
 ## Out of scope for this repository
 
 - Anything unrelated to building ANIKUTA. The root directory is kept clean so it
-  can also hold AI-agent session rules and handoff notes (see `../rules/`).
+  can also hold AI-agent session rules and handoff notes (see `../RULES/`).

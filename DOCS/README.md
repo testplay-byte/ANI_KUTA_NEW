@@ -1,4 +1,4 @@
-# docs/
+# DOCS/
 
 All project documentation lives here. Documents are numbered so they read in a
 sensible order. Each doc is self-contained but cross-references the others.

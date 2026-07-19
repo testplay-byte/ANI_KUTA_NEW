@@ -102,4 +102,4 @@ Keep it short (ntfy.sh is a phone notification, not an email):
 - A link if relevant (repo URL, file path).
 
 Do NOT dump full logs. If detail is needed, put it in a session handoff note
-under `rules/sessions/` and link to it from the notification.
+under `RULES/sessions/` and link to it from the notification.

@@ -9,11 +9,11 @@
 place and the rules of engagement defined.
 
 **Done when:**
-- ✅ Repo structured: `ANIYOMI_REFRENCE/`, `ANIKUTA_PROJECT/`, `docs/`, `rules/`, `.github/`.
+- ✅ Repo structured: `ANIYOMI_REFRENCE/`, `ANIKUTA_PROJECT/`, `DOCS/`, `RULES/`, `.github/`.
 - ✅ Aniyomi reference source committed under `ANIYOMI_REFRENCE/ANIYOMI/`.
 - ✅ Root `README.md` + `AGENTS.md` written.
-- ✅ `docs/01..06` written.
-- ✅ `rules/` written.
+- ✅ `DOCS/01..06` written.
+- ✅ `RULES/` written.
 - ✅ CI placeholder workflow exists and passes a repo-sanity job.
 - ✅ Build policy (CI-only) documented and enforced by convention.
 
@@ -80,4 +80,4 @@ in `04-design-decisions.md` is checked off.
 
 > Phases 2–6 are intentionally coarse. They will be detailed as we approach them,
 > and each will get its own breakdown in this file (or a per-phase doc under
-> `docs/`).
+> `DOCS/`).

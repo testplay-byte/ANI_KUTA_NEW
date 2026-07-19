@@ -16,9 +16,9 @@ verified supplementary docs for valid gaps.
 ## Audit verification results (honest assessment)
 
 ### Genuinely VALID issues (fixed)
-1. **Wrong-depth `../../../../docs/` references** in
+1. **Wrong-depth `../../../../DOCS/` references** in
    `01-architecture/02-dependency-injection.md` (lines 105, 112). Should be
-   `../../../docs/` (3 levels, not 4). **Fixed.** (Note: the audit ALSO cited
+   `../../../DOCS/` (3 levels, not 4). **Fixed.** (Note: the audit ALSO cited
    `manga-reader.md:763` and `cross-reference-matrix.md:106` as having the same
    broken link — these were **fabricated**; those lines contain no such reference.)
 2. **No consolidated dual manga/anime pattern guide** — valid gap. Added
@@ -53,7 +53,7 @@ The audit contained many inaccurate source citations. Verified FALSE:
 
 ### Audit suggestions judged OUT OF SCOPE (not added)
 - **ADRs for Aniyomi's design choices** — ADRs belong to the ANIKUTA project
-  (`docs/04-design-decisions.md`), not the Aniyomi *reference* docs. The reference
+  (`DOCS/04-design-decisions.md`), not the Aniyomi *reference* docs. The reference
   docs explain what Aniyomi does; ANIKUTA's decisions about whether to copy it
   are recorded separately. (The reference docs do link to the ANIKUTA ADR file
   where relevant, e.g. the DI doc.)
