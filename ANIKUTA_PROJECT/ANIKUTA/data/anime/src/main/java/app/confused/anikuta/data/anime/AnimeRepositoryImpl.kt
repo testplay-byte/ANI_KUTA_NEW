@@ -2,11 +2,11 @@ package app.confused.anikuta.data.anime
 
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.repository.AnimeRepository
+import app.confused.anikuta.core.common.di.DispatcherProvider
 import app.confused.anikuta.core.database.AnikutaDatabase
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import android.util.Log
 
@@ -20,27 +20,28 @@ import android.util.Log
  */
 class AnimeRepositoryImpl(
     private val database: AnikutaDatabase,
+    private val dispatchers: DispatcherProvider,
 ) : AnimeRepository {
 
     override fun observeAll(): Flow<List<Anime>> =
         database.animesQueries.selectAll(AnimeMapper::map)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(dispatchers.io)
 
     override fun observeFavorites(): Flow<List<Anime>> =
         database.animesQueries.selectFavorites(AnimeMapper::map)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(dispatchers.io)
 
     override fun observeById(id: Long): Flow<Anime?> =
         database.animesQueries.selectById(id, AnimeMapper::map)
             .asFlow()
-            .mapToOneOrNull(Dispatchers.IO)
+            .mapToOneOrNull(dispatchers.io)
 
     override fun observeBySource(sourceId: Long): Flow<List<Anime>> =
         database.animesQueries.selectBySource(sourceId, AnimeMapper::map)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(dispatchers.io)
 
     override suspend fun getById(id: Long): Anime? =
         database.animesQueries.selectById(id, AnimeMapper::map)

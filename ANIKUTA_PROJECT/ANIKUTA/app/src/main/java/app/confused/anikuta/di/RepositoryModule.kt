@@ -1,5 +1,7 @@
 package app.confused.anikuta.di
 
+import app.confused.anikuta.core.common.di.DefaultDispatcherProvider
+import app.confused.anikuta.core.common.di.DispatcherProvider
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.common.repository.EpisodeRepository
 import app.confused.anikuta.core.common.repository.HistoryRepository
@@ -14,9 +16,13 @@ import org.koin.dsl.module
  *
  * Binds interfaces (in `:core:common`) to implementations (in `:data:*`).
  * Per `RULES/ai-agent-rules.md` §3: ViewModels depend on the interface only.
+ *
+ * Also provides [DispatcherProvider] (injected, not hardcoded — per ADR-023
+ * and `RULES/ai-agent-rules.md` §10 testability).
  */
 val repositoryModule: Module = module {
-    single<AnimeRepository> { AnimeRepositoryImpl(get()) }
-    single<EpisodeRepository> { EpisodeRepositoryImpl(get()) }
-    single<HistoryRepository> { HistoryRepositoryImpl(get()) }
+    single<DispatcherProvider> { DefaultDispatcherProvider() }
+    single<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
+    single<EpisodeRepository> { EpisodeRepositoryImpl(get(), get()) }
+    single<HistoryRepository> { HistoryRepositoryImpl(get(), get()) }
 }

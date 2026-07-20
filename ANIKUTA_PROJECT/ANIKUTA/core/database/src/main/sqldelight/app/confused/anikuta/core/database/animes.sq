@@ -39,7 +39,7 @@ selectBySource:
 SELECT * FROM animes WHERE source_id = :sourceId AND favorite = 1;
 
 searchByName:
-SELECT * FROM animes WHERE title LIKE '%' || :query || '%' AND favorite = 1;
+SELECT * FROM animes WHERE title LIKE '%' || :query || '%' COLLATE NOCASE AND favorite = 1;
 
 insert:
 INSERT INTO animes (

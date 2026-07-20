@@ -11,6 +11,7 @@ CREATE TABLE animetrack (
     status INTEGER NOT NULL DEFAULT 0,
     total_episodes INTEGER NOT NULL DEFAULT 0,
     display_score TEXT,
+    UNIQUE(anime_id, tracker_id),
     FOREIGN KEY (anime_id) REFERENCES animes(_id) ON DELETE CASCADE
 );
 
@@ -35,6 +36,17 @@ UPDATE animetrack SET
     score = :score, status = :status, total_episodes = :totalEpisodes,
     display_score = :displayScore
 WHERE _id = :id;
+
+-- Upsert: insert or replace on conflict (anime_id, tracker_id).
+-- Uses INSERT OR REPLACE (SQLite 3.18 default dialect compatible).
+upsert:
+INSERT OR REPLACE INTO animetrack (
+    anime_id, tracker_id, remote_id, remote_url, last_seen,
+    score, status, total_episodes, display_score
+) VALUES (
+    :animeId, :trackerId, :remoteId, :remoteUrl, :lastSeen,
+    :score, :status, :totalEpisodes, :displayScore
+);
 
 delete:
 DELETE FROM animetrack WHERE _id = :id;

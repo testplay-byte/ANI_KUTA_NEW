@@ -6,10 +6,11 @@
 > **ADR refs:** ADR-015 (custom M3-inspired, not stock Material 3 Expressive),
 > ADR-018 (customizable defaults + simple mode).
 >
-> **Status:** STRUCTURE is fixed (this doc). Specific color **values** (hex
-> codes, contrast ratios, exact hue choices) are TBD — to be decided in a
-> dedicated design session with the owner. Do not hardcode palette values into
-> production code yet.
+> **Primary color:** `#B1F256` (lime green) — the owner's chosen starter color.
+> Derivable shades for elements. Customizable later.
+>
+> **Structure reference:** `PROTOTYPE_REFERENCE/Anime_App/app/src/main/java/com/testplaybyte/animeapp/theme/`
+> (the owner's prototype — same structure, different palette colors).
 
 ---
 
