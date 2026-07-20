@@ -62,7 +62,12 @@ class ExtensionRepoApi(
 
     /**
      * Verifies that [baseUrl] is a valid extension repository by fetching its
-     * index.json and checking that it parses correctly.
+     * index.json AND repo.json (for metadata).
+     *
+     * Per the old ANIKUTA project's approach:
+     * 1. The URL can be a base URL or end with /index.min.json
+     * 2. Fetch $baseUrl/index.min.json to verify it's a valid extension index
+     * 3. Fetch $baseUrl/repo.json to get the repo's proper name + website
      *
      * @return a [RepoVerificationResult] indicating success or failure with a message.
      */
@@ -73,44 +78,84 @@ class ExtensionRepoApi(
             .removeSuffix("/index.min.json")
             .trimEnd('/')
 
-        // Try index.min.json first (smaller), then index.json
-        val urls = listOf("$cleanUrl/index.min.json", "$cleanUrl/index.json")
+        if (!cleanUrl.startsWith("http")) {
+            return@withContext RepoVerificationResult.Error("URL must start with http:// or https://")
+        }
 
-        for (url in urls) {
+        // Step 1: Verify the index exists and is valid
+        val indexUrls = listOf("$cleanUrl/index.min.json", "$cleanUrl/index.json")
+        var indexVerified = false
+        var extensionCount = 0
+
+        for (url in indexUrls) {
             try {
-                Log.i(TAG, "Verifying repo at: $url")
+                Log.i(TAG, "Verifying repo index at: $url")
                 val response = client.newCall(Request.Builder().url(url).build()).execute()
                 response.use {
                     if (!it.isSuccessful) {
                         Log.w(TAG, "HTTP ${it.code} for $url")
-                        return@use  // Try next URL
+                        return@use
                     }
                     val body = it.body?.string().orEmpty()
                     if (body.isEmpty()) {
                         Log.w(TAG, "Empty body from $url")
-                        return@use  // Try next URL
+                        return@use
                     }
-                    // Try to parse
                     val entries = try {
                         json.decodeFromString<List<RepoIndexEntry>>(body)
                     } catch (e: Exception) {
                         Log.w(TAG, "Parse failed for $url: ${e.message}")
-                        return@use  // Try next URL
+                        return@use
                     }
                     if (entries.isEmpty()) {
                         Log.w(TAG, "Index is empty at $url")
-                        return@use  // Try next URL
+                        return@use
                     }
-                    Log.i(TAG, "Repo verified: $cleanUrl (${entries.size} extensions)")
-                    return@withContext RepoVerificationResult.Success(cleanUrl, entries.size)
+                    indexVerified = true
+                    extensionCount = entries.size
+                    Log.i(TAG, "Index verified: $cleanUrl ($extensionCount extensions)")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch failed for $url: ${e.message}")
-                // Try next URL
             }
+            if (indexVerified) break
         }
 
-        RepoVerificationResult.Error("Could not fetch a valid index from this URL. Make sure it's a valid extension repository.")
+        if (!indexVerified) {
+            return@withContext RepoVerificationResult.Error("Could not fetch a valid extension index from this URL. Make sure it's a valid extension repository.")
+        }
+
+        // Step 2: Fetch repo.json for the proper name + website
+        var repoName = cleanUrl.substringAfterLast("/").ifEmpty { cleanUrl }
+        var repoWebsite = ""
+
+        try {
+            Log.i(TAG, "Fetching repo.json from: $cleanUrl/repo.json")
+            val response = client.newCall(Request.Builder().url("$cleanUrl/repo.json").build()).execute()
+            response.use {
+                if (it.isSuccessful) {
+                    val body = it.body?.string().orEmpty()
+                    if (body.isNotEmpty()) {
+                        try {
+                            val meta = json.decodeFromString<RepoMetaDto>(body)
+                            repoName = meta.meta.name
+                            repoWebsite = meta.meta.website
+                            Log.i(TAG, "Repo metadata: name=$repoName, website=$repoWebsite")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to parse repo.json: ${e.message}")
+                            // Use fallback name — not an error
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "HTTP ${it.code} for repo.json — using fallback name")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch repo.json: ${e.message}")
+            // Use fallback name — not an error
+        }
+
+        RepoVerificationResult.Success(cleanUrl, repoName, repoWebsite, extensionCount)
     }
 
     /** Parses the index JSON body into [AnimeExtension.Available] entries. */
@@ -181,9 +226,28 @@ class ExtensionRepoApi(
  * The UI uses this to show feedback to the user before adding the repo.
  */
 sealed interface RepoVerificationResult {
-    data class Success(val cleanUrl: String, val extensionCount: Int) : RepoVerificationResult
+    data class Success(
+        val cleanUrl: String,
+        val repoName: String,
+        val website: String,
+        val extensionCount: Int,
+    ) : RepoVerificationResult
     data class Error(val message: String) : RepoVerificationResult
 }
+
+/** DTO for repo.json — contains the repo's display metadata. */
+@Serializable
+data class RepoMetaDto(
+    val meta: RepoMetaContent,
+)
+
+@Serializable
+data class RepoMetaContent(
+    val name: String,
+    val shortName: String? = null,
+    val website: String = "",
+    val signingKeyFingerprint: String = "",
+)
 
 /** Builds a default OkHttpClient suitable for repo-index fetching. */
 fun defaultRepoOkHttpClient(): OkHttpClient = OkHttpClient.Builder()

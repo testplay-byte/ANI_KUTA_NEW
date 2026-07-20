@@ -199,10 +199,11 @@ fun ExtensionRepoSettingsScreen(
                                     isVerifying = false
                                     when (result) {
                                         is RepoVerificationResult.Success -> {
-                                            Log.i(TAG, "Repo verified: ${result.cleanUrl} (${result.extensionCount} extensions)")
+                                            Log.i(TAG, "Repo verified: ${result.cleanUrl} (${result.extensionCount} extensions, name=${result.repoName})")
                                             repoRepository.insert(ExtensionRepo(
                                                 baseUrl = result.cleanUrl,
-                                                name = result.cleanUrl.substringAfterLast("/").ifEmpty { result.cleanUrl },
+                                                name = result.repoName,
+                                                website = result.website,
                                             ))
                                             repoUrlInput = ""
                                             showAddDialog = false

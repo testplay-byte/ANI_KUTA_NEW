@@ -129,30 +129,27 @@ class AnimeExtensionInstaller(
      */
     fun uninstallApk(pkgName: String) {
         val uri = Uri.fromParts("package", pkgName, null)
-        // Use ACTION_UNINSTALL_PACKAGE (deprecated but more reliable on some ROMs)
-        // with FLAG_ACTIVITY_NEW_TASK. Falls back to ACTION_DELETE if the
-        // deprecated action isn't available.
-        @Suppress("DEPRECATION")
-        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri).apply {
+        val intent = Intent(Intent.ACTION_DELETE, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(Intent.EXTRA_RETURN_RESULT, true)
         }
         try {
-            context.startActivity(intent)
-            Log.i(TAG, "Uninstall intent sent for $pkgName")
+            // Check if the intent can be resolved (some ROMs don't support ACTION_DELETE)
+            if (intent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(intent)
+                Log.i(TAG, "Uninstall intent sent for $pkgName")
+            } else {
+                // Fallback: open the app details settings page where the user can uninstall manually
+                Log.w(TAG, "ACTION_DELETE not resolved for $pkgName, opening app settings")
+                val settingsIntent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = uri
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(settingsIntent)
+                Toast.makeText(context, "Open the app info to uninstall", Toast.LENGTH_SHORT).show()
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "ACTION_UNINSTALL_PACKAGE failed for $pkgName, trying ACTION_DELETE", e)
-            // Fallback: ACTION_DELETE
-            val fallbackIntent = Intent(Intent.ACTION_DELETE, uri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            try {
-                context.startActivity(fallbackIntent)
-                Log.i(TAG, "Fallback ACTION_DELETE sent for $pkgName")
-            } catch (e2: Exception) {
-                Log.e(TAG, "Both uninstall intents failed for $pkgName", e2)
-                Toast.makeText(context, "Cannot uninstall extension", Toast.LENGTH_SHORT).show()
-            }
+            Log.e(TAG, "Uninstall failed for $pkgName", e)
+            Toast.makeText(context, "Uninstall failed: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
