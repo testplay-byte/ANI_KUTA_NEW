@@ -5,6 +5,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * Network helper stubs — replaces the reference's `eu.kanade.tachiyomi.network`
@@ -80,7 +83,7 @@ fun okhttp3.Call.asObservableSuccess(): Observable<Response> {
 /** Extension function: await the success of an RxJava Observable. */
 suspend fun <T> Observable<T>.awaitSuccess(): T = awaitSingle()
 
-/** Extension function: await a single emission (same as awaitSingle). */
+/** Extension function: await a single emission from an RxJava Observable. */
 suspend fun <T> Observable<T>.awaitSingle(): T = eu.kanade.tachiyomi.util.awaitSingle()
 
 /** Extension function: suspend and await an OkHttp Call's response directly. */
