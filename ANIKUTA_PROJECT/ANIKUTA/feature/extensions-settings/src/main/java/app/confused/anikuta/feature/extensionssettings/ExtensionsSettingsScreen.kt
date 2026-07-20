@@ -59,20 +59,16 @@ fun ExtensionsSettingsScreen(
 ) {
     val scrollState = rememberScrollState()
 
+    // Handle the system back gesture
+    androidx.activity.compose.BackHandler { onBack() }
+
     // 0 = Anime, 1 = Manga (ADR-016: Video / Image-Manga).
     // Default = Anime per ADR-009 (the app is anime-first).
     var selectedCategoryIndex by rememberSaveable { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Pinned collapsing header with a back button
-        CollapsingHeader(
-            title = "Extensions",
-            scrollState = scrollState,
-            actions = {
-                // Back button will be handled by the parent's onBack
-                // For now, the header just shows the title
-            },
-        )
+        // Pinned collapsing header
+        CollapsingHeader(title = "Extensions", scrollState = scrollState)
 
         // Sticky Anime/Manga toggle — sits below the header, does NOT scroll
         // away with the list (per extensions-settings.md §4).

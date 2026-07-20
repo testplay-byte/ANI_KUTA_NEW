@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,11 +60,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// Nav items: Settings is now under More (per owner feedback)
 private val navItems = listOf(
     NavItem("home", "Home", NavIcons.Home),
     NavItem("library", "Library", NavIcons.Library),
     NavItem("search", "Search", NavIcons.Search),
-    NavItem("settings", "Settings", NavIcons.Settings),
     NavItem("more", "More", NavIcons.More),
 )
 
@@ -72,7 +73,17 @@ private fun AnikutaApp() {
     var currentRoute by remember { mutableStateOf("home") }
     var detailAnimeId by remember { mutableStateOf<Int?>(null) }
     var showExtensions by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val anilistApi = remember { AniListApi() }
+
+    // Handle back gesture for sub-screens
+    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings) {
+        when {
+            detailAnimeId != null -> detailAnimeId = null
+            showExtensions -> showExtensions = false
+            showSettings -> showSettings = false
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -94,6 +105,13 @@ private fun AnikutaApp() {
                     onBack = { showExtensions = false },
                 )
             }
+            // Settings sub-screen (from More)
+            showSettings -> {
+                SettingsScreen(
+                    onOpenExtensions = { showExtensions = true },
+                    onBack = { showSettings = false },
+                )
+            }
             // Tab content
             else -> {
                 when (currentRoute) {
@@ -101,8 +119,8 @@ private fun AnikutaApp() {
                         api = anilistApi,
                         onOpenAnime = { id -> detailAnimeId = id },
                     )
-                    "settings" -> SettingsScreen(
-                        onOpenExtensions = { showExtensions = true },
+                    "more" -> MoreScreen(
+                        onOpenSettings = { showSettings = true },
                     )
                     else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
                 }
@@ -120,12 +138,39 @@ private fun AnikutaApp() {
 }
 
 /**
- * Settings screen — a simple list with sections.
- * Extensions is a sub-option here (not in the More tab).
+ * More screen — a list with Settings and other options.
+ */
+@Composable
+private fun MoreScreen(
+    onOpenSettings: () -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        CollapsingHeader(title = "More", scrollState = scrollState)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
+        ) {
+            item {
+                SettingsSectionLabel("General")
+                MoreRow(
+                    icon = Icons.Filled.Settings,
+                    title = "Settings",
+                    subtitle = "Theme, display, data management",
+                    onClick = onOpenSettings,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Settings screen — a sub-screen from More.
  */
 @Composable
 private fun SettingsScreen(
     onOpenExtensions: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize()) {
@@ -134,10 +179,9 @@ private fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
         ) {
-            // General section
             item {
                 SettingsSectionLabel("General")
-                SettingsRow(
+                MoreRow(
                     icon = Icons.Filled.Extension,
                     title = "Extensions",
                     subtitle = "Manage anime and manga extensions",
@@ -161,7 +205,7 @@ private fun SettingsSectionLabel(text: String) {
 }
 
 @Composable
-private fun SettingsRow(
+private fun MoreRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,

@@ -31,6 +31,11 @@ import java.util.concurrent.TimeUnit
 class AniListApi(
     private val client: OkHttpClient = defaultClient(),
 ) {
+    // In-memory cache for anime details (5-minute TTL).
+    // Keyed by AniList ID. Prevents re-fetching when navigating back to a detail page.
+    private val detailCache = mutableMapOf<Int, Pair<Long, AniListAnime>>()
+    private val cacheTtlMs = 5 * 60 * 1000L // 5 minutes
+
     /** Fetch trending anime (for the Browse screen). */
     suspend fun fetchTrending(page: Int = 1, perPage: Int = 20): List<AniListAnime> =
         queryList(TRENDING_QUERY, page, perPage)
@@ -43,8 +48,23 @@ class AniListApi(
     suspend fun searchAnime(query: String, page: Int = 1, perPage: Int = 20): List<AniListAnime> =
         queryList(SEARCH_QUERY, page, perPage, search = query)
 
-    /** Fetch a single anime by its AniList ID. */
-    suspend fun fetchById(id: Int): AniListAnime? = withContext(Dispatchers.IO) {
+    /** Fetch a single anime by its AniList ID (with 5-min in-memory cache). */
+    suspend fun fetchById(id: Int): AniListAnime? {
+        // Check cache
+        val cached = detailCache[id]
+        if (cached != null && System.currentTimeMillis() - cached.first < cacheTtlMs) {
+            return cached.second
+        }
+
+        // Fetch from network
+        val result = fetchByIdFromNetwork(id) ?: return null
+
+        // Cache it
+        detailCache[id] = System.currentTimeMillis() to result
+        return result
+    }
+
+    private suspend fun fetchByIdFromNetwork(id: Int): AniListAnime? = withContext(Dispatchers.IO) {
         val variables = buildJsonObject {
             put("id", id)
         }
@@ -144,12 +164,24 @@ class AniListApi(
             title { romaji english native }
             coverImage { medium large extraLarge color }
             averageScore
+            meanScore
+            popularity
+            favourites
             format
             episodes
             status
             description(asHtml: false)
             bannerImage
             genres
+            season
+            seasonYear
+            startDate { year month day }
+            endDate { year month day }
+            studios(isMain: true) { nodes { id name isAnimationStudio } }
+            nextAiringEpisode { id airingAt timeUntilAiring episode }
+            source
+            countryOfOrigin
+            isAdult
         """
 
         private const val TRENDING_QUERY = """
