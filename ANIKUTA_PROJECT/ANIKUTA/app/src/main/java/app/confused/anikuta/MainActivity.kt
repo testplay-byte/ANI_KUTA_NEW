@@ -114,12 +114,18 @@ private fun AnikutaApp() {
                     api = anilistApi,
                     onBack = {
                         detailAnimeId = null
-                        resolverState = VideoResolverState.Hidden // Clear resolver on back
+                        resolverState = VideoResolverState.Hidden
                     },
                     onOpenEpisode = { epNum ->
-                        // No extensions loaded yet — show "No sources" state
                         resolverState = VideoResolverState.NoSources(episodeNumber = epNum)
                     },
+                )
+            }
+            // Repo settings sub-screen (from Extensions) — MUST come before showExtensions
+            showRepoSettings -> {
+                ExtensionRepoSettingsScreen(
+                    repoRepository = repoRepository,
+                    onBack = { showRepoSettings = false },
                 )
             }
             // Extensions sub-screen (from Settings)
@@ -129,13 +135,6 @@ private fun AnikutaApp() {
                     repoRepository = repoRepository,
                     onBack = { showExtensions = false },
                     onOpenRepoSettings = { showRepoSettings = true },
-                )
-            }
-            // Repo settings sub-screen (from Extensions)
-            showRepoSettings -> {
-                ExtensionRepoSettingsScreen(
-                    repoRepository = repoRepository,
-                    onBack = { showRepoSettings = false },
                 )
             }
             // Settings sub-screen (from More)

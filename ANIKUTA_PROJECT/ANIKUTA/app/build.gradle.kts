@@ -64,6 +64,10 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
+    // Injekt (required by Keiyoushi-family extensions — ADR-029 extension compat)
+    // Extensions expect uy.kohesive.injekt to be on the host classpath.
+    implementation("com.github.mihonapp:injekt:91edab2317")
+
     // Koin (ADR-023)
     implementation(platform(libs.koin.bom))
     implementation(libs.bundles.koin)

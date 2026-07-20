@@ -91,11 +91,17 @@ class ExtensionInstallService : Service() {
     /** Calls [startForeground] using the right API for the device's SDK. */
     private fun startForegroundCompat(contentText: String) {
         val notification = buildNotification(contentText)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Android 14+ requires the foregroundServiceType in startForeground.
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // Android 14+ requires the foregroundServiceType in startForeground.
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: SecurityException) {
+            // Fallback: run as a normal (non-foreground) service if permission is missing.
+            // This prevents a crash — the install will still work but without a notification.
+            android.util.Log.w("AnikutaExtInstaller", "startForeground failed (missing permission?), running as background service", e)
         }
     }
 
