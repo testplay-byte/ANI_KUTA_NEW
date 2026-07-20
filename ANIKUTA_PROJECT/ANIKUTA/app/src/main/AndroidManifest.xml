@@ -7,7 +7,6 @@
     <!-- Extension installer (Phase 4B): allows installing external Aniyomi-compatible APKs. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PACKAGE_INSTALL" />
     <!-- The install service shows a foreground notification (Android 13+ needs this). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Needed to receive PACKAGE_ADDED/REPLACED/REMOVED broadcasts on Android 14+. -->
@@ -37,7 +36,7 @@
         <service
             android:name="app.confused.anikuta.data.extension.installer.ExtensionInstallService"
             android:exported="false"
-            android:foregroundServiceType="packageInstall" />
+            android:foregroundServiceType="dataSync" />
 
         <!--
             ExtensionInstallReceiver is registered dynamically by AnimeExtensionManager
