@@ -47,6 +47,8 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
+import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
+import app.confused.anikuta.feature.videoresolver.VideoResolverState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,11 +76,13 @@ private fun AnikutaApp() {
     var detailAnimeId by remember { mutableStateOf<Int?>(null) }
     var showExtensions by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     val anilistApi = remember { AniListApi() }
 
-    // Handle back gesture for sub-screens
-    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings) {
+    // Handle back gesture for sub-screens + resolver sheet
+    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || resolverState !is VideoResolverState.Hidden) {
         when {
+            resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
             detailAnimeId != null -> detailAnimeId = null
             showExtensions -> showExtensions = false
             showSettings -> showSettings = false
@@ -97,6 +101,10 @@ private fun AnikutaApp() {
                     animeId = detailAnimeId!!,
                     api = anilistApi,
                     onBack = { detailAnimeId = null },
+                    onOpenEpisode = { epNum ->
+                        // No extensions loaded yet — show "No sources" state
+                        resolverState = VideoResolverState.NoSources(episodeNumber = epNum)
+                    },
                 )
             }
             // Extensions sub-screen (from Settings)
@@ -114,6 +122,25 @@ private fun AnikutaApp() {
             }
             // Tab content
             else -> {
+                // Video resolver sheet overlay (shows on top of the detail screen)
+                if (resolverState !is VideoResolverState.Hidden) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
+                            .clickable { resolverState = VideoResolverState.Hidden },
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        VideoResolverSheet(
+                            state = resolverState,
+                            onDismiss = { resolverState = VideoResolverState.Hidden },
+                            onVideoSelected = { video ->
+                                resolverState = VideoResolverState.Hidden
+                                // Phase 6: open the watch page / player with this video
+                            },
+                        )
+                    }
+                }
                 when (currentRoute) {
                     "home" -> BrowseScreen(
                         api = anilistApi,

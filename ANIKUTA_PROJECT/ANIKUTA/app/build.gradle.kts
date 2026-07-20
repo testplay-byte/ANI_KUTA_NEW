@@ -52,6 +52,10 @@ dependencies {
     implementation(projects.feature.browse)
     implementation(projects.feature.animeDetails)
     implementation(projects.feature.extensionsSettings)
+    implementation(projects.feature.videoResolver)
+
+    // Core modules for episode metadata
+    implementation(projects.core.episodeMetadata)
 
     // Koin (ADR-023)
     implementation(platform(libs.koin.bom))
