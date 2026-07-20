@@ -83,7 +83,10 @@ private fun AnikutaApp() {
     BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || resolverState !is VideoResolverState.Hidden) {
         when {
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
-            detailAnimeId != null -> detailAnimeId = null
+            detailAnimeId != null -> {
+                detailAnimeId = null
+                resolverState = VideoResolverState.Hidden // Clear resolver when leaving detail
+            }
             showExtensions -> showExtensions = false
             showSettings -> showSettings = false
         }
@@ -100,7 +103,10 @@ private fun AnikutaApp() {
                 AnimeDetailScreen(
                     animeId = detailAnimeId!!,
                     api = anilistApi,
-                    onBack = { detailAnimeId = null },
+                    onBack = {
+                        detailAnimeId = null
+                        resolverState = VideoResolverState.Hidden // Clear resolver on back
+                    },
                     onOpenEpisode = { epNum ->
                         // No extensions loaded yet — show "No sources" state
                         resolverState = VideoResolverState.NoSources(episodeNumber = epNum)

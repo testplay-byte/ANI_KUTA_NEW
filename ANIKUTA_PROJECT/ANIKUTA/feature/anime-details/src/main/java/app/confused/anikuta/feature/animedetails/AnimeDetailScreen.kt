@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -251,34 +252,25 @@ private fun DetailContent(
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
-                val epCount = anime.episodes ?: 12
-                Text(
-                    text = "$epCount episodes",
-                    fontFamily = RobotoFamily,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // Show episode count from AniList metadata (informational only)
+                val epCount = anime.episodes
+                if (epCount != null) {
+                    Text(
+                        text = "$epCount episodes",
+                        fontFamily = RobotoFamily,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
-        // Episode rows
-        val episodeCount = anime.episodes ?: 12
-        items(episodeCount) { index ->
-            val epNumber = index + 1
-            val isWatched = watchedEpisodes.contains(epNumber)
-            EpisodeRow(
-                episodeNumber = epNumber,
-                isWatched = isWatched,
-                onClick = { onOpenEpisode(epNumber) },
-                onToggleWatched = {
-                    watchedEpisodes = if (isWatched) {
-                        watchedEpisodes - epNumber
-                    } else {
-                        watchedEpisodes + epNumber
-                    }
-                },
-            )
+        // Episode list — NO DEMO EPISODES.
+        // Episodes come from extensions (when loaded). Until then, show a proper
+        // empty state explaining that extensions are needed.
+        item {
+            NoExtensionsEpisodesState()
         }
 
         // ── Information section ──
@@ -593,6 +585,39 @@ private fun InfoRow(label: String, value: String) {
             fontSize = 14.sp,
             fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/**
+ * Empty state for the episodes section when no extensions are loaded.
+ *
+ * Per owner feedback: do NOT show demo/fake episodes. Show a proper empty state
+ * explaining that extensions are needed to load episode lists.
+ */
+@Composable
+private fun NoExtensionsEpisodesState() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "No episodes loaded",
+            fontFamily = RobotoFamily,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Install an anime extension from Settings → Extensions to load episode lists from streaming sources.",
+            fontFamily = RobotoFamily,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }

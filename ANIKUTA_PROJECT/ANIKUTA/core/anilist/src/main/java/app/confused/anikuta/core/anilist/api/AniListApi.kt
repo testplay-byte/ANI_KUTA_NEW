@@ -32,21 +32,70 @@ class AniListApi(
     private val client: OkHttpClient = defaultClient(),
 ) {
     // In-memory cache for anime details (5-minute TTL).
-    // Keyed by AniList ID. Prevents re-fetching when navigating back to a detail page.
     private val detailCache = mutableMapOf<Int, Pair<Long, AniListAnime>>()
     private val cacheTtlMs = 5 * 60 * 1000L // 5 minutes
 
-    /** Fetch trending anime (for the Browse screen). */
-    suspend fun fetchTrending(page: Int = 1, perPage: Int = 20): List<AniListAnime> =
-        queryList(TRENDING_QUERY, page, perPage)
+    // In-memory cache for list queries (trending/popular) — stale-while-revalidate.
+    // Key: query type + page. Value: (timestamp, results).
+    private val listCache = mutableMapOf<String, Pair<Long, List<AniListAnime>>>()
 
-    /** Fetch popular anime (for the Browse screen). */
-    suspend fun fetchPopular(page: Int = 1, perPage: Int = 20): List<AniListAnime> =
-        queryList(POPULAR_QUERY, page, perPage)
+    /** Fetch trending anime (with stale-while-revalidate caching). */
+    suspend fun fetchTrending(page: Int = 1, perPage: Int = 20): List<AniListAnime> {
+        val cacheKey = "trending_$page"
+        return cachedListQuery(cacheKey) { queryList(TRENDING_QUERY, page, perPage) }
+    }
 
-    /** Search anime by query. */
+    /** Fetch popular anime (with stale-while-revalidate caching). */
+    suspend fun fetchPopular(page: Int = 1, perPage: Int = 20): List<AniListAnime> {
+        val cacheKey = "popular_$page"
+        return cachedListQuery(cacheKey) { queryList(POPULAR_QUERY, page, perPage) }
+    }
+
+    /** Search anime by query (NOT cached — search results change with the query). */
     suspend fun searchAnime(query: String, page: Int = 1, perPage: Int = 20): List<AniListAnime> =
         queryList(SEARCH_QUERY, page, perPage, search = query)
+
+    /**
+     * Get cached trending data if available (for instant display on app open).
+     * Returns null if no cache exists.
+     */
+    fun getCachedTrending(): List<AniListAnime>? {
+        val cached = listCache["trending_1"]
+        return cached?.second
+    }
+
+    /**
+     * Stale-while-revalidate pattern for list queries:
+     * 1. If cache exists (even if stale): return it immediately.
+     * 2. Always fetch fresh data from network.
+     * 3. If network succeeds: update cache + return fresh data.
+     * 4. If network fails: return cached data (even if stale).
+     */
+    private suspend fun cachedListQuery(
+        cacheKey: String,
+        networkCall: suspend () -> List<AniListAnime>,
+    ): List<AniListAnime> {
+        val cached = listCache[cacheKey]
+
+        // If no cache, must fetch from network
+        if (cached == null) {
+            val fresh = networkCall()
+            listCache[cacheKey] = System.currentTimeMillis() to fresh
+            return fresh
+        }
+
+        // Cache exists — return it immediately (stale-while-revalidate)
+        // The caller can use getCachedTrending() for instant display,
+        // then call fetchTrending() to refresh in the background.
+        return try {
+            val fresh = networkCall()
+            listCache[cacheKey] = System.currentTimeMillis() to fresh
+            fresh
+        } catch (e: Exception) {
+            // Network failed — return stale cached data
+            cached.second
+        }
+    }
 
     /** Fetch a single anime by its AniList ID (with 5-min in-memory cache). */
     suspend fun fetchById(id: Int): AniListAnime? {

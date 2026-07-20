@@ -65,9 +65,12 @@ fun BrowseScreen(
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
-    var anime by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    // Stale-while-revalidate: show cached data instantly if available
+    val cached = api.getCachedTrending()
+    var anime by remember { mutableStateOf<List<AniListAnime>>(cached ?: emptyList()) }
+    var loading by remember { mutableStateOf(cached == null) } // Only show loading if no cache
     var error by remember { mutableStateOf<String?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) } // Background refresh indicator
 
     // Derive "collapsed" from the grid's scroll state
     val collapsed by remember {
@@ -76,14 +79,27 @@ fun BrowseScreen(
         }
     }
 
+    // Fetch trending — stale-while-revalidate pattern.
+    // If cache exists: show it immediately (loading=false), refresh in background.
+    // If no cache: show loading spinner, fetch from network.
+    // If refresh fails: keep showing old cached data (don't clear it).
     LaunchedEffect(Unit) {
-        scope.launch {
-            loading = true
-            val result = runCatching { api.fetchTrending(perPage = 30) }
-            anime = result.getOrDefault(emptyList())
-            error = result.exceptionOrNull()?.message
-            loading = false
+        if (cached != null) {
+            // Cache exists — refresh in background, keep showing old data
+            isRefreshing = true
         }
+        val result = runCatching { api.fetchTrending(perPage = 30) }
+        val freshData = result.getOrDefault(emptyList())
+        if (freshData.isNotEmpty()) {
+            anime = freshData
+            error = null
+        } else if (cached == null) {
+            // No cache AND fetch failed — show error
+            error = result.exceptionOrNull()?.message ?: "Failed to load anime"
+        }
+        // If cache existed but fetch failed (freshData empty), keep showing cached data
+        loading = false
+        isRefreshing = false
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
