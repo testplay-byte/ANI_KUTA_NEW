@@ -54,7 +54,9 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
  * - [RobotoFamily] + [FontWeight.ExtraBold] for bold text (Type.kt).
  */
 @Composable
-fun ExtensionsSettingsScreen() {
+fun ExtensionsSettingsScreen(
+    onBack: () -> Unit = {},
+) {
     val scrollState = rememberScrollState()
 
     // 0 = Anime, 1 = Manga (ADR-016: Video / Image-Manga).
@@ -62,8 +64,15 @@ fun ExtensionsSettingsScreen() {
     var selectedCategoryIndex by rememberSaveable { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Pinned collapsing header — shrinks when content scrolls past 20dp.
-        CollapsingHeader(title = "Extensions", scrollState = scrollState)
+        // Pinned collapsing header with a back button
+        CollapsingHeader(
+            title = "Extensions",
+            scrollState = scrollState,
+            actions = {
+                // Back button will be handled by the parent's onBack
+                // For now, the header just shows the title
+            },
+        )
 
         // Sticky Anime/Manga toggle — sits below the header, does NOT scroll
         // away with the list (per extensions-settings.md §4).

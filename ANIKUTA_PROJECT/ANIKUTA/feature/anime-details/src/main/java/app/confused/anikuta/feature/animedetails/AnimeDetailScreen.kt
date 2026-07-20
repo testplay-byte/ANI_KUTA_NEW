@@ -2,15 +2,19 @@
 
 package app.confused.anikuta.feature.animedetails
 
+import android.os.Build
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.RenderEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,11 +23,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +50,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,17 +66,21 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 /**
- * Anime detail screen — shows full anime info with a blurred cover header.
+ * Anime detail screen — redesigned per OLD_ANIKUTA's DetailScreen.kt.
  *
- * Per `DESIGN_LANGUAGE/04-screens/anime-details.md`:
- * - Blurred cover image at the top with a gradient darkening overlay (principle #4).
- * - Cover image overlapping the blurred header.
- * - Title (ExtraBold), score, format, episodes, status, genres.
- * - Description (expandable).
- * - Episode list below.
- * - Back button (top-left).
+ * Key design decisions (from `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md`):
+ * - **360dp banner** with blurred cover (8dp blur), theme-color tint (20% alpha),
+ *   and 3-stop vertical gradient (black 20% → transparent → background).
+ * - **Back/Save/Share/More buttons** overlaid on the banner (statusBarsPadding).
+ * - **100×150dp cover thumbnail** at the bottom of the banner, overlapping the gradient.
+ * - **Title + score + status + episodes** beside the thumbnail.
+ * - **Genre chips** as a LazyRow.
+ * - **Synopsis** with HTML stripping, expandable (tap to toggle).
+ * - **Episodes section** with alternating card backgrounds (zebra stripe).
+ * - **Watched episodes** = grayscale (RenderEffect, API 31+) + alpha dimming.
+ * - **Information section** with format/status/episodes/score.
  *
- * Uses AniList data (ADR-010).
+ * NOT referencing the ANDROID-PROTOTYPE — this screen references OLD_ANIKUTA.
  */
 @Composable
 fun AnimeDetailScreen(
@@ -80,6 +94,7 @@ fun AnimeDetailScreen(
     var anime by remember { mutableStateOf<AniListAnime?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var saved by remember { mutableStateOf(false) }
 
     LaunchedEffect(animeId) {
         scope.launch {
@@ -95,9 +110,11 @@ fun AnimeDetailScreen(
         when {
             loading -> LoadingState()
             error != null -> ErrorState(message = error!!)
-            anime != null -> AnimeDetailContent(
+            anime != null -> DetailContent(
                 anime = anime!!,
+                saved = saved,
                 onBack = onBack,
+                onToggleSave = { saved = !saved },
                 onOpenEpisode = onOpenEpisode,
             )
         }
@@ -105,138 +122,37 @@ fun AnimeDetailScreen(
 }
 
 @Composable
-private fun AnimeDetailContent(
+private fun DetailContent(
     anime: AniListAnime,
+    saved: Boolean,
     onBack: () -> Unit,
+    onToggleSave: () -> Unit,
     onOpenEpisode: (Int) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
     var descriptionExpanded by remember { mutableStateOf(false) }
+    // Track watched episodes (in-memory for now — will use DB in a later phase)
+    var watchedEpisodes by remember { mutableStateOf(setOf<Int>()) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
+        contentPadding = PaddingValues(bottom = 16.dp),
     ) {
-        // Blurred cover header + gradient
+        // ── Banner: blurred cover + gradient + action buttons + cover thumbnail + title ──
         item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp),
-            ) {
-                // Blurred cover background
-                if (anime.coverUrl != null) {
-                    AsyncImage(
-                        model = anime.coverUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(20.dp),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-                // Gradient overlay (transparent → background)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Black.copy(alpha = 0.3f),
-                                    Color.Black.copy(alpha = 0.5f),
-                                    MaterialTheme.colorScheme.background,
-                                ),
-                            ),
-                        ),
-                )
-                // Back button
-                Surface(
-                    color = Color.Black.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier
-                        .statusBarsPadding()
-                        .padding(12.dp)
-                        .size(40.dp)
-                        .clickable(onClick = onBack),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                        )
-                    }
-                }
-            }
+            DetailBanner(
+                anime = anime,
+                saved = saved,
+                onBack = onBack,
+                onToggleSave = onToggleSave,
+            )
         }
 
-        // Cover + title section
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                // Cover image (overlapping the header)
-                if (anime.coverUrl != null) {
-                    AsyncImage(
-                        model = anime.coverUrl,
-                        contentDescription = anime.displayTitle,
-                        modifier = Modifier
-                            .size(width = 100.dp, height = 140.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = anime.displayTitle,
-                        fontFamily = RobotoFamily,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    // Meta row: format, episodes, status
-                    val metaParts = buildList {
-                        anime.format?.let { add(it) }
-                        anime.episodes?.let { add("$it eps") }
-                        anime.status?.let { add(it.replace("_", " ").lowercase()) }
-                    }
-                    if (metaParts.isNotEmpty()) {
-                        Text(
-                            text = metaParts.joinToString(" · "),
-                            fontFamily = RobotoFamily,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // Score
-                    if (anime.averageScore != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "★ ${anime.averageScore}%",
-                            fontFamily = RobotoFamily,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        }
-
-        // Genres
+        // ── Genre chips ──
         val genres = anime.genres
         if (!genres.isNullOrEmpty()) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
                 FlowRow(
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     genres.forEach { genre ->
@@ -258,11 +174,11 @@ private fun AnimeDetailContent(
             }
         }
 
-        // Description
+        // ── Synopsis ──
         if (!anime.description.isNullOrBlank()) {
             item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                val cleanDesc = anime.description!!.replace(Regex("<[^>]*>"), "")
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
                         text = "Synopsis",
                         fontFamily = RobotoFamily,
@@ -270,9 +186,7 @@ private fun AnimeDetailContent(
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    // Strip HTML tags from AniList description
-                    val cleanDesc = anime.description!!.replace(Regex("<[^>]*>"), "")
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = cleanDesc,
                         fontFamily = RobotoFamily,
@@ -283,47 +197,285 @@ private fun AnimeDetailContent(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clickable { descriptionExpanded = !descriptionExpanded },
                     )
+                    if (!descriptionExpanded && cleanDesc.length > 200) {
+                        Text(
+                            text = "Show more",
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clickable { descriptionExpanded = true },
+                        )
+                    }
                 }
             }
         }
 
-        // Episodes section
+        // ── Episodes section ──
         item {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Episodes",
-                fontFamily = RobotoFamily,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Episodes",
+                    fontFamily = RobotoFamily,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                val epCount = anime.episodes ?: 12
+                Text(
+                    text = "$epCount episodes",
+                    fontFamily = RobotoFamily,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
-        // Episode list (placeholder: generate N episodes based on the anime's episode count)
+        // Episode rows (placeholder: generate N episodes)
         val episodeCount = anime.episodes ?: 12
         items(episodeCount) { index ->
+            val epNumber = index + 1
+            val isWatched = watchedEpisodes.contains(epNumber)
             EpisodeRow(
-                episodeNumber = index + 1,
-                title = "Episode ${index + 1}",
-                onClick = { onOpenEpisode(index + 1) },
+                episodeNumber = epNumber,
+                isWatched = isWatched,
+                onClick = { onOpenEpisode(epNumber) },
+                onToggleWatched = {
+                    watchedEpisodes = if (isWatched) {
+                        watchedEpisodes - epNumber
+                    } else {
+                        watchedEpisodes + epNumber
+                    }
+                },
             )
+        }
+
+        // ── Information section ──
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = "Information",
+                    fontFamily = RobotoFamily,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                InfoRow("Format", anime.format ?: "Unknown")
+                InfoRow("Status", anime.status?.replace("_", " ")?.lowercase() ?: "Unknown")
+                InfoRow("Episodes", (anime.episodes ?: 0).toString())
+                if (anime.averageScore != null) {
+                    InfoRow("Score", "${anime.averageScore} / 100")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The banner: 360dp tall, blurred cover (8dp), theme tint (20%), gradient overlay,
+ * action buttons, and cover thumbnail + title at the bottom.
+ *
+ * Per OLD_ANIKUTA's DetailScreen.kt:755-946.
+ */
+@Composable
+private fun DetailBanner(
+    anime: AniListAnime,
+    saved: Boolean,
+    onBack: () -> Unit,
+    onToggleSave: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Blurred cover background (360dp tall)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp),
+        ) {
+            // 1) Blurred cover image (8dp blur — subtle, just enough for text readability)
+            if (anime.coverUrl != null) {
+                AsyncImage(
+                    model = anime.coverUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(8.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+            }
+
+            // 2) Gradient overlay: black 20% at top → transparent → background at bottom
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.2f),
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.background,
+                            ),
+                        ),
+                    ),
+            )
+        }
+
+        // Action buttons row (top, over the banner)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Back button
+            ActionButton(
+                icon = Icons.Filled.ArrowBack,
+                contentDescription = "Back",
+                onClick = onBack,
+            )
+            Row {
+                // Save button
+                ActionButton(
+                    icon = if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                    contentDescription = if (saved) "Remove from library" else "Add to library",
+                    onClick = onToggleSave,
+                )
+                // Share button
+                ActionButton(
+                    icon = Icons.Filled.Share,
+                    contentDescription = "Share",
+                    onClick = {},
+                )
+                // More button
+                ActionButton(
+                    icon = Icons.Filled.MoreHoriz,
+                    contentDescription = "More",
+                    onClick = {},
+                )
+            }
+        }
+
+        // Cover thumbnail + title (bottom-aligned, overlapping the gradient)
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // 100×150dp cover thumbnail
+            if (anime.coverUrl != null) {
+                AsyncImage(
+                    model = anime.coverUrl,
+                    contentDescription = anime.displayTitle,
+                    modifier = Modifier
+                        .size(width = 100.dp, height = 150.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = anime.displayTitle,
+                    fontFamily = RobotoFamily,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                // Meta: score · status · episodes
+                val metaParts = buildList {
+                    anime.averageScore?.let { add("★ $it%") }
+                    anime.status?.let { add(it.replace("_", " ").lowercase()) }
+                    anime.episodes?.let { add("$it eps") }
+                }
+                if (metaParts.isNotEmpty()) {
+                    Text(
+                        text = metaParts.joinToString(" · "),
+                        fontFamily = RobotoFamily,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun EpisodeRow(
-    episodeNumber: Int,
-    title: String,
+private fun ActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
 ) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.4f),
+        shape = CircleShape,
+        modifier = Modifier
+            .padding(4.dp)
+            .size(40.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Episode row — alternating background + watched effect (grayscale + alpha).
+ *
+ * Per OLD_ANIKUTA's EpisodeRow + Grayscale.kt:
+ * - Alternating bg: surfaceVariant (even) / surfaceVariant+alpha (odd)
+ * - Watched = grayscale (RenderEffect API 31+) + alpha 0.55f
+ * - Tap → open episode, long-press → toggle watched (simplified for now)
+ * - Rounded 12dp, padding
+ */
+@Composable
+private fun EpisodeRow(
+    episodeNumber: Int,
+    isWatched: Boolean,
+    onClick: () -> Unit,
+    onToggleWatched: () -> Unit,
+) {
+    val isEven = episodeNumber % 2 == 0
+    val cardColor = if (isEven) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 3.dp)
+            .watchedEpisodeEffect(isWatched)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cardColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Episode number circle
@@ -344,20 +496,69 @@ private fun EpisodeRow(
         }
         Spacer(modifier = Modifier.size(12.dp))
         Text(
-            text = title,
+            text = "Episode $episodeNumber",
             fontFamily = RobotoFamily,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(modifier = Modifier.weight(1f))
+        // Play icon
         Icon(
             imageVector = Icons.Filled.PlayArrow,
             contentDescription = "Play",
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier
+                .size(24.dp)
+                .clickable(onClick = onClick),
+        )
+    }
+}
+
+/**
+ * Applies the watched-episode visual effect: grayscale (API 31+) + alpha dimming.
+ *
+ * Per OLD_ANIKUTA's Grayscale.kt:
+ * - Grayscale via RenderEffect.createColorFilterEffect (intercepts entire rendered layer)
+ * - Alpha 0.55f (slightly more than half-opacity)
+ * - Below API 31: only alpha dimming (graceful degradation)
+ */
+private fun Modifier.watchedEpisodeEffect(isWatched: Boolean): Modifier {
+    if (!isWatched) return this
+    return this.graphicsLayer {
+        alpha = 0.55f
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val matrix = ColorMatrix().apply { setSaturation(0f) }
+            renderEffect = RenderEffect.createColorFilterEffect(
+                ColorMatrixColorFilter(matrix),
+            ).asComposeRenderEffect()
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            fontFamily = RobotoFamily,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            fontFamily = RobotoFamily,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
