@@ -1,9 +1,13 @@
 package eu.kanade.tachiyomi.animesource.model
 
+import fi.iki.elonen.NanoHTTPD
 
-
-
-
+/**
+ * HttpServer — a local NanoHTTPD server used by some anime sources to
+ * proxy/rewrite URLs for MPV playback.
+ *
+ * Replaces logcat/tachiyomi.core.common imports with android.util.Log.
+ */
 open class HttpServer : NanoHTTPD(0) {
     val url: String
         get() = "http://localhost:$listeningPort"

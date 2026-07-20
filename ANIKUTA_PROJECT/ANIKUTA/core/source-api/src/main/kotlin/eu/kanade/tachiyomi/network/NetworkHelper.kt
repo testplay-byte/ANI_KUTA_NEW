@@ -83,6 +83,24 @@ suspend fun <T> Observable<T>.awaitSuccess(): T = awaitSingle()
 /** Extension function: await a single emission (same as awaitSingle). */
 suspend fun <T> Observable<T>.awaitSingle(): T = eu.kanade.tachiyomi.util.awaitSingle()
 
+/** Extension function: suspend and await an OkHttp Call's response directly. */
+suspend fun okhttp3.Call.awaitSuccess(): okhttp3.Response {
+    return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        enqueue(object : okhttp3.Callback {
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                if (response.isSuccessful) {
+                    cont.resume(response)
+                } else {
+                    cont.resumeWithException(Exception("HTTP ${response.code}"))
+                }
+            }
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                cont.resumeWithException(e)
+            }
+        })
+    }
+}
+
 /** Extension function: create a cacheless OkHttp call with progress. */
 fun OkHttpClient.newCachelessCallWithProgress(
     request: Request,
