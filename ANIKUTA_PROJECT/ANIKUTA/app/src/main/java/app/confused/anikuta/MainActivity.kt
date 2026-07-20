@@ -94,15 +94,15 @@ private fun AnikutaApp() {
     var showRepoSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     val anilistApi = remember { AniListApi() }
-    val extensionManager: AnimeExtensionManager by koinInject()
-    val sourceMatcher: SourceMatcher by koinInject()
+    val extensionManager: AnimeExtensionManager = koinInject()
+    val sourceMatcher: SourceMatcher = koinInject()
     val resolverService = remember { ResolverService() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     // Repo layer (for the ExtensionsSettings + RepoSettings screens)
-    val repoRepository: ExtensionRepoRepository by koinInject()
-    val repoApi: ExtensionRepoApi by koinInject()
+    val repoRepository: ExtensionRepoRepository = koinInject()
+    val repoApi: ExtensionRepoApi = koinInject()
 
     // Tracks the episode+source being resolved (for retry on Error)
     var resolveTarget by remember {
