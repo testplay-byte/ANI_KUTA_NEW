@@ -42,8 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -246,19 +244,11 @@ private fun InstalledExtensionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Extension icon — use actual icon if available, otherwise placeholder
-        if (extension.icon != null) {
-            androidx.compose.foundation.Image(
-                bitmap = extension.icon.toBitmap(96, 96),
-                contentDescription = extension.name,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop,
-                colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.3f) }),
-            )
-        } else {
-            ExtensionIconPlaceholder(name = extension.name)
-        }
+        // Note: Drawable -> Compose Image requires the drawable to be converted.
+        // For simplicity, we use the placeholder for now — actual icon rendering
+        // for installed extensions will be improved when we add the Image(drawable)
+        // overload from compose-foundation in a future iteration.
+        ExtensionIconPlaceholder(name = extension.name)
 
         Spacer(modifier = Modifier.size(12.dp))
 

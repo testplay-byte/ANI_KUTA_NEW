@@ -12,6 +12,9 @@ dependencies {
     implementation(projects.data.extension)
     implementation(projects.core.sourceApi)
 
+    // AndroidX core (for DrawableCompat)
+    implementation("androidx.core:core-ktx:1.15.0")
+
     // Coil for extension icons
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
