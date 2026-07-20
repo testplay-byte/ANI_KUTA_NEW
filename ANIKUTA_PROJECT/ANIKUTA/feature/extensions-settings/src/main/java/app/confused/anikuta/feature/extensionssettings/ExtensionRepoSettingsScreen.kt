@@ -154,7 +154,7 @@ fun ExtensionRepoSettingsScreen(
                         if (url.isNotEmpty()) {
                             Log.i(TAG, "Adding repo: $url")
                             scope.launch {
-                                repoRepository.insert(ExtensionRepo(baseUrl = url))
+                                repoRepository.insert(ExtensionRepo(baseUrl = url, name = url))
                             }
                             repoUrlInput = ""
                             showAddDialog = false
