@@ -101,6 +101,15 @@ class AnimeDetailViewModel(
         loadEpisodes(match)
     }
 
+    /**
+     * Refreshes everything: AniList data + source matching + episodes.
+     * Called when the user pulls to refresh.
+     */
+    fun refresh() {
+        Log.i(TAG, "Refreshing anime $anilistId")
+        loadAnimeDetails()
+    }
+
     // ── Internal: Stage 1 — Load AniList data ──
 
     private fun loadAnimeDetails() {

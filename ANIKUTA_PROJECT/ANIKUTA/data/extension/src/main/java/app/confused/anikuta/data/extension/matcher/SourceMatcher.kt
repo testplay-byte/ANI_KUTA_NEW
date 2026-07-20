@@ -94,12 +94,25 @@ class SourceMatcher(
      */
     suspend fun matchAll(title: String): List<SourceMatch> = coroutineScope {
         val sources = getCatalogueSources()
-        if (sources.isEmpty()) return@coroutineScope emptyList()
+        if (sources.isEmpty()) {
+            Log.w(TAG, "matchAll: no catalogue sources available")
+            return@coroutineScope emptyList()
+        }
 
-        Log.i(TAG, "matchAll: searching ${sources.size} sources for '$title'")
-        sources.map { source ->
-            async { searchSource(source, title) }
-        }.awaitAll().filterNotNull().sortedByDescending { it.score }
+        Log.i(TAG, "matchAll: searching ${sources.size} sources for '$title': ${sources.map { it.name }}")
+        val results = sources.map { source ->
+            async {
+                Log.d(TAG, "matchAll: starting search on '${source.name}'")
+                searchSource(source, title)
+            }
+        }.awaitAll()
+
+        val matches = results.filterNotNull().sortedByDescending { it.score }
+        Log.i(TAG, "matchAll: found ${matches.size} matches for '$title'")
+        matches.forEach { m ->
+            Log.i(TAG, "matchAll: match '${m.sAnime.title}' (score=${m.score}) from '${m.source.name}'")
+        }
+        matches
     }
 
     /**
@@ -112,7 +125,9 @@ class SourceMatcher(
         query: String,
     ): SourceMatch? {
         return try {
+            Log.d(TAG, "searchSource: calling getSearchAnime on '${source.name}' with query='$query'")
             val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
+            Log.d(TAG, "searchSource: '${source.name}' returned ${page.animes.size} results")
             val normalizedQuery = normalizeTitle(query)
             page.animes
                 .map { sAnime ->
@@ -122,7 +137,7 @@ class SourceMatcher(
                 .filter { it.score >= THRESHOLD }
                 .maxByOrNull { it.score }
         } catch (e: Exception) {
-            Log.w(TAG, "Source '${source.name}' search failed for '$query': ${e.message}")
+            Log.e(TAG, "searchSource: Source '${source.name}' search failed for '$query'", e)
             null
         }
     }
