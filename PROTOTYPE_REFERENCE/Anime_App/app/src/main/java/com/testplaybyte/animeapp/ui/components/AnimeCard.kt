@@ -69,7 +69,7 @@ fun AnimeCard(
                     Text(
                         text = "★ ${anime.scoreFormatted}",
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                     )

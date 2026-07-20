@@ -164,7 +164,7 @@ private fun SectionHeader(title: String) {
     Text(
         text = title,
         fontSize = 16.sp,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.ExtraBold,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
     )

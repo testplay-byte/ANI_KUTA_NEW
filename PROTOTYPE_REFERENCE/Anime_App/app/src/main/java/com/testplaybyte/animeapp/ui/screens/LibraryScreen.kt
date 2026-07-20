@@ -391,7 +391,7 @@ private fun StatusTabRow(active: LibTab, onSelect: (LibTab) -> Unit, counts: Map
                         Text(
                             text = tab.label,
                             fontSize = 14.sp,
-                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+                            fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
                             color = if (isActive) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -494,7 +494,7 @@ private fun LibraryEmptyState(title: String, description: String) {
         Text(
             text = title,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
@@ -629,7 +629,7 @@ private fun LibraryGridCard(
                         Text(
                             text = "EP ${item.episodes}",
                             fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
                             letterSpacing = 0.02.sp,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
@@ -880,7 +880,7 @@ private fun LibraryListRow(
                     LibraryStatus.PLAN -> "Plan to Watch"
                 },
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
             )
         }
@@ -1000,7 +1000,7 @@ private fun CustomizeSheetContent(
         Text(
             text = "Customize Library",
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 20.dp),
         )
@@ -1095,7 +1095,7 @@ private fun CustomizeSheetContent(
             Text(
                 text = "Done",
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
             )
         }
     }
@@ -1125,7 +1125,7 @@ private fun CategorySheetContent(
         Text(
             text = "Current".uppercase(),
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             letterSpacing = 0.06.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -1168,7 +1168,7 @@ private fun CategorySheetContent(
         Text(
             text = "Move to category",
             fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 12.dp),
         )
@@ -1225,7 +1225,7 @@ private fun CustomizeSection(label: String, content: @Composable () -> Unit) {
         Text(
             text = label.uppercase(),
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             letterSpacing = 0.06.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 8.dp),

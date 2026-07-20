@@ -109,7 +109,7 @@ private fun ContinueCard(
             Text(
                 text = "EP ${item.episode}$totalLabel",
                 fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = Color.White,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
             )

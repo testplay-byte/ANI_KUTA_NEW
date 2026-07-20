@@ -237,7 +237,7 @@ private fun DayPill(
             Text(
                 text = label,
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -245,7 +245,7 @@ private fun DayPill(
             Text(
                 text = if (count > 0) count.toString() else "—",
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -318,7 +318,7 @@ private fun AiringRow(
                     Text(
                         text = "EP ${sched.episode}",
                         fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
                         textAlign = TextAlign.Center,
                         letterSpacing = 0.02.sp,
@@ -381,7 +381,7 @@ private fun AiringRow(
                 Text(
                     text = timeFmt.format(Date(airingMs)),
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.height(2.dp))
@@ -434,7 +434,7 @@ private fun ScheduleErrorState(message: String) {
         Text(
             text = "Couldn't load schedule",
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
@@ -477,7 +477,7 @@ private fun ScheduleEmptyState(dayLabel: String) {
         Text(
             text = "Nothing airing",
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )

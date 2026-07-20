@@ -14,15 +14,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +43,7 @@ import app.confused.anikuta.core.anilist.model.AniListAnime
 import app.confused.anikuta.core.anilist.model.coverUrl
 import app.confused.anikuta.core.anilist.model.displayTitle
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
+import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
@@ -48,7 +51,7 @@ import kotlinx.coroutines.launch
  * Browse screen — shows trending anime from AniList in a grid.
  *
  * Phase 4: fetches trending anime from AniList (ADR-010, ADR-030).
- * Uses the CollapsingHeader from the design system.
+ * Uses the CollapsingHeader from the design system — collapses when the grid scrolls.
  * Grid of AnimeCard composables (cover + title).
  * Loading/error/empty states.
  *
@@ -59,12 +62,19 @@ fun BrowseScreen(
     api: AniListApi,
     onOpenAnime: (Int) -> Unit = {},
 ) {
-    val scrollState = rememberScrollState()
+    val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
     var anime by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Derive "collapsed" from the grid's scroll state
+    val collapsed by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemScrollOffset > 20 || gridState.firstVisibleItemIndex > 0
+        }
+    }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -77,13 +87,17 @@ fun BrowseScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        CollapsingHeader(title = "Browse", scrollState = scrollState)
+        CollapsingHeader(title = "Browse", collapsed = collapsed)
 
         when {
             loading && anime.isEmpty() -> LoadingState()
             error != null && anime.isEmpty() -> ErrorState(message = error!!)
             anime.isEmpty() -> EmptyState()
-            else -> AnimeGrid(anime = anime, onOpenAnime = onOpenAnime)
+            else -> AnimeGrid(
+                anime = anime,
+                gridState = gridState,
+                onOpenAnime = onOpenAnime,
+            )
         }
     }
 }
@@ -91,10 +105,12 @@ fun BrowseScreen(
 @Composable
 private fun AnimeGrid(
     anime: List<AniListAnime>,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     onOpenAnime: (Int) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 110.dp),
+        state = gridState,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -104,7 +120,7 @@ private fun AnimeGrid(
             AnimeCard(anime = item, onClick = { onOpenAnime(item.id) })
         }
         // Bottom padding for the floating nav
-        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(110.dp))
         }
     }
@@ -146,8 +162,9 @@ private fun AnimeCard(
                 ) {
                     Text(
                         text = "${anime.averageScore}",
+                        fontFamily = RobotoFamily,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 }
@@ -156,6 +173,7 @@ private fun AnimeCard(
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = anime.displayTitle,
+            fontFamily = RobotoFamily,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
@@ -191,13 +209,15 @@ private fun ErrorState(message: String) {
     ) {
         Text(
             text = "Couldn't load anime",
+            fontFamily = RobotoFamily,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = message,
+            fontFamily = RobotoFamily,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -212,6 +232,7 @@ private fun EmptyState() {
     ) {
         Text(
             text = "No anime found",
+            fontFamily = RobotoFamily,
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -33,6 +33,7 @@ import com.testplaybyte.animeapp.data.AniListClient
 import com.testplaybyte.animeapp.model.Anime
 import com.testplaybyte.animeapp.ui.components.AnimeCard
 import com.testplaybyte.animeapp.ui.components.FilterSheet
+import com.testplaybyte.animeapp.theme.RobotoFamily
 import kotlinx.coroutines.delay
 
 /**
@@ -200,7 +201,7 @@ fun SearchScreen(
                             Text(
                                 text = activeFilterCount.toString(),
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             )
@@ -239,7 +240,7 @@ fun SearchScreen(
                     ) {
                         sortOptions.forEach { (value, label) ->
                             DropdownMenuItem(
-                                text = { Text(label, fontSize = 14.sp, fontWeight = if (value == sort) FontWeight.Bold else FontWeight.Normal) },
+                                text = { Text(label, fontSize = 14.sp, fontWeight = if (value == sort) FontWeight.ExtraBold else FontWeight.Normal) },
                                 onClick = {
                                     sort = value
                                     showSortDropdown = false
@@ -271,13 +272,13 @@ fun SearchScreen(
                 )
             }
 
-            // Results tray (in a card)
+            // Results tray (in a card) — minimal edge padding so it's closer to device borders
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 shape = RoundedCornerShape(20.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
@@ -291,7 +292,7 @@ fun SearchScreen(
                         Text(
                             text = sectionLabel,
                             fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.weight(1f),
                         )
@@ -394,7 +395,7 @@ private fun SearchTopBar(
     onSubmit: () -> Unit,
 ) {
     val titleFontSize by animateFloatAsState(
-        targetValue = if (collapsed) 22f else 32f,
+        targetValue = if (collapsed) 26f else 36f,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "titleSize",
     )
@@ -428,8 +429,9 @@ private fun SearchTopBar(
                 // Title (always visible)
                 Text(
                     text = "Search",
+                    fontFamily = RobotoFamily,
                     fontSize = titleFontSize.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.02).sp,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
@@ -634,7 +636,7 @@ private fun RecentSearchesCard(
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

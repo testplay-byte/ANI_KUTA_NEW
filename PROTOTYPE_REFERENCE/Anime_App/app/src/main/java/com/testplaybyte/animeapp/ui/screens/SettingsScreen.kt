@@ -221,7 +221,7 @@ private fun SettingsGroup(
         Text(
             text = label.uppercase(),
             fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             letterSpacing = 0.06.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier

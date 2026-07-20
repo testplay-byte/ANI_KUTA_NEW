@@ -1,55 +1,118 @@
 # Anime App — Native Android (Improvement Tracker)
 
-This document tracks the gap between the native Android app and the web prototype.
-Future agents should use this to know what's implemented, what needs work, and what's missing.
+> Tracks the gap between the native Android app and the web prototype.
+> Future agents should use this to know what's implemented, what needs work, and what's missing.
+>
+> **Last updated:** Build #14 (commit 1606ac9)
 
 ---
 
-## ✅ Implemented
+## ✅ Implemented & Working
 
+### Core
 - **M3 dark purple theme** — matches the prototype's color palette (PrimaryDark #d0bcff, Surface tiers, etc.)
+- **Light theme** — works, toggles live (reads from DataStore settings)
+- **Background color** — proper M3 dark purple (#14111F) on all pages (was gray #303030)
 - **7 screens** — Home, Library, History, Schedule, Search, Settings, Detail
-- **Navigation** — Navigation Compose with routes for each screen + detail push
-- **Bottom nav** — floating pill with content-sized active item, 6 nav items
-- **AniList API** — trending, seasonal, top-rated, search, detail, airing schedule (Ktor + GraphQL)
-- **Library** — DataStore-backed, add/remove, status (Watching/Completed/Plan), grid + list layouts
-- **Library multi-select** — long-press to enter selection mode, checkmark circles, action bar (Cancel/Category/Delete)
-- **Library customize** — Layout, Columns (2-5), Text placement, Show/hide format+episodes, Episode badge position
-- **History** — DataStore-backed, auto-added on detail view, simulated episode+progress
-- **Continue Watching** — horizontal row with banner, play icon, episode label, progress bar
-- **Settings** — theme toggle, poster style (Rounded/Soft/Sharp), card density (Compact/Default/Comfortable), single-line titles
-- **Detail screen** — banner, cover, title, score, genres, synopsis (expandable), episodes, add to library
-- **Schedule** — 7-day selector, airing list with time + relative, past dimmed, next-up highlighted
-- **Search** — debounced search, results grid
-- **Collapsing headers** — title shrinks on scroll
-- **Card animations** — staggered fade-in
-- **Image loading** — Coil (AsyncImage)
+- **Navigation** — Navigation Compose with floating bottom nav (Box overlay, not Scaffold)
+- **Bottom nav** — floating pill, SVG Material icons, content-sized active item, animated label
+- **Collapsing headers** — pinned title (36sp→26sp, ExtraBold), shrinks on scroll, never scrolls away
+- **Bold text** — all bold text uses FontWeight.ExtraBold (800) for visibility on Android
+- **Launcher icon** — adaptive icon (purple bg + play button)
+
+### Home
+- Hero carousel (180dp height)
+- Continue Watching section (from history, with progress bars)
+- Popular This Season grid (3-column)
+- Top Rated grid (3-column)
+
+### Search
+- Collapsing topbar: title + source toggle + search bar
+  - When scrolled: search bar moves beside title, source toggle fades out
+  - Quick row (filters + sort) slides out
+- Source toggle: AniList/Extension with SVG icons
+  - AniList → Popular anime (30 results)
+  - Extension → Trending now (30 results)
+- Filters button (left) + Sort dropdown (right, 5 options)
+- Filter sheet: accordion + flat views, 5 categories (Genres/Release/Type/Score/Sort)
+- Recent searches: collapsible card, individual delete, "Show N more"
+- Results grid: in a surface card, 3-column, minimal padding (8dp outer)
+
+### Library
+- Status tabs (All/Watching/Completed/Plan) with item counts
+- Grid mode (2-5 columns, configurable) + List mode
+- Long-press multi-select mode with checkmark circles
+- Bottom action bar (Cancel/Category/Delete)
+- Category menu (shows current categories + move options)
+- Customize sheet (Layout/Columns/Text placement/Cover details/Episode badge position)
+- Poster styles (Rounded/Soft/Sharp) + Card density (Compact/Default/Comfortable)
+
+### History
+- Continue Watching section
+- Recently Viewed list with timestamps
+
+### Schedule
+- 7-day selector with airing counts
+- Airing list with cover, title, EP badge, time, relative time
+- Past entries dimmed, next-up highlighted
+
+### Settings
+- Theme toggle (Dark/Light) with Material icons — works live
+- Poster style (text-only segmented: Rounded/Soft/Sharp)
+- Card density (text-only segmented: Compact/Default/Comfortable)
+- Single-line titles toggle
+- Animation speed (text-only segmented: Fast/Normal/Slow)
+- Clear history / Clear library (with confirm dialog)
+- About section
+
+### Detail
+- Banner + cover overlap (using offset, not negative padding)
+- Title, score, genres, synopsis (expandable), episodes
+- Add to Library button (toggles)
+- Back handler (physical + on-screen)
 
 ---
 
 ## ❌ Not Yet Implemented (Future Work)
 
 ### High Priority
-1. **Custom on-screen keyboard** — the prototype has a custom QWERTY keyboard. On Android, the native keyboard appears. To replicate: create a custom `SoftKeyboard` composable that replaces the native IME for in-app inputs.
-2. **Swipe gestures** — the prototype has click-drag-to-swipe for screen navigation. On Android, use `ViewPager` or swipe-to-navigate gestures.
-3. **Fullscreen button** — the prototype has a mobile-only fullscreen button. On Android, use immersive mode (`WindowCompat.setDecorFitsSystemWindows(window, false)`).
-4. **Theme persistence** — the app currently always starts in dark mode. Need to read the saved theme from SettingsRepository and apply it.
-5. **Light theme** — the light theme colors are defined but not wired up. Need to toggle based on settings.
+1. **Filter state not wired to API** — the filter sheet has UI but the selected filters don't affect the AniList GraphQL query. Need to pass filter params to `client.search()`.
+2. **Sort not wired to API** — sort selection in the UI doesn't change the actual API sort parameter.
+3. **Recent searches not persisted** — stored in memory only, lost on app restart. Need DataStore persistence.
+4. **Card density not fully applied** — setting exists but doesn't affect grid gaps in all screens.
+5. **Poster style not applied to all covers** — only AnimeCard reads it; hero carousel, continue watching, detail screen don't.
 
 ### Medium Priority
-6. **Card density** — the density setting exists but doesn't affect the grid gap. Need to read the setting and adjust `Arrangement.spacedBy`.
-7. **Poster style** — the setting exists but only AnimeCard reads it. Need to apply to all cover images (hero carousel, continue watching, detail screen).
-8. **Filter sheet** — the search screen doesn't have the filter bottom sheet (genres, year, season, format, status, score slider).
-9. **Sort dropdown** — the search screen doesn't have the sort options.
-10. **Recent searches** — not implemented in the search screen.
-11. **Source toggle** — AniList/Extension toggle not implemented.
+6. **Custom on-screen keyboard** — the prototype has a custom QWERTY keyboard. On Android, the native keyboard appears.
+7. **Swipe gestures** — the prototype has click-drag-to-swipe for screen navigation.
+8. **Fullscreen mode** — mobile-only fullscreen button (immersive mode).
+9. **Filter sheet score section** — the score slider exists but the value isn't used in the API query.
 
 ### Low Priority
-12. **Hero carousel auto-advance** — the prototype doesn't auto-advance, but a subtle auto-rotate would be nice.
-13. **Pull-to-refresh** — not implemented on any screen.
-14. **Animations** — the prototype has more elaborate animations (staggered card fade-in, blur overlay on header collapse). The Android app has basic animations but could be more polished.
-15. **Status bar** — the prototype has a custom status bar (time, punch-hole, wifi, signal, battery). On Android, the real status bar is used. Could add a custom status bar overlay for the prototype look.
-16. **Side panels** — the prototype has left/right info panels on desktop. Not applicable on mobile.
+10. **Hero carousel auto-advance** — subtle auto-rotate would be nice.
+11. **Pull-to-refresh** — not implemented on any screen.
+12. **More elaborate animations** — staggered card fade-in, blur overlay on header collapse.
+
+---
+
+## Build History
+
+| Build # | Status | Key issue |
+|---------|--------|-----------|
+| 1 | ❌ | Missing launcher icon |
+| 2 | ❌ | Missing serialization plugin |
+| 3 | ❌ | Compilation errors (genres null, isNull, experimental APIs) |
+| 4 | ✅ | First successful build |
+| 5 | ✅ | Fixed crash (weight(0f)) + added launcher icon |
+| 6 | ❌ | Compilation errors (AnimeApp.kt, LibraryScreen imports, SearchScreen width) |
+| 7 | ✅ | All screens rebuilt to match prototype |
+| 8 | ❌ | Missing Surface import in SearchScreen |
+| 9 | ✅ | Background color, theme toggle, hero height, search source toggle |
+| 10 | ❌ | SourceToggleBtn needs RowScope |
+| 11 | ✅ | Search screen rebuilt, library tabs improved |
+| 12 | ✅ | Collapsing search bar, recent searches, filter sheet |
+| 13 | ✅ | Filter sheet with accordion+flat views, scroll animation fix |
+| 14 | ✅ | ExtraBold everywhere, bigger titles, results padding |
 
 ---
 
@@ -67,40 +130,40 @@ Future agents should use this to know what's implemented, what needs work, and w
 ```
 Android_app/Anime_App/
 ├── app/
-│   ├── build.gradle.kts          ← dependencies (Compose, Coil, Ktor, DataStore, Navigation)
+│   ├── build.gradle.kts          ← dependencies (Compose, Coil, Ktor, DataStore, Navigation, material-icons-extended)
 │   └── src/main/
 │       ├── AndroidManifest.xml
 │       └── java/com/testplaybyte/animeapp/
-│           ├── MainActivity.kt   ← entry point, sets up Compose + theme
+│           ├── MainActivity.kt   ← reads theme from settings, applies AnimeAppTheme
 │           ├── AnimeApp.kt       ← root composable
-│           ├── theme/            ← M3 colors, typography, theme
+│           ├── theme/            ← M3 colors, typography (ExtraBold), theme
 │           ├── model/            ← data models (Anime, LibraryItem, etc.)
 │           ├── data/             ← AniList client + repositories (DataStore)
-│           ├── navigation/       ← NavHost with routes
+│           ├── navigation/       ← NavHost + floating bottom nav (Box overlay)
 │           └── ui/
-│               ├── components/   ← BottomNavBar, AnimeCard, HeroCarousel, ContinueWatching
+│               ├── components/   ← BottomNavBar, CollapsingHeader, AnimeCard, HeroCarousel, ContinueWatching, FilterSheet, NavIcons
 │               └── screens/      ← 7 screens
-├── build.gradle.kts              ← project-level (AGP, Kotlin plugins)
-├── settings.gradle.kts           ← project name + repos
-├── gradle.properties             ← JVM args, AndroidX
+├── build.gradle.kts              ← project-level (AGP, Kotlin, Compose, Serialization plugins)
+├── settings.gradle.kts
 ├── gradle/wrapper/               ← Gradle 8.9 wrapper
-├── gradlew                       ← Unix wrapper script
-└── .gitignore                    ← ignores build/, local.properties, *.apk
+├── gradlew
+└── .gitignore
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| UI | Jetpack Compose (BOM 2024.09.03) |
-| Design | Material 3 (dark purple theme) |
-| Navigation | Navigation Compose 2.8.1 |
-| Images | Coil 2.7.0 |
-| Networking | Ktor 2.3.12 (Android engine) |
-| Serialization | kotlinx.serialization 1.7.3 |
-| Persistence | DataStore Preferences 1.1.1 |
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| UI | Jetpack Compose (BOM) | 2024.09.03 |
+| Design | Material 3 (dark purple theme) | from BOM |
+| Icons | material-icons-extended | 1.7.2 |
+| Navigation | Navigation Compose | 2.8.1 |
+| Images | Coil | 2.7.0 |
+| Networking | Ktor (Android engine) | 2.3.12 |
+| Serialization | kotlinx.serialization | 1.7.3 |
+| Persistence | DataStore Preferences | 1.1.1 |
 | Build | Gradle 8.9 + AGP 8.5.2 + Kotlin 2.0.20 |
-| Min SDK | 24 (Android 7.0+) |
+| Min SDK | 24 (Android 7.0) |
 | Target SDK | 35 (Android 15) |

@@ -290,7 +290,7 @@ private fun FilterHeader(
         Text(
             text = "Filters",
             fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             letterSpacing = (-0.02).sp,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -516,7 +516,7 @@ private fun AccordionSection(
                     Text(
                         text = count.toString(),
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = if (isOpen) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.primary,
                     )
@@ -785,7 +785,7 @@ private fun ScoreContent(
         Text(
             text = if (value <= 0f) "Any" else "${"%.1f".format(value / 10f)}+",
             fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.End,
             modifier = Modifier.width(48.dp),
@@ -955,7 +955,7 @@ private fun FilterActions(
             Text(
                 text = "Apply filters",
                 fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onPrimary,
             )
         }

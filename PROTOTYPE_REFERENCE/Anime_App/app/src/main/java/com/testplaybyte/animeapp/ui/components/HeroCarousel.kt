@@ -118,7 +118,7 @@ private fun HeroSlide(
                 Text(
                     text = "★ ${anime.scoreFormatted}",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
@@ -128,7 +128,7 @@ private fun HeroSlide(
         Text(
             text = anime.displayTitle,
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = Color.White,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,

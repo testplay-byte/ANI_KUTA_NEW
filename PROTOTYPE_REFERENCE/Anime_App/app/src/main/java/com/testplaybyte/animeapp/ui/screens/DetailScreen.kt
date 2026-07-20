@@ -145,7 +145,7 @@ fun DetailScreen(
                     Text(
                         text = "Could not load anime",
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -233,7 +233,7 @@ fun DetailScreen(
                         Text(
                             text = a.displayTitle,
                             fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
                         )
@@ -250,7 +250,7 @@ fun DetailScreen(
                                 Text(
                                     text = "\u2605 ${a.scoreFormatted}",
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = WarnDark,
                                 )
                             }
@@ -286,7 +286,7 @@ fun DetailScreen(
                             Text(
                                 text = "Synopsis",
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 modifier = Modifier.padding(
                                     start = 16.dp,
@@ -306,7 +306,7 @@ fun DetailScreen(
                             Text(
                                 text = if (synopsisExpanded) "Read less" else "Read more",
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .padding(start = 16.dp, top = 2.dp)
@@ -319,7 +319,7 @@ fun DetailScreen(
                             Text(
                                 text = "Episodes",
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 modifier = Modifier.padding(
                                     start = 16.dp,
@@ -370,7 +370,7 @@ fun DetailScreen(
                     Text(
                         text = if (inLibrary) "In Library \u2713" else "Add to Library",
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                     )
                 }
             }
@@ -445,7 +445,7 @@ private fun EpisodeRow(index: Int, format: String) {
             Text(
                 text = index.toString(),
                 fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }

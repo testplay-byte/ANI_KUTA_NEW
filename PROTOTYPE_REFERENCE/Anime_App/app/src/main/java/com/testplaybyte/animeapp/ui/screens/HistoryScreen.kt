@@ -91,7 +91,7 @@ fun HistoryScreen(
             Text(
                 text = "Recently Viewed",
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
             )
@@ -202,7 +202,7 @@ private fun HistoryEmptyState() {
         Text(
             text = "No history yet",
             fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
