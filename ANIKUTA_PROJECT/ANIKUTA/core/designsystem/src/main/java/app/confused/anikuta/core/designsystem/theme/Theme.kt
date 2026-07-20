@@ -1,13 +1,11 @@
 package app.confused.anikuta.core.designsystem.theme
 
-import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -18,8 +16,11 @@ import androidx.core.view.WindowCompat
  * - Dark theme is the default (per owner preference — `darkTheme` defaults to true).
  * - Primary color: #B1F256 (lime green).
  * - Surface tonal tiers (surface1–5).
- * - Status bar color matches the background.
  * - AMOLED mode forces pure black background + near-black surface ramp.
+ *
+ * Status bar appearance is handled by `enableEdgeToEdge()` in the Activity
+ * (the modern API 35+ approach — `window.statusBarColor` is deprecated).
+ * Here we only set the system bar icon appearance (light/dark icons).
  *
  * Usage:
  * ```kotlin
@@ -46,8 +47,9 @@ fun AnikutaTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
+            val window = (view.context as android.app.Activity).window
+            // Modern approach: only control icon appearance, not the color.
+            // enableEdgeToEdge() in the Activity handles the transparent system bars.
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
