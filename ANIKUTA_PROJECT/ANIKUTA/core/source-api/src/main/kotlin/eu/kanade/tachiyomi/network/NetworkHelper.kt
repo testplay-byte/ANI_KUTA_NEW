@@ -80,11 +80,11 @@ fun okhttp3.Call.asObservableSuccess(): Observable<Response> {
     }
 }
 
-/** Extension function: await the success of an RxJava Observable. */
-suspend fun <T> Observable<T>.awaitSuccess(): T = awaitSingle()
-
-/** Extension function: await a single emission from an RxJava Observable. */
-suspend fun <T> Observable<T>.awaitSingle(): T = eu.kanade.tachiyomi.util.awaitSingle()
+/** Extension function: await the success of an RxJava Observable.
+ * Delegates to eu.kanade.tachiyomi.util.awaitSingle (from RxExtension.kt). */
+suspend fun <T> Observable<T>.awaitSuccess(): T {
+    return eu.kanade.tachiyomi.util.run { this@awaitSuccess.awaitSingle() }
+}
 
 /** Extension function: suspend and await an OkHttp Call's response directly. */
 suspend fun okhttp3.Call.awaitSuccess(): okhttp3.Response {
