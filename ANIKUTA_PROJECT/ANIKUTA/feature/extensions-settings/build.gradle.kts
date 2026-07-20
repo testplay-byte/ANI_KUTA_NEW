@@ -9,7 +9,9 @@ android {
 dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
-    implementation(projects.core.sourceApi)
+    // NOTE: :core:source-api removed — it has compilation issues (references Injekt,
+    // network helpers from the reference's :core:common that we don't have yet).
+    // Will be re-added in Phase 4B when the extension loader is built.
 
     // Coil for image loading (squircle extension icons — added now, used once
     // real extension rows land in a later phase).

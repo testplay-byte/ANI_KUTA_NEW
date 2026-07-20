@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -65,6 +66,7 @@ import kotlinx.coroutines.launch
  *
  * Uses AniList data (ADR-010).
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AnimeDetailScreen(
     animeId: Int,
@@ -231,7 +233,7 @@ private fun AnimeDetailContent(
         if (!anime.genres.isNullOrEmpty()) {
             item {
                 Spacer(modifier = Modifier.height(12.dp))
-                androidx.compose.foundation.layout.FlowRow(
+                FlowRow(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
