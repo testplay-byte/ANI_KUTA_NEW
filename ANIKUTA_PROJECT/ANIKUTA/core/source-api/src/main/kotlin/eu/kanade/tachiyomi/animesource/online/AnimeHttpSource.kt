@@ -17,13 +17,13 @@ import eu.kanade.tachiyomi.network.ProgressListener
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
+import eu.kanade.tachiyomi.network.DefaultNetworkHelper
 import eu.kanade.tachiyomi.util.awaitSingle
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
-import eu.kanade.tachiyomi.util.awaitSingle
 import java.net.URI
 import java.net.URISyntaxException
 import java.security.MessageDigest

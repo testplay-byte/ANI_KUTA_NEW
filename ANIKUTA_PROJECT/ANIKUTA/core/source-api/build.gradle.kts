@@ -20,6 +20,8 @@ dependencies {
     implementation("io.reactivex:rxjava:1.3.8")
     // RxAndroid (for AndroidSchedulers, used by some extensions)
     implementation("io.reactivex:rxandroid:1.2.1")
+    // NanoHTTPD (for HttpServer model, used by some anime sources)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
     // Compose stable marker (for @Stable annotation — compileOnly, not needed at runtime)
     compileOnly("com.github.skydoves:compose-stable-marker:1.0.5")
     // AndroidX Preference (for PreferenceScreen typealias)
