@@ -1,5 +1,7 @@
 package app.confused.anikuta.feature.extensionssettings
 
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,13 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,6 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,25 +55,14 @@ import app.confused.anikuta.core.designsystem.component.SettingsGroupCard
 import app.confused.anikuta.core.designsystem.component.TwoWayToggle
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.data.extension.AnimeExtensionManager
-import app.confused.anikuta.data.extension.installer.InstallStep
 import app.confused.anikuta.data.extension.model.AnimeExtension
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 private const val TAG = "AnikutaExtUI"
 
-/**
- * Extensions settings screen — shows real installed, untrusted, and available
- * extensions from the [AnimeExtensionManager].
- *
- * Per ADR-016 + DESIGN_LANGUAGE/04-screens/extensions-settings.md:
- * - Top: 2-way Anime/Manga toggle (sticky, doesn't scroll away)
- * - Three categories: Trusted Sources → Installed Extensions → Available Extensions
- * - Settings button (top-right) → opens repo management page
- * - Trust/untrust, install, uninstall functionality
- * - Proper logging (tag: AnikutaExtUI)
- */
 @Composable
 fun ExtensionsSettingsScreen(
     extensionManager: AnimeExtensionManager,
@@ -80,26 +72,52 @@ fun ExtensionsSettingsScreen(
 ) {
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var selectedCategoryIndex by rememberSaveable { mutableIntStateOf(0) }
     var isRefreshing by remember { mutableStateOf(false) }
 
-    // Collect extension flows
     val installedExtensions by extensionManager.installedExtensionsFlow.collectAsState()
     val untrustedExtensions by extensionManager.untrustedExtensionsFlow.collectAsState()
     val availableExtensions by extensionManager.availableExtensionsFlow.collectAsState()
+    val repos by repoRepository.repos.collectAsState(initial = emptyList())
 
-    // Fetch available extensions on first load
-    LaunchedEffect(Unit) {
-        Log.i(TAG, "Extensions screen opened — fetching available extensions")
-        isRefreshing = true
-        extensionManager.findAvailableExtensions()
-        isRefreshing = false
-        Log.i(TAG, "Extensions: ${installedExtensions.size} installed, ${untrustedExtensions.size} untrusted, ${availableExtensions.size} available")
+    // Fetch available extensions only if repos are configured
+    LaunchedEffect(repos.size) {
+        if (repos.isNotEmpty()) {
+            Log.i(TAG, "Extensions screen — fetching from ${repos.size} repos")
+            isRefreshing = true
+            extensionManager.findAvailableExtensions()
+            isRefreshing = false
+            Log.i(TAG, "Extensions: ${installedExtensions.size} installed, ${untrustedExtensions.size} untrusted, ${availableExtensions.size} available")
+        } else {
+            Log.i(TAG, "No repos configured — skipping available extensions fetch")
+        }
+    }
+
+    // Filter by category: 0=Anime, 1=Manga
+    // For now, manga extensions have pkg names containing "mangaextension" vs "animeextension"
+    val isAnimeMode = selectedCategoryIndex == 0
+
+    val filteredInstalled = if (isAnimeMode) {
+        installedExtensions.filter { it.pkgName.contains("animeextension") }
+    } else {
+        installedExtensions.filter { it.pkgName.contains("mangaextension") }
+    }
+
+    val filteredUntrusted = if (isAnimeMode) {
+        untrustedExtensions.filter { it.pkgName.contains("animeextension") }
+    } else {
+        untrustedExtensions.filter { it.pkgName.contains("mangaextension") }
+    }
+
+    val filteredAvailable = if (isAnimeMode) {
+        availableExtensions.filter { it.pkgName.contains("animeextension") }
+    } else {
+        availableExtensions.filter { it.pkgName.contains("mangaextension") }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header with settings button in actions slot
         CollapsingHeader(
             title = "Extensions",
             scrollState = scrollState,
@@ -114,7 +132,6 @@ fun ExtensionsSettingsScreen(
             },
         )
 
-        // Sticky Anime/Manga toggle
         TwoWayToggle(
             options = listOf("Anime", "Manga"),
             selected = selectedCategoryIndex,
@@ -128,12 +145,12 @@ fun ExtensionsSettingsScreen(
                 .verticalScroll(scrollState)
                 .padding(bottom = 110.dp),
         ) {
-            // ── Card 1: Trusted Sources (= installed + trusted extensions) ──
+            // ── Trusted Sources ──
             SettingsGroupCard(label = "Trusted Sources") {
-                if (installedExtensions.isEmpty()) {
-                    EmptySectionBody("No trusted sources. Trust an extension to pin it here.")
+                if (filteredInstalled.isEmpty()) {
+                    EmptySectionBody(if (isAnimeMode) "No trusted anime sources. Trust an extension to pin it here." else "No trusted manga sources. Trust an extension to pin it here.")
                 } else {
-                    installedExtensions.forEach { ext ->
+                    filteredInstalled.forEach { ext ->
                         InstalledExtensionRow(
                             extension = ext,
                             onUninstall = {
@@ -145,10 +162,10 @@ fun ExtensionsSettingsScreen(
                 }
             }
 
-            // ── Card 2: Untrusted Extensions (installed but not trusted) ──
-            if (untrustedExtensions.isNotEmpty()) {
+            // ── Untrusted ──
+            if (filteredUntrusted.isNotEmpty()) {
                 SettingsGroupCard(label = "Untrusted") {
-                    untrustedExtensions.forEach { ext ->
+                    filteredUntrusted.forEach { ext ->
                         UntrustedExtensionRow(
                             extension = ext,
                             onTrust = {
@@ -160,17 +177,25 @@ fun ExtensionsSettingsScreen(
                             },
                             onUninstall = {
                                 Log.i(TAG, "Uninstalling untrusted: ${ext.pkgName}")
-                                extensionManager.uninstallExtension(ext)
+                                // Launch system uninstall intent
+                                val intent = Intent(Intent.ACTION_DELETE).apply {
+                                    data = Uri.parse("package:${ext.pkgName}")
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
                             },
                         )
                     }
                 }
             }
 
-            // ── Card 3: Available Extensions (from repos) ──
+            // ── Available ──
             SettingsGroupCard(label = "Available Extensions") {
                 when {
-                    isRefreshing && availableExtensions.isEmpty() -> {
+                    repos.isEmpty() -> {
+                        EmptySectionBody("No repositories configured. Tap the settings icon to add one.")
+                    }
+                    isRefreshing && filteredAvailable.isEmpty() -> {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
                             contentAlignment = Alignment.Center,
@@ -182,15 +207,15 @@ fun ExtensionsSettingsScreen(
                             )
                         }
                     }
-                    availableExtensions.isEmpty() -> {
-                        EmptySectionBody("No extensions available. Add a repository in settings to browse.")
+                    filteredAvailable.isEmpty() -> {
+                        EmptySectionBody(if (isAnimeMode) "No anime extensions available." else "No manga extensions available.")
                     }
                     else -> {
-                        availableExtensions.forEach { ext ->
+                        filteredAvailable.forEach { ext ->
                             AvailableExtensionRow(
                                 extension = ext,
-                                isInstalled = installedExtensions.any { it.pkgName == ext.pkgName } ||
-                                    untrustedExtensions.any { it.pkgName == ext.pkgName },
+                                isInstalled = filteredInstalled.any { it.pkgName == ext.pkgName } ||
+                                    filteredUntrusted.any { it.pkgName == ext.pkgName },
                                 onInstall = {
                                     Log.i(TAG, "Installing: ${ext.pkgName}")
                                     scope.launch {
@@ -213,14 +238,27 @@ private fun InstalledExtensionRow(
     extension: AnimeExtension.Installed,
     onUninstall: () -> Unit,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Extension icon placeholder
-        ExtensionIconPlaceholder(name = extension.name)
+        // Extension icon — use actual icon if available, otherwise placeholder
+        if (extension.icon != null) {
+            androidx.compose.foundation.Image(
+                bitmap = extension.icon.toBitmap(96, 96),
+                contentDescription = extension.name,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop,
+                colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setSaturation(0.3f) }),
+            )
+        } else {
+            ExtensionIconPlaceholder(name = extension.name)
+        }
 
         Spacer(modifier = Modifier.size(12.dp))
 
@@ -244,7 +282,6 @@ private fun InstalledExtensionRow(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            // Source names
             extension.sources.forEach { source ->
                 Text(
                     text = "  → ${source.name} (${source.lang.ifEmpty { "?" }})",
@@ -256,8 +293,14 @@ private fun InstalledExtensionRow(
             }
         }
 
-        // Uninstall button
-        IconButton(onClick = onUninstall) {
+        IconButton(onClick = {
+            // Launch system uninstall dialog
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:${extension.pkgName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        }) {
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Uninstall",
@@ -301,7 +344,6 @@ private fun UntrustedExtensionRow(
             )
         }
 
-        // Trust button
         IconButton(onClick = onTrust) {
             Icon(
                 imageVector = Icons.Filled.VerifiedUser,
@@ -310,7 +352,6 @@ private fun UntrustedExtensionRow(
             )
         }
 
-        // Uninstall button
         IconButton(onClick = onUninstall) {
             Icon(
                 imageVector = Icons.Filled.Delete,
@@ -334,7 +375,15 @@ private fun AvailableExtensionRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ExtensionIconPlaceholder(name = extension.name)
+        // Extension icon from URL
+        AsyncImage(
+            model = extension.iconUrl,
+            contentDescription = extension.name,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop,
+        )
 
         Spacer(modifier = Modifier.size(12.dp))
 
@@ -360,7 +409,6 @@ private fun AvailableExtensionRow(
             )
         }
 
-        // Install button (only if not installed)
         if (!isInstalled) {
             IconButton(onClick = onInstall) {
                 Icon(

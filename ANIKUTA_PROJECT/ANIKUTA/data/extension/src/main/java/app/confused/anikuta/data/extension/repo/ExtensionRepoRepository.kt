@@ -105,12 +105,12 @@ class ExtensionRepoRepository(context: Context) {
     }
 
     private fun loadAll(): List<ExtensionRepo> {
-        val raw = prefs.getString(KEY_REPOS, null) ?: return listOf(ExtensionRepo.DEFAULT)
+        val raw = prefs.getString(KEY_REPOS, null) ?: return emptyList()
         return try {
             json.decodeFromString<List<ExtensionRepo>>(raw)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to decode repos, falling back to default", e)
-            listOf(ExtensionRepo.DEFAULT)
+            Log.e(TAG, "Failed to decode repos, returning empty", e)
+            emptyList()
         }
     }
 
