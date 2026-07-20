@@ -1,6 +1,7 @@
 package app.confused.anikuta
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,25 +21,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomNavBar
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.NavIcons
 import app.confused.anikuta.core.designsystem.component.NavItem
 import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
+import app.confused.anikuta.feature.browse.BrowseScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge() // Design language principle #1: edge-to-edge
+        enableEdgeToEdge()
         setContent {
-            AnikutaTheme(darkTheme = true) { // Dark is the default (owner preference)
+            AnikutaTheme(darkTheme = true) {
                 AnikutaApp()
             }
         }
     }
 }
 
-/** Temporary nav items — Phase 4 will wire these to real screens. */
 private val navItems = listOf(
     NavItem("home", "Home", NavIcons.Home),
     NavItem("library", "Library", NavIcons.Library),
@@ -50,51 +52,44 @@ private val navItems = listOf(
 @Composable
 private fun AnikutaApp() {
     var currentRoute by remember { mutableStateOf("home") }
+    val anilistApi = remember { AniListApi() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        // Content area — placeholder for Phase 4+ screens
-        val scrollState = rememberScrollState()
-        Column(modifier = Modifier.fillMaxSize()) {
-            CollapsingHeader(
-                title = when (currentRoute) {
-                    "home" -> "ANIKUTA"
-                    "library" -> "Library"
-                    "search" -> "Search"
-                    "settings" -> "Settings"
-                    else -> "More"
-                },
-                scrollState = scrollState,
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = when (currentRoute) {
-                        "home" -> "Home — Phase 4 coming soon"
-                        "library" -> "Library — Phase 5+"
-                        "search" -> "Search — Phase 4+"
-                        "settings" -> "Settings — Phase 10+"
-                        else -> "More — Phase 10+"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        when (currentRoute) {
+            "home" -> BrowseScreen(api = anilistApi)
+            else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
         }
 
-        // Floating bottom nav — overlays on top of content
+        // Floating bottom nav
         AnikutaBottomNavBar(
             items = navItems,
             currentRoute = currentRoute,
             onSelect = { route -> currentRoute = route },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+    }
+}
+
+@Composable
+private fun PlaceholderScreen(title: String) {
+    val scrollState = rememberScrollState()
+    Column(modifier = Modifier.fillMaxSize()) {
+        CollapsingHeader(title = title, scrollState = scrollState)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "$title — coming in a future phase",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

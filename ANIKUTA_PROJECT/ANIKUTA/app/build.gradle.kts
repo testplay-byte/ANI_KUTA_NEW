@@ -42,10 +42,14 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.core.database)
+    implementation(projects.core.anilist)
 
     // Data modules (for Koin wiring)
     implementation(projects.data.anime)
     implementation(projects.data.history)
+
+    // Feature modules
+    implementation(projects.feature.browse)
 
     // Koin (ADR-023)
     implementation(platform(libs.koin.bom))
