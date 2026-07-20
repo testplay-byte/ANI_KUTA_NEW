@@ -17,13 +17,13 @@ import eu.kanade.tachiyomi.network.ProgressListener
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
+import eu.kanade.tachiyomi.util.awaitSingle
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import rx.Observable
-import tachiyomi.core.common.util.lang.awaitSingle
-import uy.kohesive.injekt.injectLazy
+import eu.kanade.tachiyomi.util.awaitSingle
 import java.net.URI
 import java.net.URISyntaxException
 import java.security.MessageDigest
@@ -36,7 +36,7 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
     /**
      * Network service.
      */
-    protected val network: NetworkHelper by injectLazy()
+    protected val network: NetworkHelper = DefaultNetworkHelper()
 
     /**
      * Base url of the website without the trailing slash, like: http://mysite.com

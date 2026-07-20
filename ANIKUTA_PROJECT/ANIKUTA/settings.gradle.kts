@@ -44,10 +44,8 @@ include(":core:database")
 include(":core:preferences")
 include(":core:anilist")
 include(":core:episode-metadata")
-// :core:source-api temporarily excluded — has compilation issues (references Injekt,
-// network helpers from the reference's :core:common). Will be re-added in Phase 4B.
-// include(":core:source-api")
-// include(":core:source-local")
+include(":core:source-api")
+include(":core:source-local")
 include(":core:player")
 include(":core:download")
 include(":core:notification")
