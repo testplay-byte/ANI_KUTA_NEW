@@ -12,13 +12,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge() // Design language principle #1: edge-to-edge
         setContent {
-            MaterialTheme {
+            AnikutaTheme(darkTheme = true) { // Dark is the default (owner preference)
                 Surface(modifier = Modifier.fillMaxSize()) {
                     HelloWorld()
                 }
@@ -36,6 +37,7 @@ private fun HelloWorld() {
         Text(
             text = "ANIKUTA",
             style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.primary, // #B1F256 green
         )
     }
 }
