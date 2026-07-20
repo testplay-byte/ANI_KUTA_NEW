@@ -129,14 +129,30 @@ class AnimeExtensionInstaller(
      */
     fun uninstallApk(pkgName: String) {
         val uri = Uri.fromParts("package", pkgName, null)
-        val intent = Intent(Intent.ACTION_DELETE, uri).apply {
+        // Use ACTION_UNINSTALL_PACKAGE (deprecated but more reliable on some ROMs)
+        // with FLAG_ACTIVITY_NEW_TASK. Falls back to ACTION_DELETE if the
+        // deprecated action isn't available.
+        @Suppress("DEPRECATION")
+        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_RETURN_RESULT, true)
         }
         try {
             context.startActivity(intent)
+            Log.i(TAG, "Uninstall intent sent for $pkgName")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start uninstall for $pkgName", e)
-            Toast.makeText(context, "Cannot uninstall $pkgName", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "ACTION_UNINSTALL_PACKAGE failed for $pkgName, trying ACTION_DELETE", e)
+            // Fallback: ACTION_DELETE
+            val fallbackIntent = Intent(Intent.ACTION_DELETE, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                context.startActivity(fallbackIntent)
+                Log.i(TAG, "Fallback ACTION_DELETE sent for $pkgName")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Both uninstall intents failed for $pkgName", e2)
+                Toast.makeText(context, "Cannot uninstall extension", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

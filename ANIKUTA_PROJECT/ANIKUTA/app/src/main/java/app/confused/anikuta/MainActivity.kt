@@ -83,9 +83,10 @@ private fun AnikutaApp() {
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     val anilistApi = remember { AniListApi() }
 
-    // Get extension manager + repo repository from Koin
+    // Get extension manager + repo repository + repo API from Koin
     val extensionManager = remember { org.koin.core.context.GlobalContext.get().get<AnimeExtensionManager>() }
     val repoRepository = remember { org.koin.core.context.GlobalContext.get().get<ExtensionRepoRepository>() }
+    val repoApi = remember { extensionManager.api.repoApi }
 
     // Handle back gesture for sub-screens + resolver sheet
     BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden) {
@@ -125,6 +126,7 @@ private fun AnikutaApp() {
             showRepoSettings -> {
                 ExtensionRepoSettingsScreen(
                     repoRepository = repoRepository,
+                    repoApi = repoApi,
                     onBack = { showRepoSettings = false },
                 )
             }

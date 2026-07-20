@@ -60,6 +60,59 @@ class ExtensionRepoApi(
             }
         }
 
+    /**
+     * Verifies that [baseUrl] is a valid extension repository by fetching its
+     * index.json and checking that it parses correctly.
+     *
+     * @return a [RepoVerificationResult] indicating success or failure with a message.
+     */
+    suspend fun verifyRepo(baseUrl: String): RepoVerificationResult = withContext(Dispatchers.IO) {
+        // Normalize URL: strip trailing /index.json or /index.min.json
+        val cleanUrl = baseUrl
+            .removeSuffix("/index.json")
+            .removeSuffix("/index.min.json")
+            .trimEnd('/')
+
+        // Try index.min.json first (smaller), then index.json
+        val urls = listOf("$cleanUrl/index.min.json", "$cleanUrl/index.json")
+
+        for (url in urls) {
+            try {
+                Log.i(TAG, "Verifying repo at: $url")
+                val response = client.newCall(Request.Builder().url(url).build()).execute()
+                response.use {
+                    if (!it.isSuccessful) {
+                        Log.w(TAG, "HTTP ${it.code} for $url")
+                        return@use  // Try next URL
+                    }
+                    val body = it.body?.string().orEmpty()
+                    if (body.isEmpty()) {
+                        Log.w(TAG, "Empty body from $url")
+                        return@use  // Try next URL
+                    }
+                    // Try to parse
+                    val entries = try {
+                        json.decodeFromString<List<RepoIndexEntry>>(body)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Parse failed for $url: ${e.message}")
+                        return@use  // Try next URL
+                    }
+                    if (entries.isEmpty()) {
+                        Log.w(TAG, "Index is empty at $url")
+                        return@use  // Try next URL
+                    }
+                    Log.i(TAG, "Repo verified: $cleanUrl (${entries.size} extensions)")
+                    return@withContext RepoVerificationResult.Success(cleanUrl, entries.size)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Fetch failed for $url: ${e.message}")
+                // Try next URL
+            }
+        }
+
+        RepoVerificationResult.Error("Could not fetch a valid index from this URL. Make sure it's a valid extension repository.")
+    }
+
     /** Parses the index JSON body into [AnimeExtension.Available] entries. */
     internal fun parseIndex(jsonBody: String, repoBaseUrl: String): List<AnimeExtension.Available> {
         val entries = try {
@@ -121,6 +174,15 @@ class ExtensionRepoApi(
         private const val LIB_MIN = 12
         private const val LIB_MAX = 16
     }
+}
+
+/**
+ * Result of verifying a repo URL.
+ * The UI uses this to show feedback to the user before adding the repo.
+ */
+sealed interface RepoVerificationResult {
+    data class Success(val cleanUrl: String, val extensionCount: Int) : RepoVerificationResult
+    data class Error(val message: String) : RepoVerificationResult
 }
 
 /** Builds a default OkHttpClient suitable for repo-index fetching. */

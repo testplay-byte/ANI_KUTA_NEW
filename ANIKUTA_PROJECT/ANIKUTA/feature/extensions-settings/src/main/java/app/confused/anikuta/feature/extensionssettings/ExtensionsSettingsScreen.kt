@@ -1,7 +1,5 @@
 package app.confused.anikuta.feature.extensionssettings
 
-import android.content.Intent
-import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -157,11 +155,7 @@ fun ExtensionsSettingsScreen(
                             },
                             onUninstall = {
                                 Log.i(TAG, "Uninstalling: ${ext.pkgName}")
-                                val intent = Intent(Intent.ACTION_DELETE).apply {
-                                    data = Uri.parse("package:${ext.pkgName}")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(intent)
+                                extensionManager.uninstallExtension(ext)
                             },
                         )
                     }
@@ -183,12 +177,7 @@ fun ExtensionsSettingsScreen(
                             },
                             onUninstall = {
                                 Log.i(TAG, "Uninstalling untrusted: ${ext.pkgName}")
-                                // Launch system uninstall intent
-                                val intent = Intent(Intent.ACTION_DELETE).apply {
-                                    data = Uri.parse("package:${ext.pkgName}")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(intent)
+                                extensionManager.uninstallExtension(ext)
                             },
                         )
                     }

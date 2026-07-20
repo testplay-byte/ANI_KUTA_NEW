@@ -31,7 +31,7 @@ import kotlinx.coroutines.coroutineScope
  */
 class AnimeExtensionApi(
     private val repoRepository: ExtensionRepoRepository,
-    private val repoApi: ExtensionRepoApi,
+    val repoApi: ExtensionRepoApi,
 ) {
 
     /**

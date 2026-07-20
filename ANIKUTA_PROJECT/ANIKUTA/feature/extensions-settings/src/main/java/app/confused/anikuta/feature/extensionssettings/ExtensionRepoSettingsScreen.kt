@@ -1,9 +1,6 @@
 package app.confused.anikuta.feature.extensionssettings
 
 import android.util.Log
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,8 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -43,21 +42,17 @@ import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.data.extension.repo.ExtensionRepo
+import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
+import app.confused.anikuta.data.extension.repo.RepoVerificationResult
 import kotlinx.coroutines.launch
 
 private const val TAG = "AnikutaRepoUI"
 
-/**
- * Extension repository settings screen — manage extension repos.
- *
- * Shows the list of configured repos with delete buttons.
- * FAB (bottom-right) opens an add-repo dialog.
- * The default Aniyomi repo is pre-configured.
- */
 @Composable
 fun ExtensionRepoSettingsScreen(
     repoRepository: ExtensionRepoRepository,
+    repoApi: ExtensionRepoApi? = null,
     onBack: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
@@ -66,6 +61,8 @@ fun ExtensionRepoSettingsScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var repoUrlInput by remember { mutableStateOf("") }
+    var isVerifying by remember { mutableStateOf(false) }
+    var verificationError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         Log.i(TAG, "Repo settings opened — ${repos.size} repos configured")
@@ -113,9 +110,8 @@ fun ExtensionRepoSettingsScreen(
             }
         }
 
-        // FAB — add repo
         FloatingActionButton(
-            onClick = { showAddDialog = true },
+            onClick = { showAddDialog = true; verificationError = null; repoUrlInput = "" },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
@@ -126,10 +122,9 @@ fun ExtensionRepoSettingsScreen(
         }
     }
 
-    // Add repo dialog
     if (showAddDialog) {
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
+            onDismissRequest = { showAddDialog = false; isVerifying = false; verificationError = null },
             title = {
                 Text(
                     text = "Add Repository",
@@ -141,20 +136,52 @@ fun ExtensionRepoSettingsScreen(
                 Column {
                     OutlinedTextField(
                         value = repoUrlInput,
-                        onValueChange = { repoUrlInput = it },
+                        onValueChange = { repoUrlInput = it; verificationError = null },
                         label = { Text("Repository URL") },
                         placeholder = { Text("https://raw.githubusercontent.com/...") },
                         singleLine = true,
+                        enabled = !isVerifying,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (repoUrlInput.isNotEmpty() && !repoUrlInput.trim().startsWith("http")) {
-                        Text(
-                            text = "URL must start with http:// or https://",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp,
-                            fontFamily = RobotoFamily,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                    // Show verification status
+                    when {
+                        isVerifying -> {
+                            Row(
+                                modifier = Modifier.padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text(
+                                    text = "Verifying repository...",
+                                    fontSize = 13.sp,
+                                    fontFamily = RobotoFamily,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        verificationError != null -> {
+                            Text(
+                                text = verificationError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                fontFamily = RobotoFamily,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        repoUrlInput.isNotEmpty() && !repoUrlInput.trim().startsWith("http") -> {
+                            Text(
+                                text = "URL must start with http:// or https://",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                fontFamily = RobotoFamily,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
                     }
                 }
             },
@@ -162,30 +189,57 @@ fun ExtensionRepoSettingsScreen(
                 TextButton(
                     onClick = {
                         val url = repoUrlInput.trim()
-                        // Basic validation
                         if (url.isNotEmpty() && url.startsWith("http")) {
-                            // Strip trailing /index.json or /index.min.json if user pasted the full URL
-                            val cleanUrl = url
-                                .removeSuffix("/index.json")
-                                .removeSuffix("/index.min.json")
-                            Log.i(TAG, "Adding repo: $cleanUrl")
-                            scope.launch {
-                                val success = repoRepository.insert(ExtensionRepo(baseUrl = cleanUrl, name = cleanUrl))
-                                if (!success) {
-                                    Log.w(TAG, "Repo already exists: $cleanUrl")
+                            if (repoApi != null) {
+                                // Verify the repo by fetching its index
+                                isVerifying = true
+                                verificationError = null
+                                scope.launch {
+                                    val result = repoApi.verifyRepo(url)
+                                    isVerifying = false
+                                    when (result) {
+                                        is RepoVerificationResult.Success -> {
+                                            Log.i(TAG, "Repo verified: ${result.cleanUrl} (${result.extensionCount} extensions)")
+                                            repoRepository.insert(ExtensionRepo(
+                                                baseUrl = result.cleanUrl,
+                                                name = result.cleanUrl.substringAfterLast("/").ifEmpty { result.cleanUrl },
+                                            ))
+                                            repoUrlInput = ""
+                                            showAddDialog = false
+                                        }
+                                        is RepoVerificationResult.Error -> {
+                                            Log.w(TAG, "Repo verification failed: ${result.message}")
+                                            verificationError = result.message
+                                        }
+                                    }
                                 }
+                            } else {
+                                // No API available — just add without verification (fallback)
+                                val cleanUrl = url
+                                    .removeSuffix("/index.json")
+                                    .removeSuffix("/index.min.json")
+                                Log.i(TAG, "Adding repo (no verification): $cleanUrl")
+                                scope.launch {
+                                    repoRepository.insert(ExtensionRepo(
+                                        baseUrl = cleanUrl,
+                                        name = cleanUrl.substringAfterLast("/").ifEmpty { cleanUrl },
+                                    ))
+                                }
+                                repoUrlInput = ""
+                                showAddDialog = false
                             }
-                            repoUrlInput = ""
-                            showAddDialog = false
                         }
                     },
-                    enabled = repoUrlInput.trim().isNotEmpty() && repoUrlInput.trim().startsWith("http"),
+                    enabled = !isVerifying && repoUrlInput.trim().isNotEmpty() && repoUrlInput.trim().startsWith("http"),
                 ) {
                     Text("Add", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
+                TextButton(
+                    onClick = { showAddDialog = false; isVerifying = false; verificationError = null },
+                    enabled = !isVerifying,
+                ) {
                     Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
                 }
             },
@@ -213,7 +267,7 @@ private fun RepoRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = repo.name ?: repo.baseUrl,
+                    text = repo.name.ifEmpty { repo.baseUrl },
                     fontFamily = RobotoFamily,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -227,7 +281,7 @@ private fun RepoRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            androidx.compose.material3.IconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = "Delete",
