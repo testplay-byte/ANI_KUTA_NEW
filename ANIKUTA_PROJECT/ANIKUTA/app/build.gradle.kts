@@ -43,9 +43,12 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.database)
     implementation(projects.core.anilist)
+    // source-api — for ExtensionAppHolder.init() in App.kt (ADR-029)
+    implementation(projects.core.sourceApi)
 
     // Data modules (for Koin wiring)
     implementation(projects.data.anime)
+    implementation(projects.data.extension)
     implementation(projects.data.history)
 
     // Feature modules

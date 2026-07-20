@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Extension installer (Phase 4B): allows installing external Aniyomi-compatible APKs. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PACKAGE_INSTALL" />
+    <!-- The install service shows a foreground notification (Android 13+ needs this). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Needed to receive PACKAGE_ADDED/REPLACED/REMOVED broadcasts on Android 14+. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
         android:name=".App"
@@ -21,5 +32,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Extension install service: foreground service hosting the PackageInstaller queue. -->
+        <service
+            android:name="app.confused.anikuta.data.extension.installer.ExtensionInstallService"
+            android:exported="false"
+            android:foregroundServiceType="packageInstall" />
+
+        <!--
+            ExtensionInstallReceiver is registered dynamically by AnimeExtensionManager
+            (it needs a Listener constructor arg), so it is NOT declared here.
+            The manager registers it for ACTION_PACKAGE_ADDED/REPLACED/REMOVED at startup.
+        -->
     </application>
 </manifest>
