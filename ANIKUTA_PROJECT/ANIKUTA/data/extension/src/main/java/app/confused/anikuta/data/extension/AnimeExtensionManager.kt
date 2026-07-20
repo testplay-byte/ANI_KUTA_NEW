@@ -175,8 +175,40 @@ class AnimeExtensionManager(
         untrustedMap.value = untrustedMap.value - extension.pkgName
         when (val result = loader.loadExtensionFromPkgName(context, extension.pkgName)) {
             is AnimeLoadResult.Success -> installedMap.value = installedMap.value + (result.extension.pkgName to result.extension)
-            else -> Log.w(TAG, "Trust: re-load failed for ${extension.pkgName}: $result")
+            is AnimeLoadResult.Untrusted -> {
+                // Still untrusted after re-load — put it back
+                untrustedMap.value = untrustedMap.value + (result.extension.pkgName to result.extension)
+                Log.w(TAG, "Trust: re-load still untrusted for ${extension.pkgName}")
+            }
+            is AnimeLoadResult.Error -> {
+                // Load failed — put it back as untrusted so the user can retry
+                untrustedMap.value = untrustedMap.value + (extension.pkgName to extension)
+                Log.e(TAG, "Trust: re-load failed for ${extension.pkgName}: ${result.error}")
+            }
         }
+    }
+
+    /**
+     * Untrusts [extension], moves it from [installedExtensionsFlow] back to
+     * [untrustedExtensionsFlow], and unloads its sources.
+     */
+    fun untrust(extension: AnimeExtension.Installed) {
+        trustExtension.untrust(extension.pkgName)
+        installedMap.value = installedMap.value - extension.pkgName
+        // Re-add as untrusted (the loader will detect it as untrusted on next scan)
+        val untrusted = AnimeExtension.Untrusted(
+            name = extension.name,
+            pkgName = extension.pkgName,
+            versionName = extension.versionName,
+            versionCode = extension.versionCode,
+            libVersion = extension.libVersion,
+            signatureHash = "", // Will be re-computed on next scan
+            lang = extension.lang,
+            isNsfw = extension.isNsfw,
+            isTorrent = extension.isTorrent,
+        )
+        untrustedMap.value = untrustedMap.value + (extension.pkgName to untrusted)
+        Log.i(TAG, "Untrusted: ${extension.pkgName}")
     }
 
     private fun <T : AnimeExtension> MutableStateFlow<Map<String, T>>.mapExtensions(): StateFlow<List<T>> =

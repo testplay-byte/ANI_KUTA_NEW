@@ -151,9 +151,17 @@ fun ExtensionsSettingsScreen(
                     filteredInstalled.forEach { ext ->
                         InstalledExtensionRow(
                             extension = ext,
+                            onUntrust = {
+                                Log.i(TAG, "Untrusting: ${ext.pkgName}")
+                                extensionManager.untrust(ext)
+                            },
                             onUninstall = {
                                 Log.i(TAG, "Uninstalling: ${ext.pkgName}")
-                                extensionManager.uninstallExtension(ext)
+                                val intent = Intent(Intent.ACTION_DELETE).apply {
+                                    data = Uri.parse("package:${ext.pkgName}")
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
                             },
                         )
                     }
@@ -234,20 +242,15 @@ fun ExtensionsSettingsScreen(
 @Composable
 private fun InstalledExtensionRow(
     extension: AnimeExtension.Installed,
+    onUntrust: () -> Unit,
     onUninstall: () -> Unit,
 ) {
-    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Extension icon — use actual icon if available, otherwise placeholder
-        // Note: Drawable -> Compose Image requires the drawable to be converted.
-        // For simplicity, we use the placeholder for now — actual icon rendering
-        // for installed extensions will be improved when we add the Image(drawable)
-        // overload from compose-foundation in a future iteration.
         ExtensionIconPlaceholder(name = extension.name)
 
         Spacer(modifier = Modifier.size(12.dp))
@@ -283,14 +286,17 @@ private fun InstalledExtensionRow(
             }
         }
 
-        IconButton(onClick = {
-            // Launch system uninstall dialog
-            val intent = Intent(Intent.ACTION_DELETE).apply {
-                data = Uri.parse("package:${extension.pkgName}")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-        }) {
+        // Untrust button
+        IconButton(onClick = onUntrust) {
+            Icon(
+                imageVector = Icons.Filled.VerifiedUser,
+                contentDescription = "Untrust",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // Uninstall button
+        IconButton(onClick = onUninstall) {
             Icon(
                 imageVector = Icons.Filled.Delete,
                 contentDescription = "Uninstall",

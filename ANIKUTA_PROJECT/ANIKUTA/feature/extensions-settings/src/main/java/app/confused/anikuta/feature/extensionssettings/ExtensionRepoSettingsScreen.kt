@@ -138,28 +138,48 @@ fun ExtensionRepoSettingsScreen(
                 )
             },
             text = {
-                OutlinedTextField(
-                    value = repoUrlInput,
-                    onValueChange = { repoUrlInput = it },
-                    label = { Text("Repository URL") },
-                    placeholder = { Text("https://raw.githubusercontent.com/...") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column {
+                    OutlinedTextField(
+                        value = repoUrlInput,
+                        onValueChange = { repoUrlInput = it },
+                        label = { Text("Repository URL") },
+                        placeholder = { Text("https://raw.githubusercontent.com/...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (repoUrlInput.isNotEmpty() && !repoUrlInput.trim().startsWith("http")) {
+                        Text(
+                            text = "URL must start with http:// or https://",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontFamily = RobotoFamily,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         val url = repoUrlInput.trim()
-                        if (url.isNotEmpty()) {
-                            Log.i(TAG, "Adding repo: $url")
+                        // Basic validation
+                        if (url.isNotEmpty() && url.startsWith("http")) {
+                            // Strip trailing /index.json or /index.min.json if user pasted the full URL
+                            val cleanUrl = url
+                                .removeSuffix("/index.json")
+                                .removeSuffix("/index.min.json")
+                            Log.i(TAG, "Adding repo: $cleanUrl")
                             scope.launch {
-                                repoRepository.insert(ExtensionRepo(baseUrl = url, name = url))
+                                val success = repoRepository.insert(ExtensionRepo(baseUrl = cleanUrl, name = cleanUrl))
+                                if (!success) {
+                                    Log.w(TAG, "Repo already exists: $cleanUrl")
+                                }
                             }
                             repoUrlInput = ""
                             showAddDialog = false
                         }
                     },
+                    enabled = repoUrlInput.trim().isNotEmpty() && repoUrlInput.trim().startsWith("http"),
                 ) {
                     Text("Add", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
                 }
