@@ -1,6 +1,7 @@
 package app.confused.anikuta
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -44,11 +45,16 @@ import app.confused.anikuta.core.designsystem.component.NavIcons
 import app.confused.anikuta.core.designsystem.component.NavItem
 import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.data.extension.AnimeExtensionManager
+import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
+import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.SEpisode
+import org.koin.compose.koinInject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +84,8 @@ private fun AnikutaApp() {
     var showSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     val anilistApi = remember { AniListApi() }
+    val extensionManager: AnimeExtensionManager by koinInject()
+    val sourceMatcher: SourceMatcher by koinInject()
 
     // Handle back gesture for sub-screens + resolver sheet
     BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || resolverState !is VideoResolverState.Hidden) {
@@ -103,13 +111,15 @@ private fun AnikutaApp() {
                 AnimeDetailScreen(
                     animeId = detailAnimeId!!,
                     api = anilistApi,
+                    extensionManager = extensionManager,
+                    sourceMatcher = sourceMatcher,
                     onBack = {
                         detailAnimeId = null
-                        resolverState = VideoResolverState.Hidden // Clear resolver on back
+                        resolverState = VideoResolverState.Hidden
                     },
-                    onOpenEpisode = { epNum ->
-                        // No extensions loaded yet — show "No sources" state
-                        resolverState = VideoResolverState.NoSources(episodeNumber = epNum)
+                    onOpenEpisode = { episode, source ->
+                        // Step 5: just log the tap. Step 6 will wire the video resolver.
+                        Log.i("AnikutaDetailUI", "Episode tapped: ${episode.name} (num=${episode.episode_number}) from ${source.name}")
                     },
                 )
             }

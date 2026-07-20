@@ -5,6 +5,7 @@ import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.api.AnimeExtensionApi
 import app.confused.anikuta.data.extension.installer.AnimeExtensionInstaller
 import app.confused.anikuta.data.extension.loader.AnimeExtensionLoader
+import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.data.extension.repo.defaultRepoOkHttpClient
@@ -57,4 +58,7 @@ val extensionModule: Module = module {
 
     // ── Manager (the public façade — depends on loader, trust, api, installer) ──
     single { AnimeExtensionManager(get(), get(), get(), get(), get()) }
+
+    // ── SourceMatcher (Step 5 — searches trusted sources by title) ──
+    single { SourceMatcher(get()) }
 }
