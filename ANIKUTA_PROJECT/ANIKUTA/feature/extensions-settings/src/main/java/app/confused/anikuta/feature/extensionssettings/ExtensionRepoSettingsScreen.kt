@@ -87,7 +87,7 @@ fun ExtensionRepoSettingsScreen(
                         repo = repo,
                         onDelete = {
                             Log.i(TAG, "Deleting repo: ${repo.baseUrl}")
-                            scope.launch { repoRepository.deleteRepo(repo.baseUrl) }
+                            scope.launch { repoRepository.delete(repo.baseUrl) }
                         },
                     )
                 }
@@ -154,7 +154,7 @@ fun ExtensionRepoSettingsScreen(
                         if (url.isNotEmpty()) {
                             Log.i(TAG, "Adding repo: $url")
                             scope.launch {
-                                repoRepository.addRepo(url)
+                                repoRepository.insert(ExtensionRepo(baseUrl = url))
                             }
                             repoUrlInput = ""
                             showAddDialog = false

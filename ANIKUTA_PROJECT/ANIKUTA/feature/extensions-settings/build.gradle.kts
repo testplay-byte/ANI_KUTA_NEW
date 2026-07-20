@@ -10,6 +10,7 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.data.extension)
+    implementation(projects.core.sourceApi)
 
     // Coil for extension icons
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
