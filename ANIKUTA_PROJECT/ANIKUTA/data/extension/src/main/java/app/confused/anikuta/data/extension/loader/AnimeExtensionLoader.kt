@@ -48,7 +48,7 @@ import kotlinx.coroutines.runBlocking
  *   the feature flag (the reference returns `Error` for the same case).
  */
 @SuppressLint("PackageManagerGetSignatures")
-internal class AnimeExtensionLoader(
+class AnimeExtensionLoader(
     private val trustExtension: TrustExtension,
 ) {
 
