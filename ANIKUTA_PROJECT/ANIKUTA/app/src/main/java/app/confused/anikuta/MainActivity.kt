@@ -46,6 +46,9 @@ import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
+import app.confused.anikuta.data.extension.AnimeExtensionManager
+import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
+import app.confused.anikuta.feature.extensionssettings.ExtensionRepoSettingsScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
@@ -76,17 +79,23 @@ private fun AnikutaApp() {
     var detailAnimeId by remember { mutableStateOf<Int?>(null) }
     var showExtensions by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showRepoSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     val anilistApi = remember { AniListApi() }
 
+    // Get extension manager + repo repository from Koin
+    val extensionManager = remember { org.koin.core.context.GlobalContext.get().get<AnimeExtensionManager>() }
+    val repoRepository = remember { org.koin.core.context.GlobalContext.get().get<ExtensionRepoRepository>() }
+
     // Handle back gesture for sub-screens + resolver sheet
-    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || resolverState !is VideoResolverState.Hidden) {
+    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden) {
         when {
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
             detailAnimeId != null -> {
                 detailAnimeId = null
-                resolverState = VideoResolverState.Hidden // Clear resolver when leaving detail
+                resolverState = VideoResolverState.Hidden
             }
+            showRepoSettings -> showRepoSettings = false
             showExtensions -> showExtensions = false
             showSettings -> showSettings = false
         }
@@ -116,7 +125,17 @@ private fun AnikutaApp() {
             // Extensions sub-screen (from Settings)
             showExtensions -> {
                 ExtensionsSettingsScreen(
+                    extensionManager = extensionManager,
+                    repoRepository = repoRepository,
                     onBack = { showExtensions = false },
+                    onOpenRepoSettings = { showRepoSettings = true },
+                )
+            }
+            // Repo settings sub-screen (from Extensions)
+            showRepoSettings -> {
+                ExtensionRepoSettingsScreen(
+                    repoRepository = repoRepository,
+                    onBack = { showRepoSettings = false },
                 )
             }
             // Settings sub-screen (from More)
