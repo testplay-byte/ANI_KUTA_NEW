@@ -50,6 +50,8 @@ dependencies {
 
     // Feature modules
     implementation(projects.feature.browse)
+    implementation(projects.feature.anime.details)
+    implementation(projects.feature.extensions.settings)
 
     // Koin (ADR-023)
     implementation(platform(libs.koin.bom))

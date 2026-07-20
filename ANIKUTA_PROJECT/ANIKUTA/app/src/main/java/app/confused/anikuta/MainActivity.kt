@@ -1,10 +1,13 @@
 package app.confused.anikuta
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +30,9 @@ import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.NavIcons
 import app.confused.anikuta.core.designsystem.component.NavItem
 import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
+import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
+import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +57,7 @@ private val navItems = listOf(
 @Composable
 private fun AnikutaApp() {
     var currentRoute by remember { mutableStateOf("home") }
+    var detailAnimeId by remember { mutableStateOf<Int?>(null) }
     val anilistApi = remember { AniListApi() }
 
     Box(
@@ -59,18 +65,32 @@ private fun AnikutaApp() {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        when (currentRoute) {
-            "home" -> BrowseScreen(api = anilistApi)
-            else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
-        }
+        // If a detail anime is selected, show the detail screen (full screen, no bottom nav)
+        if (detailAnimeId != null) {
+            AnimeDetailScreen(
+                animeId = detailAnimeId!!,
+                api = anilistApi,
+                onBack = { detailAnimeId = null },
+            )
+        } else {
+            // Tab content
+            when (currentRoute) {
+                "home" -> BrowseScreen(
+                    api = anilistApi,
+                    onOpenAnime = { id -> detailAnimeId = id },
+                )
+                "more" -> ExtensionsSettingsScreen()
+                else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
+            }
 
-        // Floating bottom nav
-        AnikutaBottomNavBar(
-            items = navItems,
-            currentRoute = currentRoute,
-            onSelect = { route -> currentRoute = route },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+            // Floating bottom nav (hidden on detail screen)
+            AnikutaBottomNavBar(
+                items = navItems,
+                currentRoute = currentRoute,
+                onSelect = { route -> currentRoute = route },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 

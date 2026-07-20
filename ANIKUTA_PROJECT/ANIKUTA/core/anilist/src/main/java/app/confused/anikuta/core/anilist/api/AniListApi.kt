@@ -43,6 +43,40 @@ class AniListApi(
     suspend fun searchAnime(query: String, page: Int = 1, perPage: Int = 20): List<AniListAnime> =
         queryList(SEARCH_QUERY, page, perPage, search = query)
 
+    /** Fetch a single anime by its AniList ID. */
+    suspend fun fetchById(id: Int): AniListAnime? = withContext(Dispatchers.IO) {
+        val variables = buildJsonObject {
+            put("id", id)
+        }
+
+        val body = buildJsonObject {
+            put("query", BY_ID_QUERY)
+            put("variables", variables)
+        }
+
+        val request = Request.Builder()
+            .url(API_URL)
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string() ?: return@withContext null
+
+        if (!response.isSuccessful) return@withContext null
+
+        val root = Json.parseToJsonElement(responseBody).jsonObject
+        val data = root["data"]?.jsonObject ?: return@withContext null
+        val media = data["Media"] ?: return@withContext null
+
+        try {
+            Json.decodeFromJsonElement(AniListAnime.serializer(), media)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private suspend fun queryList(
         query: String,
         page: Int,
@@ -144,6 +178,14 @@ class AniListApi(
                 media(search: ${'$'}search, sort: SEARCH_MATCH, type: ANIME, isAdult: false) {
                   $ANIME_FIELDS
                 }
+              }
+            }
+        """
+
+        private const val BY_ID_QUERY = """
+            query (${'$'}id: Int) {
+              Media(id: ${'$'}id, type: ANIME) {
+                $ANIME_FIELDS
               }
             }
         """
