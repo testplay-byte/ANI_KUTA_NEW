@@ -183,7 +183,12 @@ class AnimeExtensionManager(
             is AnimeLoadResult.Error -> {
                 // Load failed — put it back as untrusted so the user can retry
                 untrustedMap.value = untrustedMap.value + (extension.pkgName to extension)
-                Log.e(TAG, "Trust: re-load failed for ${extension.pkgName}: ${result.error}")
+                Log.e(TAG, "Trust: re-load failed for ${extension.pkgName}")
+            }
+            is AnimeLoadResult.UnrecognizedExtension -> {
+                // Not recognized — put it back as untrusted
+                untrustedMap.value = untrustedMap.value + (extension.pkgName to extension)
+                Log.e(TAG, "Trust: unrecognized extension for ${extension.pkgName}")
             }
         }
     }
