@@ -60,7 +60,9 @@ fun ExtensionsSettingsScreen(
     val scrollState = rememberScrollState()
 
     // Handle the system back gesture
-    androidx.activity.compose.BackHandler { onBack() }
+    // (BackHandler is provided by activity-compose, which :app has — this screen
+    // is called from :app, so the BackHandler in MainActivity handles it.
+    // We don't add a second one here to avoid double-handling.)
 
     // 0 = Anime, 1 = Manga (ADR-016: Video / Image-Manga).
     // Default = Anime per ADR-009 (the app is anime-first).
