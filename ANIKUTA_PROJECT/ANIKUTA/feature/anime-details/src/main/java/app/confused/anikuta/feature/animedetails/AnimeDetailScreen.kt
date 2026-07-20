@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package app.confused.anikuta.feature.animedetails
 
 import androidx.compose.foundation.background
@@ -66,7 +68,6 @@ import kotlinx.coroutines.launch
  *
  * Uses AniList data (ADR-010).
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AnimeDetailScreen(
     animeId: Int,
@@ -230,14 +231,15 @@ private fun AnimeDetailContent(
         }
 
         // Genres
-        if (!anime.genres.isNullOrEmpty()) {
+        val genres = anime.genres
+        if (!genres.isNullOrEmpty()) {
             item {
                 Spacer(modifier = Modifier.height(12.dp))
                 FlowRow(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    anime.genres.forEach { genre ->
+                    genres.forEach { genre ->
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                             shape = RoundedCornerShape(50),
