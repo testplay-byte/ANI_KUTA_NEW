@@ -11,6 +11,9 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.anilist)
 
+    // Activity Compose (for BackHandler)
+    implementation("androidx.activity:activity-compose:1.10.1")
+
     // Coil for images
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
