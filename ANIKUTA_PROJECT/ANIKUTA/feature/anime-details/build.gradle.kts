@@ -10,6 +10,10 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.core.anilist)
+    // Source API — for AnimeSource, SEpisode, AnimeFilterList (ADR-029)
+    implementation(projects.core.sourceApi)
+    // Extension manager — for AnimeExtensionManager + SourceMatcher (Step 5)
+    implementation(projects.data.extension)
 
     // Activity Compose (for BackHandler)
     implementation("androidx.activity:activity-compose:1.10.1")
@@ -21,7 +25,7 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
 
-    // Lifecycle
+    // Lifecycle (ViewModel + viewModelScope)
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 }

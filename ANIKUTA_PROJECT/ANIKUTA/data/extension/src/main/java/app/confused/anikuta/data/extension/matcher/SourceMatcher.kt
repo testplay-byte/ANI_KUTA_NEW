@@ -1,0 +1,177 @@
+package app.confused.anikuta.data.extension.matcher
+
+import android.util.Log
+import app.confused.anikuta.data.extension.AnimeExtensionManager
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+
+/**
+ * Searches trusted extension sources for an anime by title and returns the
+ * best-matching source + [SAnime] pair.
+ *
+ * **Priority-based search** (per Step 5 requirements):
+ * - [match] searches sources in the order they appear in
+ *   [AnimeExtensionManager.installedExtensionsFlow] — the "trusted sources list".
+ *   The first source that returns a title-similar result wins.
+ * - [matchAll] searches every source concurrently and returns every match —
+ *   used by the source-switcher UI to show the user all available sources.
+ *
+ * **Title matching** (ported from the old ANIKUTA's `TitleMatcher.kt`):
+ * - Normalizes both the query and each result title (lowercase, strip
+ *   parentheticals, strip non-alphanumerics, collapse whitespace).
+ * - Similarity: exact = 1.0, substring = 0.95, else Levenshtein-based.
+ * - Threshold: 0.80 (matches the old project).
+ *
+ * **Error handling**: each source call is wrapped in try-catch. A failing
+ * source is logged and skipped — one broken extension doesn't kill the entire
+ * search. (Per `RULES/ai-agent-rules.md` §12: Understand → Locate → Fix.)
+ *
+ * @param extensionManager provides the live list of installed + trusted sources.
+ */
+class SourceMatcher(
+    private val extensionManager: AnimeExtensionManager,
+) {
+
+    /**
+     * A single source + SAnime match with a similarity score.
+     *
+     * @param source the catalogue source that returned the match.
+     * @param sAnime the matched anime (its `url` is needed for `getEpisodeList`).
+     * @param score title similarity (0.0–1.0); higher is better.
+     */
+    data class SourceMatch(
+        val source: AnimeCatalogueSource,
+        val sAnime: SAnime,
+        val score: Double,
+    )
+
+    /**
+     * The result of [match]. Either a single best match, no match, or an error.
+     */
+    sealed class Result {
+        /** A matching source + anime was found. */
+        data class Match(val match: SourceMatch) : Result()
+        /** No source returned a title-similar result. */
+        data object NoMatch : Result()
+        /** The search itself failed (e.g. no sources installed, or all threw). */
+        data class Error(val message: String) : Result()
+    }
+
+    /**
+     * Searches trusted sources in priority order and returns the first match.
+     *
+     * "First match" = the first source (in installed-extensions order) that
+     * returns at least one [SAnime] with title similarity >= [THRESHOLD].
+     * Within that source's results, the highest-scoring anime is picked.
+     *
+     * @param title the anime title (typically from AniList's `displayTitle`).
+     */
+    suspend fun match(title: String): Result {
+        val sources = getCatalogueSources()
+        if (sources.isEmpty()) {
+            Log.w(TAG, "No catalogue sources installed — cannot match '$title'")
+            return Result.Error("No sources installed")
+        }
+        Log.i(TAG, "Searching ${sources.size} sources for '$title'")
+
+        for (source in sources) {
+            val match = searchSource(source, title) ?: continue
+            Log.i(TAG, "Matched '${match.sAnime.title}' (score=${match.score}) from '${source.name}'")
+            return Result.Match(match)
+        }
+        Log.i(TAG, "No source has '$title'")
+        return Result.NoMatch
+    }
+
+    /**
+     * Searches ALL sources concurrently and returns every match (for the
+     * source-switcher UI). Matches are sorted by score descending so the
+     * best match is first.
+     */
+    suspend fun matchAll(title: String): List<SourceMatch> = coroutineScope {
+        val sources = getCatalogueSources()
+        if (sources.isEmpty()) return@coroutineScope emptyList()
+
+        Log.i(TAG, "matchAll: searching ${sources.size} sources for '$title'")
+        sources.map { source ->
+            async { searchSource(source, title) }
+        }.awaitAll().filterNotNull().sortedByDescending { it.score }
+    }
+
+    /**
+     * Searches one source and returns the best match if any result clears the
+     * similarity threshold. Returns `null` on no match or error (errors are
+     * logged and swallowed so the search continues with the next source).
+     */
+    private suspend fun searchSource(
+        source: AnimeCatalogueSource,
+        query: String,
+    ): SourceMatch? {
+        return try {
+            val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
+            val normalizedQuery = normalizeTitle(query)
+            page.animes
+                .map { sAnime ->
+                    val score = similarity(normalizedQuery, normalizeTitle(sAnime.title))
+                    SourceMatch(source, sAnime, score)
+                }
+                .filter { it.score >= THRESHOLD }
+                .maxByOrNull { it.score }
+        } catch (e: Exception) {
+            Log.w(TAG, "Source '${source.name}' search failed for '$query': ${e.message}")
+            null
+        }
+    }
+
+    /** Returns the catalogue sources from all installed + trusted extensions. */
+    private fun getCatalogueSources(): List<AnimeCatalogueSource> {
+        return extensionManager.installedExtensionsFlow.value
+            .flatMap { it.sources }
+            .filterIsInstance<AnimeCatalogueSource>()
+    }
+
+    // ── Title matching helpers (ported from OLD_ANIKUTA TitleMatcher.kt) ──
+
+    private fun normalizeTitle(title: String): String {
+        return title.lowercase()
+            .replace(Regex("""\b\d+(st|nd|rd|th)?\s+season\b"""), "") // "2nd season"
+            .replace(Regex("""\bseason\s+\d+\b"""), "")               // "season 2"
+            .replace(Regex("""\([^)]*\)"""), "")                      // parentheticals
+            .replace(Regex("""\[[^]]*]"""), "")                      // bracketed
+            .replace(Regex("""[^\w\s]"""), "")                        // non-alphanumerics
+            .trim()
+            .replace(Regex("""\s+"""), " ")                           // collapse whitespace
+    }
+
+    private fun similarity(a: String, b: String): Double {
+        if (a == b) return 1.0
+        if (a.isBlank() || b.isBlank()) return 0.0
+        if (a.contains(b) || b.contains(a)) return 0.95
+        val dist = levenshtein(a, b)
+        val maxLen = maxOf(a.length, b.length)
+        return 1.0 - dist.toDouble() / maxLen
+    }
+
+    private fun levenshtein(a: String, b: String): Int {
+        val prev = IntArray(b.length + 1) { it }
+        val curr = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            curr[0] = i
+            for (j in 1..b.length) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                curr[j] = minOf(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+            }
+            prev.indices.forEach { prev[it] = curr[it] }
+        }
+        return prev[b.length]
+    }
+
+    companion object {
+        private const val TAG = "AnikutaSourceMatcher"
+        private const val THRESHOLD = 0.80
+    }
+}
