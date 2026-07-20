@@ -194,7 +194,7 @@ private fun ShowContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, vertical = 4.dp),
+                    .padding(start = 16.dp, top = 4.dp, end = 0.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
