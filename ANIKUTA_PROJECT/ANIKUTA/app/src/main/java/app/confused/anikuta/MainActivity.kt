@@ -2,6 +2,7 @@ package app.confused.anikuta
 
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,9 +33,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,10 +53,13 @@ import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
+import app.confused.anikuta.feature.videoresolver.ResolverResult
+import app.confused.anikuta.feature.videoresolver.ResolverService
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 class MainActivity : ComponentActivity() {
@@ -86,6 +92,14 @@ private fun AnikutaApp() {
     val anilistApi = remember { AniListApi() }
     val extensionManager: AnimeExtensionManager by koinInject()
     val sourceMatcher: SourceMatcher by koinInject()
+    val resolverService = remember { ResolverService() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Tracks the episode+source being resolved (for retry on Error)
+    var resolveTarget by remember {
+        mutableStateOf<Pair<SEpisode, AnimeSource>?>(null)
+    }
 
     // Handle back gesture for sub-screens + resolver sheet
     BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || resolverState !is VideoResolverState.Hidden) {
@@ -93,10 +107,37 @@ private fun AnikutaApp() {
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
             detailAnimeId != null -> {
                 detailAnimeId = null
-                resolverState = VideoResolverState.Hidden // Clear resolver when leaving detail
+                resolverState = VideoResolverState.Hidden
             }
             showExtensions -> showExtensions = false
             showSettings -> showSettings = false
+        }
+    }
+
+    /**
+     * Resolves videos from [source] for [episode] and updates [resolverState].
+     * Called when the user taps an episode on the detail screen.
+     */
+    fun resolveEpisode(episode: SEpisode, source: AnimeSource) {
+        val epNum = episode.episode_number.toInt().let { if (it > 0) it else 0 }
+        resolveTarget = episode to source
+        resolverState = VideoResolverState.Resolving(epNum)
+        Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name}")
+
+        scope.launch {
+            when (val result = resolverService.resolve(source, episode)) {
+                is ResolverResult.Success -> {
+                    resolverState = VideoResolverState.Show(epNum, result.servers)
+                }
+                is ResolverResult.NoSources -> {
+                    resolverState = VideoResolverState.NoSources(epNum)
+                    Toast.makeText(context, "No video sources available", Toast.LENGTH_SHORT).show()
+                }
+                is ResolverResult.Error -> {
+                    resolverState = VideoResolverState.Error(epNum, result.message)
+                    Toast.makeText(context, "Failed to resolve: ${result.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -118,8 +159,7 @@ private fun AnikutaApp() {
                         resolverState = VideoResolverState.Hidden
                     },
                     onOpenEpisode = { episode, source ->
-                        // Step 5: just log the tap. Step 6 will wire the video resolver.
-                        Log.i("AnikutaDetailUI", "Episode tapped: ${episode.name} (num=${episode.episode_number}) from ${source.name}")
+                        resolveEpisode(episode, source)
                     },
                 )
             }
@@ -138,25 +178,6 @@ private fun AnikutaApp() {
             }
             // Tab content
             else -> {
-                // Video resolver sheet overlay (shows on top of the detail screen)
-                if (resolverState !is VideoResolverState.Hidden) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
-                            .clickable { resolverState = VideoResolverState.Hidden },
-                        contentAlignment = Alignment.BottomCenter,
-                    ) {
-                        VideoResolverSheet(
-                            state = resolverState,
-                            onDismiss = { resolverState = VideoResolverState.Hidden },
-                            onVideoSelected = { video ->
-                                resolverState = VideoResolverState.Hidden
-                                // Phase 6: open the watch page / player with this video
-                            },
-                        )
-                    }
-                }
                 when (currentRoute) {
                     "home" -> BrowseScreen(
                         api = anilistApi,
@@ -174,6 +195,33 @@ private fun AnikutaApp() {
                     currentRoute = currentRoute,
                     onSelect = { route -> currentRoute = route },
                     modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+        }
+
+        // Video resolver overlay — renders on top of any screen (detail, browse, etc.)
+        if (resolverState !is VideoResolverState.Hidden) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
+                    .clickable { resolverState = VideoResolverState.Hidden },
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                VideoResolverSheet(
+                    state = resolverState,
+                    onDismiss = { resolverState = VideoResolverState.Hidden },
+                    onVideoSelected = { video ->
+                        Log.i("AnikutaResolver", "Video selected: ${video.quality} (${video.url})")
+                        resolverState = VideoResolverState.Hidden
+                        Toast.makeText(context, "Playing ${video.quality}\u2026", Toast.LENGTH_SHORT).show()
+                        // Phase 6: open the watch page / player with this video
+                    },
+                    onRetry = {
+                        resolveTarget?.let { (episode, source) ->
+                            resolveEpisode(episode, source)
+                        }
+                    },
                 )
             }
         }

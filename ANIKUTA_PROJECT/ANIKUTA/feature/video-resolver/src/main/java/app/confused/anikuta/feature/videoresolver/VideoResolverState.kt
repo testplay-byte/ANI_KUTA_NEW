@@ -1,30 +1,29 @@
 package app.confused.anikuta.feature.videoresolver
 
 /**
- * Video resolver state — the 4-state machine for the resolver.
+ * The video resolver state machine — drives [VideoResolverSheet].
  *
- * Per `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §3:
- * - Hidden: no sheet shown.
- * - Resolving: full-screen scrim with "Resolving..." text.
- * - Cached: instant render with "Refreshing..." badge + background re-resolve.
- * - Show: the full picker with servers/audio/quality.
+ * Per `DESIGN_LANGUAGE/04-screens/video-resolver.md` §4:
+ * - [Hidden] — no sheet shown.
+ * - [Resolving] — spinner + "Resolving video sources..." while the source is queried.
+ * - [Show] — the full picker with the 3-tier server/audio/quality hierarchy.
+ * - [NoSources] — the source returned no playable videos.
+ * - [Error] — the resolution failed (network error, timeout, etc.).
  */
 sealed interface VideoResolverState {
     data object Hidden : VideoResolverState
     data class Resolving(val episodeNumber: Int) : VideoResolverState
-    data class Cached(val episodeNumber: Int) : VideoResolverState
     data class Show(
         val episodeNumber: Int,
         val servers: List<ResolverServer>,
     ) : VideoResolverState
     data class NoSources(val episodeNumber: Int) : VideoResolverState
+    data class Error(val episodeNumber: Int, val message: String) : VideoResolverState
 }
 
 /**
  * A server entry in the resolver — top level of the 3-tier hierarchy.
- *
  * Per the design language: Server → Audio → Quality.
- * When extensions are loaded, each server comes from the source's hoster list.
  */
 data class ResolverServer(
     val name: String,
@@ -35,7 +34,7 @@ data class ResolverServer(
  * An audio version (SUB/DUB/HSUB/etc.) within a server.
  */
 data class ResolverAudioVersion(
-    val label: String, // "SUB", "DUB", "HSUB", etc.
+    val label: String,
     val videos: List<ResolverVideo>,
 )
 
@@ -43,7 +42,7 @@ data class ResolverAudioVersion(
  * A single video quality option within an audio version.
  */
 data class ResolverVideo(
-    val quality: String, // "1080p", "720p", "480p", etc.
+    val quality: String,
     val url: String,
     val videoTitle: String = "",
 )
