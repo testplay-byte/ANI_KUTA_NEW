@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
@@ -255,7 +253,23 @@ fun EpisodesSection(
 }
 
 /**
- * The scrollable episode list with alternating backgrounds + watched effect.
+ * The episode list with alternating backgrounds + watched effect.
+ *
+ * **CRITICAL — Compose layout:**
+ * This is a plain [Column] (NOT a [LazyColumn]) because it's rendered inside
+ * the outer `DetailContent`'s `LazyColumn` (via `item { EpisodesSection(...) }`).
+ * Nesting a `LazyColumn` inside another `LazyColumn` gives the inner one
+ * infinite height constraints, which Compose disallows:
+ * ```
+ * IllegalStateException: Vertically scrollable component was measured with
+ * an infinity maximum height constraints, which is disallowed.
+ * ```
+ *
+ * Anime episode lists are typically 4–25 items, so a non-lazy `Column` with
+ * `forEach` is fine performance-wise. If episode counts ever grow to hundreds
+ * (e.g. long-running shonen), the correct fix is to flatten the episode rows
+ * into the parent `LazyColumn` using `items()` — NOT to nest another
+ * `LazyColumn`.
  */
 @Composable
 private fun EpisodeList(
@@ -265,11 +279,8 @@ private fun EpisodeList(
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
-    ) {
-        itemsIndexed(episodes, key = { _, ep -> ep.url }) { index, episode ->
+    Column(modifier = Modifier.fillMaxWidth()) {
+        episodes.forEachIndexed { index, episode ->
             EpisodeRow(
                 episode = episode,
                 index = index,
@@ -280,6 +291,7 @@ private fun EpisodeList(
                 onToggleWatched = { onToggleWatched(episode.url) },
             )
         }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
