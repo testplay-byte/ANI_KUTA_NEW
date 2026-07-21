@@ -12,8 +12,10 @@ dependencies {
     implementation(projects.core.preferences)
     implementation(projects.core.sourceApi)
 
-    // MPV — the video player (ADR-025)
-    implementation(anikutaLibs.aniyomi.mpv)
+    // MPV — the video player (ADR-025). MUST be `api` because AnikutaMPVView
+    // extends is.xyz.mpv.BaseMPVView (a public supertype) — consumers need to
+    // see BaseMPVView + MPVLib to call view methods.
+    api(anikutaLibs.aniyomi.mpv)
     // FFmpeg — libmpv.so is dynamically linked against it
     implementation(anikutaLibs.ffmpeg.kit)
     implementation(anikutaLibs.arthenica.smartexceptions)
