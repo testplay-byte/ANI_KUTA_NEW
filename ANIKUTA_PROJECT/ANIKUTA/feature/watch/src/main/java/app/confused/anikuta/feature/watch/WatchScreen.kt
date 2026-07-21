@@ -137,6 +137,10 @@ fun WatchScreen(
     val playerMode by stateHolder.playerMode.collectAsStateWithLifecycle()
     val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
     val controlsVisible by stateHolder.controlsVisible.collectAsStateWithLifecycle()
+    val position by stateHolder.position.collectAsStateWithLifecycle()
+    val isPlaying by stateHolder.isPlaying.collectAsStateWithLifecycle()
+    val buffering by stateHolder.buffering.collectAsStateWithLifecycle()
+    val errorMessage by stateHolder.errorMessage.collectAsStateWithLifecycle()
 
     // ── Immersive mode: hide/show system bars based on player mode ──
     // Per OLD project's hideSystemBars()/showSystemBars() pattern.
@@ -196,6 +200,30 @@ fun WatchScreen(
                 Log.e(TAG, "Switching timeout — force-clearing after 30s")
                 stateHolder.setSwitchingEpisode(false)
                 stateHolder.setErrorMessage("Video failed to load (timeout). Try a different server or quality.")
+                stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+            }
+        }
+    }
+
+    // ── Fatal-error watchdog ──
+    // Detects when MPV loads a file (FILE_LOADED fires) but the video can't
+    // actually play — e.g. the HLS stream returns "error reading packet:
+    // Invalid argument" + "treating it as fatal error". MPV doesn't send an
+    // END_FILE event for this type of demuxer error, so the player just sits
+    // frozen with the position at 0.
+    //
+    // Watchdog logic: after the video is loaded (not switching, mpvInitialized),
+    // if the position stays at 0 for 15 seconds AND the player is not actively
+    // playing, show a fatal error. This means the stream is broken — the server
+    // is not responding or the HLS segments are invalid.
+    LaunchedEffect(mpvInitialized, isSwitching, position, isPlaying) {
+        if (mpvInitialized && !isSwitching && position == 0 && !isPlaying && errorMessage == null) {
+            Log.w(TAG, "Watchdog: video loaded but not playing (pos=0) — starting 15s watchdog")
+            delay(15000) // 15 seconds
+            // Re-check: if position is STILL 0 and not playing, it's a fatal error
+            if (stateHolder.position.value == 0 && !stateHolder.isPlaying.value && stateHolder.errorMessage.value == null) {
+                Log.e(TAG, "Watchdog: FATAL — video stuck at position 0 for 15s after load. Server is not responding.")
+                stateHolder.setErrorMessage("This server is not responding. The video stream may be broken. Try a different server or quality.")
                 stateHolder.setLoadingState(PlayerLoadingState.ERROR)
             }
         }
@@ -853,6 +881,12 @@ private fun WatchScreenContent(
                                             PlayerInitializer.loadVideo(view, currentUrl, context)
                                         }
                                     }
+                                },
+                                onOpenQuality = {
+                                    // User acknowledged the error — clear it + open the
+                                    // quality/server sheet so they can pick a different one.
+                                    stateHolder.setErrorMessage(null)
+                                    onQualityClick()
                                 },
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -1525,14 +1559,16 @@ private fun selectBestVideo(
 
 /**
  * Visual error overlay shown when a video fails to load or play.
- * Displays the error message + a retry button. The overlay sits on top
- * of the black player background so the user sees a clear error state
- * instead of a frozen player.
+ * Displays the error message + a retry button + an "OK" button that opens
+ * the quality/server sheet so the user can pick a different server.
+ * The overlay sits on top of the black player background so the user sees
+ * a clear error state instead of a frozen player.
  */
 @Composable
 private fun PlayerErrorOverlay(
     message: String,
     onRetry: () -> Unit,
+    onOpenQuality: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -1564,23 +1600,44 @@ private fun PlayerErrorOverlay(
                 fontSize = 12.sp,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                maxLines = 3,
+                maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(50),
-                modifier = Modifier.clickable { onRetry() },
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = "Retry",
-                    fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                )
+                // Retry button — re-loads the same video URL
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.clickable { onRetry() },
+                ) {
+                    Text(
+                        text = "Retry",
+                        fontFamily = RobotoFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    )
+                }
+                // OK button — opens the quality/server sheet so the user can
+                // pick a different server or quality
+                Surface(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.clickable { onOpenQuality() },
+                ) {
+                    Text(
+                        text = "OK",
+                        fontFamily = RobotoFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                    )
+                }
             }
         }
     }
