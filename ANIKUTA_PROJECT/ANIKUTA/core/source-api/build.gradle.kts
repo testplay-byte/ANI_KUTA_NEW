@@ -18,8 +18,10 @@ kotlin {
 }
 
 dependencies {
-    // OkHttp (for Headers in Video, networking in HttpSource)
-    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
+    // OkHttp (for Headers in Video, networking in HttpSource) — MUST be `api`
+    // because Video.headers is a public field of type okhttp3.Headers, so
+    // consumers of :core:source-api need to see the Headers type.
+    api("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     // Jsoup (for ParsedAnimeHttpSource, used by extensions)
     implementation("org.jsoup:jsoup:1.19.1")
     // kotlinx-serialization (for Video serialization + Response.parseAs<T>())

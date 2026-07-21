@@ -48,8 +48,10 @@ class AnikutaMPVView(
     attributes: AttributeSet,
 ) : BaseMPVView(context, attributes) {
 
-    private val playerPreferences: PlayerPreferences
-        get() = Companion.playerPreferences
+    // playerPreferences is accessed via the companion object's lateinit field.
+    // We do NOT declare an instance property here to avoid a JVM signature
+    // clash (both would generate getPlayerPreferences()).
+    // Usage: `playerPreferences.xxx()` resolves to Companion.playerPreferences.
 
     var isExiting = false
 
