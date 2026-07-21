@@ -1,5 +1,6 @@
 package app.confused.anikuta.core.player
 
+import app.confused.anikuta.core.preferences.Preference
 import app.confused.anikuta.core.preferences.PreferenceStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -7,6 +8,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 
 /**
  * Lightweight watch-progress store.
@@ -42,10 +45,10 @@ class WatchProgressStore(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private val progressPref = store.getObject(
-        key = "pref_watch_progress_map",
-        defaultValue = emptyMap(),
-        serializer = { map ->
+    private val progressPref: Preference<Map<String, Progress>> = store.getObject(
+        "pref_watch_progress_map",
+        emptyMap(),
+        { map ->
             json.encodeToString(
                 MapSerializer(
                     String.serializer(),
@@ -54,7 +57,7 @@ class WatchProgressStore(
                 map,
             )
         },
-        deserializer = { str ->
+        { str ->
             try {
                 json.decodeFromString(
                     MapSerializer(

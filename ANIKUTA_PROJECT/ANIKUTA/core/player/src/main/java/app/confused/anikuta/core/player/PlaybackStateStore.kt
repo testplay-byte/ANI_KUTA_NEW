@@ -1,5 +1,6 @@
 package app.confused.anikuta.core.player
 
+import app.confused.anikuta.core.preferences.Preference
 import app.confused.anikuta.core.preferences.PreferenceStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -7,6 +8,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 
 /**
  * Saves the last playback state per episode (Phase C).
@@ -42,13 +45,13 @@ class PlaybackStateStore(
         val updatedAt: Long = 0L,
     )
 
-    private val statePref = store.getObject(
-        key = "pref_playback_state_map",
-        defaultValue = emptyMap<String, PlaybackState>(),
-        serializer = { map ->
+    private val statePref: Preference<Map<String, PlaybackState>> = store.getObject(
+        "pref_playback_state_map",
+        emptyMap<String, PlaybackState>(),
+        { map ->
             json.encodeToString(MapSerializer(String.serializer(), PlaybackState.serializer()), map)
         },
-        deserializer = { str ->
+        { str ->
             try {
                 json.decodeFromString(MapSerializer(String.serializer(), PlaybackState.serializer()), str)
             } catch (e: Exception) {
