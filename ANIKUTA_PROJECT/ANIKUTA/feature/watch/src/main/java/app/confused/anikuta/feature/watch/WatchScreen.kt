@@ -486,7 +486,7 @@ private fun WatchScreenContent(
                         playerPreferences = playerPreferences,
                         onMaximize = {
                             stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
-                            (LocalContext.current as? Activity)?.requestedOrientation =
+                            (context as? Activity)?.requestedOrientation =
                                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                         },
                     )
@@ -602,6 +602,7 @@ private fun MinimizedControlsOverlay(
     playerPreferences: PlayerPreferences,
     onMaximize: () -> Unit,
 ) {
+    val context = LocalContext.current
     MinimizedControls(
         stateHolder = stateHolder,
         playerPreferences = playerPreferences,
