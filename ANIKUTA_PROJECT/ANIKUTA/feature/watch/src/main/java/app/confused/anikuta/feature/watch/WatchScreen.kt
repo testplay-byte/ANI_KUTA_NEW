@@ -577,8 +577,8 @@ private fun WatchScreenContent(
                             (context as? Activity)?.requestedOrientation =
                                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                         },
-                        onQualityClick = { showQualitySheet = true },
-                        onSubtitleClick = { showSubtitleSheet = true },
+                        onQualityClick = onQualityClick,
+                        onSubtitleClick = onSubtitleClick,
                     )
                 }
             }
