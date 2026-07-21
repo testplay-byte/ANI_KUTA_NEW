@@ -245,12 +245,14 @@ private fun AnikutaApp() {
                     onDismiss = { resolverState = VideoResolverState.Hidden },
                     onVideoSelected = { video ->
                         Log.i("AnikutaResolver", "Video selected: ${video.quality} (${video.url})")
+                        // CRITICAL: Capture servers BEFORE clearing resolverState.
+                        // Otherwise the servers are lost and the quality sheet
+                        // will be empty in the watch page.
+                        val servers = (resolverState as? VideoResolverState.Show)?.servers ?: emptyList()
                         resolverState = VideoResolverState.Hidden
                         val target = resolveTarget
                         if (target != null) {
                             val (episode, source, episodeList) = target
-                            // Get the resolved servers from the current resolver state
-                            val servers = (resolverState as? VideoResolverState.Show)?.servers ?: emptyList()
                             watchTarget = WatchRequest(
                                 videoUrl = video.url,
                                 videoHeaders = video.videoHeaders,

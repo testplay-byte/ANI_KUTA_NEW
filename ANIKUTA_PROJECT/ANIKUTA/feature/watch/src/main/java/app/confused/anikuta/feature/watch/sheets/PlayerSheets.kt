@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.watch.sheets
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -7,12 +8,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -104,7 +109,7 @@ fun QualitySheet(
                                 modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
                             )
                         }
-                        items(audio.videos, key = { v -> v.url + v.quality }) { video ->
+                        itemsIndexed(audio.videos, key = { idx, v -> "${server.name}_${audio.label}_${idx}_${v.url}_${v.quality}" }) { idx, video ->
                             val isSelected = video.videoTitle == currentVideoTitle
                             QualityOption(
                                 quality = video.quality,
@@ -176,6 +181,7 @@ fun SubtitleTracksSheet(
     currentTrackId: Int,
     onTrackSelected: (Int) -> Unit,
     onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -212,6 +218,47 @@ fun SubtitleTracksSheet(
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            // "Subtitle Settings" navigation row — opens the SubtitleSettingsSheet.
+            // Matches the OLD project's pattern: Settings icon (primary tint) +
+            // "Subtitle Settings" label + ChevronRight trailing icon.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenSettings() }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = "Subtitle Settings",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
 
             if (tracks.size <= 1) {
                 Text(

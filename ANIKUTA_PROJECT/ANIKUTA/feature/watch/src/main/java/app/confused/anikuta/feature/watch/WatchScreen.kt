@@ -115,8 +115,11 @@ fun WatchScreen(
     // Sheet visibility state (bottom-up menus)
     var showQualitySheet by remember { mutableStateOf(false) }
     var showSubtitleSheet by remember { mutableStateOf(false) }
-    // Cached resolved servers for quality switching
-    var resolvedServers by remember { mutableStateOf<List<app.confused.anikuta.feature.videoresolver.ResolverServer>>(emptyList()) }
+    var showSubtitleSettingsSheet by remember { mutableStateOf(false) }
+    // Cached resolved servers for quality switching — initialized from WatchRequest
+    var resolvedServers by remember(watchRequest) {
+        mutableStateOf(watchRequest.resolvedServers)
+    }
 
     // Set the companion playerPreferences BEFORE inflating the view
     AnikutaMPVView.playerPreferences = playerPreferences
@@ -204,18 +207,24 @@ fun WatchScreen(
         )
         // Find the index of the tapped episode. Match by URL first, then by
         // episode_number as fallback (URLs may differ between source calls).
+        // Use Float comparison with tolerance for episode_number.
         val tappedIndex = watchRequest.episodeList.indexOfFirst { it.url == watchRequest.episodeUrl }
         val fallbackIndex = watchRequest.episodeList.indexOfFirst {
-            it.episode_number == watchRequest.episodeNumber
+            kotlin.math.abs(it.episode_number - watchRequest.episodeNumber) < 0.01f
         }
         val finalIndex = when {
             tappedIndex >= 0 -> tappedIndex
             fallbackIndex >= 0 -> fallbackIndex
             else -> 0
         }
+        // Log the episode list for debugging
         Log.i(TAG, "Episode index: tappedUrl=${watchRequest.episodeUrl}, " +
+            "tappedEpisodeNumber=${watchRequest.episodeNumber}, " +
             "tappedIndex=$tappedIndex, fallbackIndex=$fallbackIndex, finalIndex=$finalIndex, " +
             "listSize=${watchRequest.episodeList.size}")
+        watchRequest.episodeList.forEachIndexed { i, ep ->
+            Log.d(TAG, "  ep[$i]: num=${ep.episode_number}, url=${ep.url.take(50)}, name=${ep.name}")
+        }
         stateHolder.setCurrentEpisodeIndex(finalIndex)
         stateHolder.setCurrentVideoTitle(watchRequest.videoTitle)
         stateHolder.setCurrentVideoUrl(watchRequest.videoUrl)
@@ -493,13 +502,10 @@ fun WatchScreen(
 
     // ── Quality switching: use pre-resolved servers from WatchRequest, or resolve on-demand ──
     val onQualityClick: () -> Unit = {
-        // Use pre-resolved servers from the WatchRequest if available
-        if (resolvedServers.isEmpty() && watchRequest.resolvedServers.isNotEmpty()) {
-            resolvedServers = watchRequest.resolvedServers
-            Log.i(TAG, "Using pre-resolved servers from WatchRequest: ${resolvedServers.size} servers")
-        }
-        // If still empty, resolve on-demand
+        // resolvedServers is initialized from watchRequest.resolvedServers on launch.
+        // If empty, resolve on-demand.
         if (resolvedServers.isEmpty()) {
+            Log.i(TAG, "No pre-resolved servers — resolving on-demand for quality sheet")
             scope.launch {
                 try {
                     val source = watchRequest.source
@@ -519,6 +525,8 @@ fun WatchScreen(
                     Log.e(TAG, "Quality resolve failed", e)
                 }
             }
+        } else {
+            Log.i(TAG, "Using cached resolved servers: ${resolvedServers.size} servers")
         }
         showQualitySheet = true
     }
@@ -575,6 +583,13 @@ fun WatchScreen(
             onDismissSheet = {
                 showQualitySheet = false
                 showSubtitleSheet = false
+                showSubtitleSettingsSheet = false
+            },
+            showSubtitleSettingsSheet = showSubtitleSettingsSheet,
+            onDismissSettingsSheet = { showSubtitleSettingsSheet = false },
+            onOpenSubtitleSettings = {
+                showSubtitleSheet = false
+                showSubtitleSettingsSheet = true
             },
         )
     }
@@ -611,6 +626,9 @@ private fun WatchScreenContent(
     onSubtitleClick: () -> Unit,
     onSubtitleSelected: (Int) -> Unit,
     onDismissSheet: () -> Unit,
+    showSubtitleSettingsSheet: Boolean,
+    onDismissSettingsSheet: () -> Unit,
+    onOpenSubtitleSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     if (playerMode == PlayerMode.FULLSCREEN) {
@@ -767,7 +785,22 @@ private fun WatchScreenContent(
             tracks = stateHolder.subtitleTracks.value,
             currentTrackId = stateHolder.currentSubtitleId.value,
             onTrackSelected = onSubtitleSelected,
+            onOpenSettings = onOpenSubtitleSettings,
             onDismiss = onDismissSheet,
+        )
+    }
+
+    if (showSubtitleSettingsSheet) {
+        app.confused.anikuta.core.player.controls.SubtitleSettingsSheet(
+            playerPreferences = playerPreferences,
+            onApplySettings = {
+                try {
+                    mpvView?.applySubtitlePreferences()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to apply subtitle settings", e)
+                }
+            },
+            onDismiss = onDismissSettingsSheet,
         )
     }
 }
