@@ -157,37 +157,53 @@ class AnimeDetailViewModel(
     }
 
     /**
-     * Manually searches all sources with a custom query.
-     * Uses [SourceMatcher.searchAllSourcesDetailed] so per-source errors are
-     * captured and shown in the UI (not just swallowed).
+     * Returns the list of available (installed + trusted) sources for the
+     * manual-search source selector. Each entry is a [SourceMatcher.SourceInfo]
+     * (id + name) — lightweight, safe to pass to the UI.
+     *
+     * The ManualSearchSheet calls this to populate its source picker. The user
+     * selects ONE source, then [manualSearch] is called with that source's ID
+     * + the query — only that source is searched.
+     */
+    fun getAvailableSources(): List<SourceMatcher.SourceInfo> =
+        sourceMatcher.getAvailableSources()
+
+    /**
+     * Manually searches ONE specific source (selected by the user from the
+     * source selector) for a custom query.
+     *
+     * Only the selected source is searched — results from other sources are
+     * NOT included. This matches the user's expectation: pick a source, see
+     * only that source's results.
      *
      * Updates [manualSearchResults], [manualSearchErrors], [isSearching],
      * and [hasSearched] so the ManualSearchSheet can render all states.
+     *
+     * @param sourceId the ID of the source to search (from the source selector).
+     * @param query the search query.
      */
-    suspend fun manualSearch(query: String): List<ManualSearchResult> {
-        Log.i(TAG, "Manual search: '$query'")
+    suspend fun manualSearch(sourceId: Long, query: String): List<ManualSearchResult> {
+        Log.i(TAG, "Manual search: sourceId=$sourceId, query='$query'")
         _isSearching.value = true
         return try {
-            val outcomes = sourceMatcher.searchAllSourcesDetailed(query)
-            val results = outcomes.filterIsInstance<SourceMatcher.SourceSearchOutcome.Success<SourceMatcher.ManualSearchResult>>()
-                .flatMap { it.results }
-            val errors = outcomes.mapNotNull {
-                when (it) {
-                    is SourceMatcher.SourceSearchOutcome.Failed -> it.sourceName to it.error
-                    is SourceMatcher.SourceSearchOutcome.Success<*> -> null
+            val outcome = sourceMatcher.searchOneSource(sourceId, query)
+            when (outcome) {
+                is SourceMatcher.SourceSearchOutcome.Success -> {
+                    _manualSearchResults.value = outcome.results
+                    _manualSearchErrors.value = emptyList()
+                }
+                is SourceMatcher.SourceSearchOutcome.Failed -> {
+                    _manualSearchResults.value = emptyList()
+                    _manualSearchErrors.value = listOf(outcome.sourceName to outcome.error)
+                    Toast.makeText(
+                        appContext,
+                        "${outcome.sourceName} failed: ${outcome.error}",
+                        Toast.LENGTH_LONG,
+                    ).show()
                 }
             }
-            _manualSearchResults.value = results
-            _manualSearchErrors.value = errors
             _hasSearched.value = true
-            if (results.isEmpty() && errors.isNotEmpty()) {
-                Toast.makeText(
-                    appContext,
-                    "All sources failed: ${errors.first().second}",
-                    Toast.LENGTH_LONG,
-                ).show()
-            }
-            results
+            _manualSearchResults.value
         } catch (e: Throwable) {
             Log.e(TAG, "Manual search failed for '$query'", e)
             _manualSearchResults.value = emptyList()

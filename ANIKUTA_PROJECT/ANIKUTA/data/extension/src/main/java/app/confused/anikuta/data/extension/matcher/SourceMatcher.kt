@@ -5,13 +5,24 @@ import app.confused.anikuta.data.extension.AnimeExtensionManager
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 /**
  * Searches trusted extension sources for an anime by title and returns the
  * best-matching source + [SAnime] pair.
+ *
+ * **Threading (CRITICAL):**
+ * All `source.getSearchAnime()` / `source.getEpisodeList()` calls are wrapped
+ * in `withContext(Dispatchers.IO)`. These suspend functions internally delegate
+ * to RxJava's `awaitSingle()` → `Observable.subscribe()` → `call.execute()`,
+ * which runs **synchronously on the calling thread**. If the calling thread is
+ * the main thread (which it is — `viewModelScope.launch` runs on Main), the
+ * network call throws `NetworkOnMainThreadException`. The `withContext(IO)`
+ * shifts execution to an IO dispatcher so the network call is legal.
  *
  * **Priority-based search** (per Step 5 requirements):
  * - [match] searches sources in the order they appear in
@@ -28,7 +39,7 @@ import kotlinx.coroutines.coroutineScope
  *
  * **Error handling**: each source call is wrapped in try-catch. A failing
  * source is logged and skipped — one broken extension doesn't kill the entire
- * search. (Per `RULES/ai-agent-rules.md` §12: Understand → Locate → Fix.)
+ * search.
  *
  * @param extensionManager provides the live list of installed + trusted sources.
  */
@@ -71,6 +82,20 @@ class SourceMatcher(
     )
 
     /**
+     * A lightweight source reference for the UI's source selector.
+     * Holds just the source ID + name — not the full [AnimeCatalogueSource]
+     * (which is a heavy object with a lazy OkHttp client).
+     *
+     * The UI uses this to render a source-picker dropdown. When the user
+     * selects a source, the ID is passed back to [searchOneSource] which
+     * resolves it to the full source object.
+     */
+    data class SourceInfo(
+        val id: Long,
+        val name: String,
+    )
+
+    /**
      * The outcome of searching a single source.
      * Either [Success] (with results) or [Failed] (with an error message).
      * The UI uses this to show per-source failure reasons so the user knows
@@ -96,12 +121,65 @@ class SourceMatcher(
         data class Error(val message: String) : Result()
     }
 
+    // ── Source listing (for the manual-search source selector) ──
+
+    /**
+     * Returns the list of available (installed + trusted) catalogue sources
+     * as [SourceInfo] — lightweight (id + name) for the UI's source selector.
+     *
+     * The manual search sheet calls this to populate its source picker.
+     * The user selects ONE source, then [searchOneSource] is called with
+     * that source's ID.
+     */
+    fun getAvailableSources(): List<SourceInfo> {
+        return getCatalogueSources().map { SourceInfo(it.id, it.name) }
+    }
+
+    /**
+     * Searches ONE specific source (by ID) for a custom query.
+     * Used by the manual search sheet when the user picks a source from the
+     * selector — only that source is searched, and only its results are shown.
+     *
+     * @param sourceId the ID of the source to search (from [SourceInfo.id]).
+     * @param query the search query.
+     * @return [SourceSearchOutcome.Success] with raw results (no similarity
+     *   scoring — the user picks manually), or [SourceSearchOutcome.Failed]
+     *   if the source threw an exception.
+     */
+    suspend fun searchOneSource(sourceId: Long, query: String): SourceSearchOutcome<ManualSearchResult> {
+        val source = getCatalogueSources().firstOrNull { it.id == sourceId }
+            ?: return SourceSearchOutcome.Failed(
+                sourceName = "(unknown)",
+                error = "Source not found. It may have been untrusted or uninstalled.",
+            )
+
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "searchOneSource: searching '${source.name}' for '$query'")
+                val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
+                Log.d(TAG, "searchOneSource: '${source.name}' returned ${page.animes.size} results")
+                val results = page.animes.map { sAnime ->
+                    ManualSearchResult(
+                        source = source,
+                        sAnime = sAnime,
+                        sourceName = source.name,
+                        title = sAnime.title,
+                        thumbnailUrl = sAnime.thumbnail_url,
+                    )
+                }
+                SourceSearchOutcome.Success(results)
+            } catch (e: Throwable) {
+                val errorMsg = e.cause?.message ?: e.message ?: e::class.java.simpleName
+                Log.e(TAG, "searchOneSource: '${source.name}' failed for '$query'", e)
+                SourceSearchOutcome.Failed(source.name, errorMsg)
+            }
+        }
+    }
+
+    // ── Auto-match (searches ALL sources, returns best match) ──
+
     /**
      * Searches trusted sources in priority order and returns the first match.
-     *
-     * "First match" = the first source (in installed-extensions order) that
-     * returns at least one [SAnime] with title similarity >= [THRESHOLD].
-     * Within that source's results, the highest-scoring anime is picked.
      *
      * @param title the anime title (typically from AniList's `displayTitle`).
      */
@@ -128,8 +206,7 @@ class SourceMatcher(
 
     /**
      * Searches ALL sources concurrently and returns every match (for the
-     * source-switcher UI). Matches are sorted by score descending so the
-     * best match is first.
+     * source-switcher UI). Matches are sorted by score descending.
      *
      * Also populates [lastMatchAllErrors] with per-source errors so the UI
      * can show the user WHY auto-match failed (not just "no match").
@@ -172,19 +249,19 @@ class SourceMatcher(
     }
 
     /**
-     * Searches one source and returns the outcome: [SourceSearchOutcome.Success]
-     * (with matches above the threshold, or empty if the source returned results
-     * but none matched) or [SourceSearchOutcome.Failed] (if the source threw).
+     * Searches one source and returns the outcome.
      *
-     * Unlike the old `searchSource` (which returned `null` for both no-match and
-     * error), this lets [matchAll] distinguish "no results" from "error" so the
-     * UI can show per-source failure reasons.
+     * **Threading:** wraps `source.getSearchAnime()` in `withContext(Dispatchers.IO)`
+     * because the suspend function internally delegates to RxJava's `awaitSingle()`
+     * → `Observable.subscribe()` → `call.execute()`, which runs synchronously on
+     * the calling thread. Without this, calling from the Main thread throws
+     * `NetworkOnMainThreadException`.
      */
     private suspend fun searchSourceDetailed(
         source: AnimeCatalogueSource,
         query: String,
-    ): SourceSearchOutcome<SourceMatch> {
-        return try {
+    ): SourceSearchOutcome<SourceMatch> = withContext(Dispatchers.IO) {
+        try {
             Log.d(TAG, "searchSource: calling getSearchAnime on '${source.name}' with query='$query'")
             val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
             Log.d(TAG, "searchSource: '${source.name}' returned ${page.animes.size} results")
@@ -211,89 +288,14 @@ class SourceMatcher(
      * Returns the catalogue sources from all installed + trusted extensions.
      *
      * **CRITICAL:** reads from [AnimeExtensionManager.getInstalledExtensions]
-     * (which reads the `installedMap` StateFlow's current value synchronously)
-     * rather than `installedExtensionsFlow.value`.
-     *
-     * `installedExtensionsFlow` is built with `stateIn(SharingStarted.Lazily, ...)`
-     * — its `.value` returns the empty initial list until the first subscriber
-     * arrives and the `map` operator runs. On a fresh app start where the user
-     * navigates directly to a detail page (without first visiting the Extensions
-     * screen), no subscriber has collected the flow yet, so `.value` was
-     * `emptyList()` → "no sources have this anime" even though 2 extensions
-     * were installed. Reading `getInstalledExtensions()` avoids this race.
+     * (synchronous read of `installedMap.value`) rather than
+     * `installedExtensionsFlow.value` (which is lazily-collected and returns
+     * the empty initial list until the first subscriber arrives).
      */
     private fun getCatalogueSources(): List<AnimeCatalogueSource> {
         return extensionManager.getInstalledExtensions()
             .flatMap { it.sources }
             .filterIsInstance<AnimeCatalogueSource>()
-    }
-
-    // ── Title matching helpers (ported from OLD_ANIKUTA TitleMatcher.kt) ──
-
-    /**
-     * Searches ALL sources for a custom query (manual search).
-     * Returns raw results without similarity scoring — the user picks manually.
-     *
-     * **Note:** per-source errors are swallowed here (logged but not returned).
-     * For a version that returns per-source errors so the UI can show them,
-     * use [searchAllSourcesDetailed].
-     */
-    suspend fun searchAllSources(query: String): List<ManualSearchResult> = coroutineScope {
-        searchAllSourcesDetailed(query)
-            .filterIsInstance<SourceSearchOutcome.Success<ManualSearchResult>>()
-            .flatMap { it.results }
-    }
-
-    /**
-     * Searches ALL sources for a custom query, returning per-source outcomes
-     * (success OR failure). The UI uses this to show the user WHY a source
-     * didn't return results — not just that it didn't.
-     *
-     * @return a list of [SourceSearchOutcome] — one per source searched.
-     *   [SourceSearchOutcome.Success] contains the results; [SourceSearchOutcome.Failed]
-     *   contains the source name + error message.
-     */
-    suspend fun searchAllSourcesDetailed(query: String): List<SourceSearchOutcome<ManualSearchResult>> = coroutineScope {
-        val sources = getCatalogueSources()
-        if (sources.isEmpty()) {
-            Log.w(TAG, "searchAllSourcesDetailed: no catalogue sources available")
-            return@coroutineScope listOf(
-                SourceSearchOutcome.Failed(
-                    sourceName = "(no sources)",
-                    error = "No trusted extensions are installed. Install an anime extension from Settings → Extensions first.",
-                ),
-            )
-        }
-
-        Log.i(TAG, "searchAllSourcesDetailed: searching ${sources.size} sources for '$query'")
-        sources.map { source ->
-            async {
-                try {
-                    Log.d(TAG, "searchAllSourcesDetailed: searching '${source.name}' for '$query'")
-                    val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
-                    Log.d(TAG, "searchAllSourcesDetailed: '${source.name}' returned ${page.animes.size} results")
-                    val results = page.animes.map { sAnime ->
-                        ManualSearchResult(
-                            source = source,
-                            sAnime = sAnime,
-                            sourceName = source.name,
-                            title = sAnime.title,
-                            thumbnailUrl = sAnime.thumbnail_url,
-                        )
-                    }
-                    SourceSearchOutcome.Success(results)
-                } catch (e: Throwable) {
-                    // Catch Throwable — see searchSource for rationale.
-                    val errorMsg = e.cause?.message ?: e.message ?: e::class.java.simpleName
-                    Log.e(TAG, "searchAllSourcesDetailed: '${source.name}' failed for '$query'", e)
-                    SourceSearchOutcome.Failed(source.name, errorMsg)
-                }
-            }
-        }.awaitAll().also { outcomes ->
-            val successCount = outcomes.count { it is SourceSearchOutcome.Success<*> }
-            val failCount = outcomes.count { it is SourceSearchOutcome.Failed }
-            Log.i(TAG, "searchAllSourcesDetailed: $successCount sources succeeded, $failCount failed")
-        }
     }
 
     // ── Title matching helpers ──

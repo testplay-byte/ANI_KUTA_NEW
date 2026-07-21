@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -82,6 +83,9 @@ fun AnimeDetailScreen(
     val manualSearchErrors by vm.manualSearchErrors.collectAsState()
     val autoMatchErrors by vm.autoMatchErrors.collectAsState()
     val hasSearched by vm.hasSearched.collectAsState()
+    // Available sources for the manual-search source selector. Computed once
+    // (not a StateFlow — the list doesn't change while the screen is open).
+    val availableSources = remember { vm.getAvailableSources() }
 
     Box(
         modifier = Modifier
@@ -103,12 +107,13 @@ fun AnimeDetailScreen(
                 manualSearchErrors = manualSearchErrors,
                 autoMatchErrors = autoMatchErrors,
                 hasSearched = hasSearched,
+                availableSources = availableSources,
                 onBack = onBack,
                 onOpenEpisode = onOpenEpisode,
                 onToggleWatched = vm::toggleWatched,
                 onSwitchSource = vm::switchSource,
                 onRefresh = vm::refresh,
-                onManualSearch = { query -> vm.manualSearch(query) },
+                onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
                 onLinkManual = vm::linkManual,
                 onClearManualSearch = vm::clearManualSearch,
             )

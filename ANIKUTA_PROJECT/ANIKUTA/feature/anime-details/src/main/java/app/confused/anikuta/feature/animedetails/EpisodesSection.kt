@@ -81,11 +81,12 @@ fun EpisodesSection(
     manualSearchErrors: List<Pair<String, String>>,
     autoMatchErrors: List<Pair<String, String>>?,
     hasSearched: Boolean,
+    availableSources: List<SourceMatcher.SourceInfo>,
     initialSearchQuery: String,
     onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
-    onManualSearch: suspend (String) -> Unit,
+    onManualSearch: suspend (Long, String) -> Unit,
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
 ) {
@@ -236,6 +237,7 @@ fun EpisodesSection(
     if (showManualSearch) {
         ManualSearchSheet(
             initialQuery = initialSearchQuery,
+            availableSources = availableSources,
             isSearching = isSearching,
             results = manualSearchResults,
             errors = manualSearchErrors,

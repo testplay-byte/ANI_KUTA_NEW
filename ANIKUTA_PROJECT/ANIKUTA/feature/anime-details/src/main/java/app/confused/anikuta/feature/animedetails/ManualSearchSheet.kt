@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,9 +32,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,43 +54,45 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 /**
- * A bottom sheet for manually searching extension sources for an anime.
+ * A bottom sheet for manually searching ONE extension source for an anime.
  *
- * Shown when the user taps the search icon next to the "Episodes" header
- * (or the "Search manually" button when no source matched). Lets the user:
- *  1. Type a custom query (pre-filled with the anime's display title).
- *  2. Search all trusted extension sources concurrently.
- *  3. Pick the right result from the list — tapping one links it to this
- *     anime and loads its episode list.
+ * **Source selector (top):** A horizontal row of [FilterChip]s showing all
+ * available (installed + trusted) sources. The user MUST pick one source
+ * before searching — results from only that source are shown. This matches
+ * the user's expectation: "pick a source, see only that source's results."
  *
- * The sheet shows these states:
- *  - **Haven't searched:** placeholder prompt ("Type a title and tap search")
- *  - **Searching:** spinner ("Searching all sources…")
- *  - **Searched, results found:** scrollable results list
- *  - **Searched, no results, all sources failed:** error cards showing
- *    per-source failure reasons — so the user knows WHY, not just that it failed
- *  - **Searched, no results, sources succeeded:** "No results found" message
+ * **Search bar (below the selector):** A text field pre-filled with the
+ * anime's display title + a search icon button. Tapping search calls
+ * [onManualSearch] with the selected source's ID + the query.
+ *
+ * **States:**
+ *  - No source selected → prompt to pick a source first
+ *  - Source selected, haven't searched → prompt to type + search
+ *  - Searching → spinner ("Searching {sourceName}…")
+ *  - Searched, results found → scrollable results list
+ *  - Searched, source failed → error card with the failure reason
+ *  - Searched, no results → "No results found" message
  *
  * @param initialQuery the anime's display title (pre-fills the search field).
+ * @param availableSources all installed + trusted sources (for the selector).
  * @param isSearching `true` while the search is running (drives the spinner).
  * @param results the current search results (empty until a search completes).
- * @param errors per-source errors from the most recent search. Each pair is
- *   (sourceName, errorMessage). Empty if all sources succeeded.
+ * @param errors per-source errors from the most recent search.
  * @param hasSearched `true` if at least one search has been performed.
- * @param onManualSearch called when the user taps search (suspend — the VM
- *   updates [results] + [errors] + [isSearching]).
+ * @param onManualSearch called with (sourceId, query) when the user taps search.
  * @param onLinkManual called when the user taps a result (links source + anime).
- * @param onDismiss called when the sheet is dismissed (swipe-down or back).
+ * @param onDismiss called when the sheet is dismissed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualSearchSheet(
     initialQuery: String,
+    availableSources: List<SourceMatcher.SourceInfo>,
     isSearching: Boolean,
     results: List<SourceMatcher.ManualSearchResult>,
     errors: List<Pair<String, String>>,
     hasSearched: Boolean,
-    onManualSearch: suspend (String) -> Unit,
+    onManualSearch: suspend (Long, String) -> Unit,
     onLinkManual: (SourceMatcher.ManualSearchResult) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -98,6 +102,13 @@ fun ManualSearchSheet(
 
     // The search query — pre-filled with the anime title, saveable across rotation.
     var query by rememberSaveable(initialQuery) { mutableStateOf(initialQuery) }
+
+    // The selected source ID — -1 means "no source selected yet".
+    // Defaults to the first source if any are available (so the user can search
+    // immediately without picking, but can switch via the chips).
+    var selectedSourceId by rememberSaveable {
+        mutableLongStateOf(availableSources.firstOrNull()?.id ?: -1L)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -119,18 +130,57 @@ fun ManualSearchSheet(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "Search every trusted extension for this anime.",
+                text = "Pick a source below, then search. Only that source's results will show.",
                 modifier = Modifier.padding(horizontal = 20.dp),
                 fontFamily = RobotoFamily,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // ── Source selector (FilterChip row, above the search bar) ──
+            // The user picks ONE source. Only that source is searched.
+            if (availableSources.isEmpty()) {
+                Text(
+                    text = "No trusted sources available. Install an extension from Settings → Extensions first.",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                    fontFamily = RobotoFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(availableSources, key = { it.id }) { source ->
+                        FilterChip(
+                            selected = source.id == selectedSourceId,
+                            onClick = { selectedSourceId = source.id },
+                            label = {
+                                Text(
+                                    text = source.name,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (source.id == selectedSourceId) FontWeight.ExtraBold else FontWeight.Medium,
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        )
+                    }
+                }
+            }
+
             // ── Search field ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OutlinedTextField(
@@ -140,17 +190,18 @@ fun ManualSearchSheet(
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
+                    enabled = selectedSourceId != -1L,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
                     onClick = {
                         val q = query.trim()
-                        if (q.isNotBlank()) {
+                        if (q.isNotBlank() && selectedSourceId != -1L) {
                             keyboard?.hide()
-                            scope.launch { onManualSearch(q) }
+                            scope.launch { onManualSearch(selectedSourceId, q) }
                         }
                     },
-                    enabled = !isSearching && query.isNotBlank(),
+                    enabled = !isSearching && query.isNotBlank() && selectedSourceId != -1L,
                 ) {
                     if (isSearching) {
                         CircularProgressIndicator(
@@ -171,8 +222,17 @@ fun ManualSearchSheet(
             // ── Results / states ──
             Box(modifier = Modifier.weight(1f)) {
                 when {
-                    isSearching && results.isEmpty() -> {
-                        // First-search loading state
+                    selectedSourceId == -1L -> {
+                        Text(
+                            text = "Select a source above to start searching.",
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    isSearching -> {
+                        val sourceName = availableSources.firstOrNull { it.id == selectedSourceId }?.name ?: "source"
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -184,7 +244,7 @@ fun ManualSearchSheet(
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Searching all sources…",
+                                text = "Searching $sourceName…",
                                 fontFamily = RobotoFamily,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -192,33 +252,25 @@ fun ManualSearchSheet(
                         }
                     }
                     !hasSearched -> {
-                        // Haven't searched yet — prompt the user
                         Text(
-                            text = "Type a title and tap the search icon.\nResults from every trusted extension will appear here.",
+                            text = "Type a title and tap the search icon.\nOnly the selected source will be searched.",
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                             fontFamily = RobotoFamily,
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    results.isEmpty() && errors.isNotEmpty() -> {
-                        // Searched but ALL sources failed — show per-source errors
+                    errors.isNotEmpty() -> {
+                        // The selected source failed — show the error
                         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                             Text(
-                                text = "All sources failed to search.",
+                                text = "Search failed.",
                                 fontFamily = RobotoFamily,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Check the error details below — this usually means the app is missing classes the extension needs.",
-                                fontFamily = RobotoFamily,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             errors.forEach { (sourceName, error) ->
                                 Surface(
                                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
@@ -249,7 +301,7 @@ fun ManualSearchSheet(
                         }
                     }
                     results.isEmpty() -> {
-                        // Searched, sources succeeded, but no results found
+                        // Searched, source succeeded, but no results found
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -263,7 +315,7 @@ fun ManualSearchSheet(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Try a different title or spelling.",
+                                text = "Try a different title or select a different source.",
                                 fontFamily = RobotoFamily,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -276,18 +328,6 @@ fun ManualSearchSheet(
                             contentPadding = PaddingValues(bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            // Show per-source errors at the top (if any sources failed)
-                            if (errors.isNotEmpty()) {
-                                item {
-                                    Text(
-                                        text = "${errors.size} source(s) failed — showing results from successful sources only.",
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                        fontFamily = RobotoFamily,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                            }
                             items(results, key = { "${it.sourceName}_${it.sAnime.url}" }) { result ->
                                 ManualSearchResultRow(
                                     result = result,
