@@ -67,7 +67,7 @@ import app.confused.anikuta.feature.videoresolver.ResolverVideo
 // Selection match by videoTitle (NOT videoUrl — proxied URLs change).
 // ─────────────────────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun QualitySheet(
     servers: List<ResolverServer>,
