@@ -80,7 +80,7 @@ fun EpisodesSection(
     hasSearched: Boolean,
     availableSources: List<SourceMatcher.SourceInfo>,
     initialSearchQuery: String,
-    onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
     onManualSearch: suspend (Long, String) -> Unit,
@@ -239,7 +239,7 @@ fun EpisodesSection(
 private fun EpisodeList(
     episodes: List<SEpisode>,
     watchedEpisodes: Set<String>,
-    onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
 ) {
@@ -250,7 +250,9 @@ private fun EpisodeList(
                 index = index,
                 isWatched = watchedEpisodes.contains(episode.url),
                 onClick = {
-                    currentSource?.let { onOpenEpisode(episode, it) }
+                    currentSource?.let { source ->
+                        onOpenEpisode(episode, source, episodes)
+                    }
                 },
                 onToggleWatched = { onToggleWatched(episode.url) },
             )

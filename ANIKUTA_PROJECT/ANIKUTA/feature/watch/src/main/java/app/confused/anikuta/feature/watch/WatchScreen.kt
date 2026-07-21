@@ -1,17 +1,12 @@
 package app.confused.anikuta.feature.watch
 
 import android.app.Activity
-import android.content.res.Configuration
 import android.util.Log
 import android.view.LayoutInflater
-import android.view.WindowManager
+import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,13 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,7 +32,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,15 +40,17 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
 import app.confused.anikuta.core.player.AnikutaMPVView
+import app.confused.anikuta.core.player.EpisodeListItem
 import app.confused.anikuta.core.player.PlayerInitializer
+import app.confused.anikuta.core.player.PlayerLoadingState
 import app.confused.anikuta.core.player.PlayerMode
 import app.confused.anikuta.core.player.PlayerObserver
 import app.confused.anikuta.core.player.PlayerPreferences
@@ -65,7 +58,8 @@ import app.confused.anikuta.core.player.PlayerStateHolder
 import app.confused.anikuta.core.player.WatchProgressStore
 import app.confused.anikuta.core.player.controls.EpisodeSwitchingOverlay
 import app.confused.anikuta.core.player.controls.MinimizedControls
-import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
+import app.confused.anikuta.feature.videoresolver.ResolverResult
+import app.confused.anikuta.feature.videoresolver.ResolverService
 import `is`.xyz.mpv.MPVLib
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,15 +70,32 @@ private const val TAG = "AnikutaWatchScreen"
 /**
  * The YouTube-style watch page (ADR-012).
  *
- * Hosts the MPV mini-player at the top (16:9), episode description below,
- * and the episode list below that. The whole page scrolls as one unit except
- * the player which stays sticky at the top.
+ * Layout (minimized mode):
+ * ```
+ * ┌─────────────────────────────┐
+ * │      Top Navigation Bar     │  ← above the player, always visible
+ * ├─────────────────────────────┤
+ * │      Video Player (16:9)    │  ← sticky, always present
+ * ├─────────────────────────────┤
+ * │   Episode Description       │  ← scrolls
+ * │   Episode List              │  ← scrolls
+ * └─────────────────────────────┘
+ * ```
  *
- * The MPV AndroidView is NEVER recreated — it's cached in a remember block
- * and reused across MINIMIZED ↔ FULLSCREEN mode switches (ADR-025).
+ * Layout (fullscreen mode):
+ * ```
+ * ┌─────────────────────────────┐
+ * │                             │
+ * │    Video Player (fills)     │  ← edge-to-edge, no top bar
+ * │                             │
+ * └─────────────────────────────┘
+ * ```
  *
- * @param watchRequest the video URL + anime metadata + episode list
- * @param onBack called when the user presses back from the watch page
+ * CRITICAL: The MPV [AnikutaMPVView] is hosted in a SINGLE [AndroidView] that
+ * is ALWAYS in composition — it is NEVER disposed or recreated during mode
+ * switches (ADR-025). Only the overlay controls and surrounding layout change.
+ * This prevents the "child already has a parent" crash that occurred when two
+ * separate AndroidView composables tried to share the same cached View.
  */
 @Composable
 fun WatchScreen(
@@ -95,13 +106,13 @@ fun WatchScreen(
     val scope = rememberCoroutineScope()
     val playerPreferences = koinInject<PlayerPreferences>()
     val watchProgressStore = koinInject<WatchProgressStore>()
-    val resolverService = remember { app.confused.anikuta.feature.videoresolver.ResolverService() }
+    val resolverService = remember { ResolverService() }
     val stateHolder = remember { PlayerStateHolder() }
 
     // Set the companion playerPreferences BEFORE inflating the view
     AnikutaMPVView.playerPreferences = playerPreferences
 
-    // MPV view — cached, NEVER recreated
+    // MPV view — cached, NEVER recreated. Owned by this composable.
     var mpvView by remember { mutableStateOf<AnikutaMPVView?>(null) }
     var observer by remember { mutableStateOf<PlayerObserver?>(null) }
     var mpvInitialized by remember { mutableStateOf(false) }
@@ -110,7 +121,7 @@ fun WatchScreen(
     val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
     val controlsVisible by stateHolder.controlsVisible.collectAsStateWithLifecycle()
 
-    // Auto-hide controls: 5s minimized, 4s fullscreen, 3s lock button
+    // Auto-hide controls: 5s minimized, 4s fullscreen
     LaunchedEffect(controlsVisible, playerMode, isSwitching) {
         if (controlsVisible && !isSwitching) {
             val delayMs = if (playerMode == PlayerMode.FULLSCREEN) 4000L else 5000L
@@ -119,10 +130,9 @@ fun WatchScreen(
         }
     }
 
-    // Nested BackHandler for fullscreen → minimized
+    // Nested BackHandler for fullscreen → minimized (NOT exit watch page)
     BackHandler(enabled = playerMode == PlayerMode.FULLSCREEN) {
         stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
-        // Restore portrait orientation
         (context as? Activity)?.requestedOrientation =
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
@@ -131,7 +141,7 @@ fun WatchScreen(
     LaunchedEffect(watchRequest) {
         stateHolder.setEpisodeList(
             watchRequest.episodeList.map { ep ->
-                app.confused.anikuta.core.player.EpisodeListItem(
+                EpisodeListItem(
                     url = ep.url,
                     name = ep.name,
                     episodeNumber = ep.episode_number,
@@ -145,8 +155,9 @@ fun WatchScreen(
         )
     }
 
-    // Initialize MPV when the view is first created
-    val initMpv: (AnikutaMPVView) -> Unit = { view ->
+    // ── MPV initialization ──
+    // Called once when the AndroidView factory first creates the view.
+    val initMpv: (AnikutaMPVView) -> Unit = remember { { view ->
         if (!mpvInitialized) {
             val obs = PlayerObserver(object : PlayerObserver.Callback {
                 override fun onEvent(eventId: Int) {
@@ -154,7 +165,7 @@ fun WatchScreen(
                         MPVLib.mpvEventId.MPV_EVENT_FILE_LOADED -> {
                             Log.i(TAG, "MPV_EVENT_FILE_LOADED")
                             stateHolder.setSwitchingEpisode(false)
-                            stateHolder.setLoadingState(app.confused.anikuta.core.player.PlayerLoadingState.READY)
+                            stateHolder.setLoadingState(PlayerLoadingState.READY)
                             // Load tracks
                             try {
                                 val (subs, audio) = view.loadTracks()
@@ -187,9 +198,7 @@ fun WatchScreen(
                     }
                 }
 
-                override fun onEventProperty(property: String) {
-                    // No-value property change
-                }
+                override fun onEventProperty(property: String) {}
 
                 override fun onEventProperty(property: String, value: Long) {
                     when (property) {
@@ -214,9 +223,7 @@ fun WatchScreen(
                     }
                 }
 
-                override fun onEventProperty(property: String, value: Double) {
-                    // Double-valued property changes (e.g. volume) — not currently tracked
-                }
+                override fun onEventProperty(property: String, value: Double) {}
 
                 override fun onFileEnded(errorMessage: String?) {
                     Log.w(TAG, "File ended: $errorMessage")
@@ -227,71 +234,91 @@ fun WatchScreen(
             })
             observer = obs
 
-            PlayerInitializer.initMpvView(
-                view = view,
-                context = context,
-                observer = obs,
-                videoHeaders = watchRequest.videoHeaders ?: "",
-            )
-            mpvInitialized = true
+            try {
+                PlayerInitializer.initMpvView(
+                    view = view,
+                    context = context,
+                    observer = obs,
+                    videoHeaders = watchRequest.videoHeaders ?: "",
+                )
+                mpvInitialized = true
+                stateHolder.setLoadingState(PlayerLoadingState.LOADING)
 
-            // Load the initial video
-            PlayerInitializer.loadVideo(view, watchRequest.videoUrl, context)
+                // Load the initial video
+                PlayerInitializer.loadVideo(view, watchRequest.videoUrl, context)
+            } catch (e: Exception) {
+                Log.e(TAG, "MPV initialization failed", e)
+                stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+                stateHolder.setErrorMessage("Failed to initialize player: ${e.message}")
+            }
         }
-    }
+    } }
 
-    // Cleanup on dispose
+    // Cleanup on dispose — save progress + destroy MPV
     DisposableEffect(Unit) {
         onDispose {
-            observer?.let { obs ->
-                mpvView?.let { view ->
-                    // Save progress before destroying
-                    val pos = stateHolder.position.value
-                    val dur = stateHolder.duration.value
-                    if (dur > 0 && pos > 0) {
-                        watchProgressStore.save(
-                            anilistId = watchRequest.anilistId,
-                            episodeUrl = watchRequest.episodeUrl,
-                            positionSeconds = pos,
-                            durationSeconds = dur,
-                            title = watchRequest.videoTitle,
-                            coverUrl = watchRequest.coverUrl,
-                            animeTitle = watchRequest.animeTitle,
-                            episodeNumber = watchRequest.episodeNumber,
-                        )
-                    }
-                    PlayerInitializer.destroyMpv(view, obs)
+            try {
+                val pos = stateHolder.position.value
+                val dur = stateHolder.duration.value
+                if (dur > 0 && pos > 0) {
+                    watchProgressStore.save(
+                        anilistId = watchRequest.anilistId,
+                        episodeUrl = watchRequest.episodeUrl,
+                        positionSeconds = pos,
+                        durationSeconds = dur,
+                        title = watchRequest.videoTitle,
+                        coverUrl = watchRequest.coverUrl,
+                        animeTitle = watchRequest.animeTitle,
+                        episodeNumber = watchRequest.episodeNumber,
+                    )
+                    Log.i(TAG, "Progress saved on dispose: ${pos}s / ${dur}s")
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to save progress on dispose", e)
+            }
+
+            try {
+                mpvView?.let { view ->
+                    observer?.let { obs ->
+                        PlayerInitializer.destroyMpv(view, obs)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "MPV destroy failed", e)
             }
         }
     }
 
-    // Periodic progress save
+    // Periodic progress save (every 10 seconds)
     LaunchedEffect(mpvInitialized) {
         while (mpvInitialized) {
             delay(10000)
-            val pos = stateHolder.position.value
-            val dur = stateHolder.duration.value
-            if (dur > 0 && pos > 0) {
-                watchProgressStore.save(
-                    anilistId = watchRequest.anilistId,
-                    episodeUrl = watchRequest.episodeUrl,
-                    positionSeconds = pos,
-                    durationSeconds = dur,
-                    title = watchRequest.videoTitle,
-                    coverUrl = watchRequest.coverUrl,
-                    animeTitle = watchRequest.animeTitle,
-                    episodeNumber = watchRequest.episodeNumber,
-                )
-                Log.d(TAG, "Progress saved: ${pos}s / ${dur}s")
+            try {
+                val pos = stateHolder.position.value
+                val dur = stateHolder.duration.value
+                if (dur > 0 && pos > 0) {
+                    watchProgressStore.save(
+                        anilistId = watchRequest.anilistId,
+                        episodeUrl = watchRequest.episodeUrl,
+                        positionSeconds = pos,
+                        durationSeconds = dur,
+                        title = watchRequest.videoTitle,
+                        coverUrl = watchRequest.coverUrl,
+                        animeTitle = watchRequest.animeTitle,
+                        episodeNumber = watchRequest.episodeNumber,
+                    )
+                    Log.d(TAG, "Progress saved: ${pos}s / ${dur}s")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Periodic progress save failed", e)
             }
         }
     }
 
-    // Episode switching: re-resolve video for the tapped episode
-    val switchEpisode: (Int) -> Unit = { index ->
+    // ── Episode switching ──
+    val switchEpisode: (Int) -> Unit = remember(watchRequest, stateHolder) { { index ->
         val episode = watchRequest.episodeList.getOrNull(index)
-        if (episode != null) {
+        if (episode != null && index != stateHolder.currentEpisodeIndex.value) {
             stateHolder.setSwitchingEpisode(true)
             stateHolder.setCurrentEpisodeIndex(index)
             Log.i(TAG, "Switching to episode ${episode.episode_number}: ${episode.name}")
@@ -304,7 +331,7 @@ fun WatchScreen(
                         stateHolder.setSwitchingEpisode(false)
                     } else {
                         when (val result = resolverService.resolve(source, episode)) {
-                            is app.confused.anikuta.feature.videoresolver.ResolverResult.Success -> {
+                            is ResolverResult.Success -> {
                                 val firstVideo = result.servers.firstOrNull()
                                     ?.audioVersions?.firstOrNull()
                                     ?.videos?.firstOrNull()
@@ -312,7 +339,9 @@ fun WatchScreen(
                                 if (firstVideo != null) {
                                     mpvView?.let { view ->
                                         PlayerInitializer.loadVideo(view, firstVideo.url, context)
-                                        stateHolder.setCurrentVideoTitle(firstVideo.videoTitle.ifBlank { episode.name })
+                                        stateHolder.setCurrentVideoTitle(
+                                            firstVideo.videoTitle.ifBlank { episode.name }
+                                        )
                                         stateHolder.setCurrentVideoUrl(firstVideo.url)
                                     }
                                 } else {
@@ -320,11 +349,11 @@ fun WatchScreen(
                                     stateHolder.setSwitchingEpisode(false)
                                 }
                             }
-                            is app.confused.anikuta.feature.videoresolver.ResolverResult.NoSources -> {
+                            is ResolverResult.NoSources -> {
                                 Log.w(TAG, "No sources for episode ${episode.episode_number}")
                                 stateHolder.setSwitchingEpisode(false)
                             }
-                            is app.confused.anikuta.feature.videoresolver.ResolverResult.Error -> {
+                            is ResolverResult.Error -> {
                                 Log.e(TAG, "Error resolving episode: ${result.message}")
                                 stateHolder.setSwitchingEpisode(false)
                             }
@@ -336,49 +365,39 @@ fun WatchScreen(
                 }
             }
         }
-    }
+    } }
 
-    // Cover-color dynamic theming (watch-page.md §7)
+    // ── Cover-color dynamic theming (watch-page.md §7) ──
     val dynamicScheme = watchRequest.coverColor?.takeIf { it != 0 }?.let {
         generateDynamicScheme(it, darkTheme = true, amoled = false)
     }
 
-    if (dynamicScheme != null) {
-        MaterialTheme(colorScheme = dynamicScheme) {
-            WatchScreenContent(
-                watchRequest = watchRequest,
-                stateHolder = stateHolder,
-                playerPreferences = playerPreferences,
-                mpvView = mpvView,
-                observer = observer,
-                mpvInitialized = mpvInitialized,
-                initMpv = initMpv,
-                playerMode = playerMode,
-                isSwitching = isSwitching,
-                context = context,
-                onBack = onBack,
-                onSwitchEpisode = switchEpisode,
-                onMpvViewCreated = { v -> mpvView = v },
-            )
-        }
-    } else {
+    val screenContent: @Composable () -> Unit = {
         WatchScreenContent(
             watchRequest = watchRequest,
             stateHolder = stateHolder,
             playerPreferences = playerPreferences,
             mpvView = mpvView,
-            observer = observer,
-            mpvInitialized = mpvInitialized,
             initMpv = initMpv,
             playerMode = playerMode,
             isSwitching = isSwitching,
-            context = context,
             onBack = onBack,
             onSwitchEpisode = switchEpisode,
             onMpvViewCreated = { v -> mpvView = v },
         )
     }
+
+    if (dynamicScheme != null) {
+        MaterialTheme(colorScheme = dynamicScheme, content = screenContent)
+    } else {
+        screenContent()
+    }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WatchScreenContent — renders the layout. The MPV AndroidView is in a SINGLE
+// place (PlayerSurface) and is NEVER disposed during mode switches.
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun WatchScreenContent(
@@ -386,46 +405,31 @@ private fun WatchScreenContent(
     stateHolder: PlayerStateHolder,
     playerPreferences: PlayerPreferences,
     mpvView: AnikutaMPVView?,
-    observer: PlayerObserver?,
-    mpvInitialized: Boolean,
     initMpv: (AnikutaMPVView) -> Unit,
     playerMode: PlayerMode,
     isSwitching: Boolean,
-    context: android.content.Context,
     onBack: () -> Unit,
     onSwitchEpisode: (Int) -> Unit,
     onMpvViewCreated: (AnikutaMPVView) -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-
     if (playerMode == PlayerMode.FULLSCREEN) {
         // ── Fullscreen mode ──
+        // Player fills the entire screen. No top bar, no scrollable content.
+        // Edge-to-edge immersive (no statusBarsPadding — player.md §3 hard rule).
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black),
         ) {
-            // The SAME MPV view — re-parented, not recreated
-            mpvView?.let { view ->
-                AndroidView(
-                    factory = { view },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } ?: run {
-                // First creation — inflate the view
-                AndroidView(
-                    factory = { ctx ->
-                        val view = LayoutInflater.from(ctx)
-                            .inflate(app.confused.anikuta.core.player.R.layout.mpv_view, null) as AnikutaMPVView
-                        onMpvViewCreated(view)
-                        initMpv(view)
-                        view
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            // SINGLE AndroidView — always present, never disposed
+            PlayerSurface(
+                mpvView = mpvView,
+                initMpv = initMpv,
+                onMpvViewCreated = onMpvViewCreated,
+                modifier = Modifier.fillMaxSize(),
+            )
 
-            // Fullscreen controls overlay
+            // Overlay: switching indicator or fullscreen controls
             if (isSwitching) {
                 EpisodeSwitchingOverlay(
                     episodeThumbnailUrl = null,
@@ -433,132 +437,68 @@ private fun WatchScreenContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                app.confused.anikuta.core.player.controls.FullscreenControls(
+                FullscreenControlsOverlay(
+                    watchRequest = watchRequest,
                     stateHolder = stateHolder,
                     playerPreferences = playerPreferences,
-                    onBack = {
-                        stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
-                        (context as? Activity)?.requestedOrientation =
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    },
-                    onTogglePlay = {
-                        try {
-                            val paused = MPVLib.getPropertyBoolean("pause") ?: false
-                            MPVLib.setPropertyBoolean("pause", !paused)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to toggle play", e)
-                        }
-                    },
-                    onSeekTo = { pos ->
-                        try { MPVLib.setPropertyInt("time-pos", pos) } catch (e: Exception) { Log.e(TAG, "Seek failed", e) }
-                    },
-                    onSeekRelative = { delta ->
-                        try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
-                    },
-                    onMinimize = {
-                        stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
-                        (context as? Activity)?.requestedOrientation =
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    },
-                    onLockToggle = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
-                    onSubtitleClick = { /* TODO: open sheet */ },
-                    onAudioClick = { /* TODO: open sheet */ },
-                    onQualityClick = { /* TODO: open sheet */ },
-                    onSpeedClick = { /* TODO: open sheet */ },
-                    onServerClick = { /* TODO: open sheet */ },
-                    onMoreClick = { /* TODO: open sheet */ },
-                    onSkipForward = {
-                        try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
-                    },
-                    onRotateClick = {
-                        (context as? Activity)?.requestedOrientation =
-                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                    },
-                    onPiPClick = {
-                        try {
-                            (context as? Activity)?.enterPictureInPictureMode(
-                                android.app.PictureInPictureParams.Builder().build()
-                            )
-                        } catch (e: Exception) { Log.w(TAG, "PiP not available", e) }
-                    },
+                    onBack = onBack,
                 )
             }
         }
     } else {
         // ── Minimized mode (YouTube-style watch page) ──
-        val listState = rememberLazyListState()
-        val topBarVisible by remember {
-            derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 200 }
-        }
+        // Top bar → Player (16:9) → Scrollable content (description + episodes)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+            // Top navigation bar — ABOVE the player, always visible
+            WatchTopBar(
+                title = watchRequest.animeTitle.ifBlank { watchRequest.videoTitle },
+                onBack = onBack,
+            )
 
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            // Player area — 16:9, always present, NEVER disposed
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black),
+            ) {
+                PlayerSurface(
+                    mpvView = mpvView,
+                    initMpv = initMpv,
+                    onMpvViewCreated = onMpvViewCreated,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                // Controls overlay
+                if (isSwitching) {
+                    EpisodeSwitchingOverlay(
+                        episodeThumbnailUrl = null,
+                        episodeTitle = watchRequest.videoTitle,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    MinimizedControlsOverlay(
+                        stateHolder = stateHolder,
+                        playerPreferences = playerPreferences,
+                        onMaximize = {
+                            stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
+                            (LocalContext.current as? Activity)?.requestedOrientation =
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        },
+                    )
+                }
+            }
+
+            // Scrollable content — description + episode list
+            val listState = rememberLazyListState()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                // Sticky player section
-                item(key = "player") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(16f / 9f)
-                            .background(Color.Black),
-                    ) {
-                        mpvView?.let { view ->
-                            AndroidView(
-                                factory = { view },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } ?: run {
-                            AndroidView(
-                                factory = { ctx ->
-                                    val view = LayoutInflater.from(ctx)
-                                        .inflate(app.confused.anikuta.core.player.R.layout.mpv_view, null) as AnikutaMPVView
-                                    onMpvViewCreated(view)
-                                    initMpv(view)
-                                    view
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-
-                        // Controls overlay
-                        if (isSwitching) {
-                            EpisodeSwitchingOverlay(
-                                episodeThumbnailUrl = null,
-                                episodeTitle = watchRequest.videoTitle,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else {
-                            MinimizedControls(
-                                stateHolder = stateHolder,
-                                playerPreferences = playerPreferences,
-                                onTogglePlay = {
-                                    try {
-                                        val paused = MPVLib.getPropertyBoolean("pause") ?: false
-                                        MPVLib.setPropertyBoolean("pause", !paused)
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Failed to toggle play", e)
-                                    }
-                                },
-                                onSeekTo = { pos ->
-                                    try { MPVLib.setPropertyInt("time-pos", pos) } catch (e: Exception) { Log.e(TAG, "Seek failed", e) }
-                                },
-                                onSeekRelative = { delta ->
-                                    try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
-                                },
-                                onMaximize = {
-                                    stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
-                                    (context as? Activity)?.requestedOrientation =
-                                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                                },
-                                onSubtitleClick = { /* TODO: open subtitle sheet */ },
-                                onQualityClick = { /* TODO: open quality sheet */ },
-                            )
-                        }
-                    }
-                }
-
                 // Episode description
                 item(key = "description") {
                     EpisodeDescriptionSection(
@@ -598,61 +538,181 @@ private fun WatchScreenContent(
                                 summary = ep.summary,
                                 isCurrent = index == stateHolder.currentEpisodeIndex.value,
                                 isSwitching = isSwitching && index == stateHolder.currentEpisodeIndex.value,
-                                onClick = {
-                                    onSwitchEpisode(index)
-                                },
+                                onClick = { onSwitchEpisode(index) },
                             )
                         }
                     }
                 }
             }
-
-            // Floating top bar
-            AnimatedVisibility(
-                visible = topBarVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter),
-            ) {
-                WatchTopBar(
-                    title = watchRequest.animeTitle,
-                    onBack = onBack,
-                )
-            }
         }
     }
 }
 
-// ── Helper composables ──
+// ─────────────────────────────────────────────────────────────────────────────
+// PlayerSurface — the SINGLE AndroidView that hosts the MPV view.
+//
+// CRITICAL FIX: This composable is called in exactly ONE place per mode branch.
+// When switching modes, the old branch disposes its PlayerSurface (detaching
+// the view from its AndroidViewHolder), and the new branch creates a new
+// PlayerSurface. The factory includes a safety check:
+//   (view.parent as? ViewGroup)?.removeView(view)
+// This ensures that if the disposal hasn't fully completed before the new
+// AndroidView tries to attach the view, we manually detach it first —
+// preventing the "child already has a parent" IllegalStateException.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun PlayerSurface(
+    mpvView: AnikutaMPVView?,
+    initMpv: (AnikutaMPVView) -> Unit,
+    onMpvViewCreated: (AnikutaMPVView) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AndroidView(
+        factory = { ctx ->
+            // Reuse the cached view, or inflate a new one on first creation
+            val view = mpvView ?: (
+                LayoutInflater.from(ctx)
+                    .inflate(app.confused.anikuta.core.player.R.layout.mpv_view, null) as AnikutaMPVView
+            ).also { v ->
+                onMpvViewCreated(v)
+                initMpv(v)
+            }
+
+            // CRITICAL: Remove from any previous parent before re-adding.
+            // When switching between minimized and fullscreen mode, the old
+            // AndroidViewHolder may not have removed the view yet when the new
+            // one tries to add it. This prevents the crash:
+            //   "The specified child already has a parent"
+            (view.parent as? ViewGroup)?.removeView(view)
+
+            view
+        },
+        modifier = modifier,
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls overlays — thin wrappers that wire MPV callbacks
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun MinimizedControlsOverlay(
+    stateHolder: PlayerStateHolder,
+    playerPreferences: PlayerPreferences,
+    onMaximize: () -> Unit,
+) {
+    MinimizedControls(
+        stateHolder = stateHolder,
+        playerPreferences = playerPreferences,
+        onTogglePlay = {
+            try {
+                val paused = MPVLib.getPropertyBoolean("pause") ?: false
+                MPVLib.setPropertyBoolean("pause", !paused)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to toggle play", e)
+            }
+        },
+        onSeekTo = { pos ->
+            try { MPVLib.setPropertyInt("time-pos", pos) } catch (e: Exception) { Log.e(TAG, "Seek failed", e) }
+        },
+        onSeekRelative = { delta ->
+            try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
+        },
+        onMaximize = onMaximize,
+        onSubtitleClick = { /* TODO: open subtitle sheet */ },
+        onQualityClick = { /* TODO: open quality sheet */ },
+    )
+}
+
+@Composable
+private fun FullscreenControlsOverlay(
+    watchRequest: WatchRequest,
+    stateHolder: PlayerStateHolder,
+    playerPreferences: PlayerPreferences,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    app.confused.anikuta.core.player.controls.FullscreenControls(
+        stateHolder = stateHolder,
+        playerPreferences = playerPreferences,
+        onBack = {
+            stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
+            (context as? Activity)?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        },
+        onTogglePlay = {
+            try {
+                val paused = MPVLib.getPropertyBoolean("pause") ?: false
+                MPVLib.setPropertyBoolean("pause", !paused)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to toggle play", e)
+            }
+        },
+        onSeekTo = { pos ->
+            try { MPVLib.setPropertyInt("time-pos", pos) } catch (e: Exception) { Log.e(TAG, "Seek failed", e) }
+        },
+        onSeekRelative = { delta ->
+            try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
+        },
+        onMinimize = {
+            stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
+            (context as? Activity)?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        },
+        onLockToggle = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
+        onSubtitleClick = { /* TODO: open sheet */ },
+        onAudioClick = { /* TODO: open sheet */ },
+        onQualityClick = { /* TODO: open sheet */ },
+        onSpeedClick = { /* TODO: open sheet */ },
+        onServerClick = { /* TODO: open sheet */ },
+        onMoreClick = { /* TODO: open sheet */ },
+        onSkipForward = {
+            try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
+        },
+        onRotateClick = {
+            (context as? Activity)?.requestedOrientation =
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        },
+        onPiPClick = {
+            try {
+                (context as? Activity)?.enterPictureInPictureMode(
+                    android.app.PictureInPictureParams.Builder().build()
+                )
+            } catch (e: Exception) { Log.w(TAG, "PiP not available", e) }
+        },
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper composables
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun WatchTopBar(title: String, onBack: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 2.dp,
         modifier = Modifier
-            .statusBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .statusBarsPadding(),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
+                text = title.ifBlank { "Now Playing" },
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -694,7 +754,7 @@ private fun EpisodeDescriptionSection(
                 text = summary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
+                maxLines = 5,
                 overflow = TextOverflow.Ellipsis,
             )
         }

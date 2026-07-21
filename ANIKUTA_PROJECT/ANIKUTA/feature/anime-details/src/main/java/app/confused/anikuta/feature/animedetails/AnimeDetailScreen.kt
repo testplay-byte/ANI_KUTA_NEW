@@ -53,7 +53,7 @@ fun AnimeDetailScreen(
     extensionManager: AnimeExtensionManager,
     sourceMatcher: SourceMatcher,
     onBack: () -> Unit,
-    onOpenEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
 

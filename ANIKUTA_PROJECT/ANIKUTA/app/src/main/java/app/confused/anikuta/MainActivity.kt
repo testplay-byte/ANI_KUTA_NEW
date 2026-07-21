@@ -107,9 +107,9 @@ private fun AnikutaApp() {
     val repoRepository: ExtensionRepoRepository = koinInject()
     val repoApi: ExtensionRepoApi = koinInject()
 
-    // Tracks the episode+source being resolved (for retry on Error)
+    // Tracks the episode+source+episodeList being resolved (for retry on Error + watch page)
     var resolveTarget by remember {
-        mutableStateOf<Pair<SEpisode, AnimeSource>?>(null)
+        mutableStateOf<Triple<SEpisode, AnimeSource, List<SEpisode>>?>(null)
     }
 
     // Handle back gesture for sub-screens + resolver sheet
@@ -130,12 +130,13 @@ private fun AnikutaApp() {
     /**
      * Resolves videos from [source] for [episode] and updates [resolverState].
      * Called when the user taps an episode on the detail screen.
+     * Stores the full [episodeList] so the watch page can switch episodes.
      */
-    fun resolveEpisode(episode: SEpisode, source: AnimeSource) {
+    fun resolveEpisode(episode: SEpisode, source: AnimeSource, episodeList: List<SEpisode>) {
         val epNum = episode.episode_number.toInt().let { if (it > 0) it else 0 }
-        resolveTarget = episode to source
+        resolveTarget = Triple(episode, source, episodeList)
         resolverState = VideoResolverState.Resolving(epNum)
-        Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name}")
+        Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name} (${episodeList.size} episodes)")
 
         scope.launch {
             when (val result = resolverService.resolve(source, episode)) {
@@ -178,8 +179,8 @@ private fun AnikutaApp() {
                         detailAnimeId = null
                         resolverState = VideoResolverState.Hidden
                     },
-                    onOpenEpisode = { episode, source ->
-                        resolveEpisode(episode, source)
+                    onOpenEpisode = { episode, source, episodeList ->
+                        resolveEpisode(episode, source, episodeList)
                     },
                 )
             }
@@ -245,9 +246,9 @@ private fun AnikutaApp() {
                     onVideoSelected = { video ->
                         Log.i("AnikutaResolver", "Video selected: ${video.quality} (${video.url})")
                         resolverState = VideoResolverState.Hidden
-                        val episode = resolveTarget?.first
-                        val source = resolveTarget?.second
-                        if (episode != null && source != null) {
+                        val target = resolveTarget
+                        if (target != null) {
+                            val (episode, source, episodeList) = target
                             watchTarget = WatchRequest(
                                 videoUrl = video.url,
                                 videoHeaders = video.videoHeaders,
@@ -263,13 +264,13 @@ private fun AnikutaApp() {
                                 videoServer = "",
                                 videoAudio = "",
                                 videoQuality = 0,
-                                episodeList = listOf(episode),
+                                episodeList = episodeList,
                             )
                         }
                     },
                     onRetry = {
-                        resolveTarget?.let { (episode, source) ->
-                            resolveEpisode(episode, source)
+                        resolveTarget?.let { (episode, source, episodeList) ->
+                            resolveEpisode(episode, source, episodeList)
                         }
                     },
                 )

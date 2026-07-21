@@ -54,7 +54,7 @@ fun DetailContent(
     hasSearched: Boolean,
     availableSources: List<SourceMatcher.SourceInfo>,
     onBack: () -> Unit,
-    onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
     onRefresh: () -> Unit,
