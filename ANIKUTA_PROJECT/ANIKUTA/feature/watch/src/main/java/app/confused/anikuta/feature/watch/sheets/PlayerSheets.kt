@@ -74,6 +74,7 @@ fun QualitySheet(
     currentVideoTitle: String,
     onQualitySelected: (ResolverVideo) -> Unit,
     onDismiss: () -> Unit,
+    currentServerName: String = "",
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -101,7 +102,7 @@ fun QualitySheet(
                     Text(
                         text = "Quality & Servers",
                         fontFamily = RobotoFamily,
-                        fontSize = 18.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -162,13 +163,20 @@ fun QualitySheet(
                     items(servers.size) { index ->
                         val server = servers[index]
                         val isExpanded = expandedServer == server.name
+                        // Highlight the current server (the one playing the video)
+                        // with a slightly different tint so the user knows which
+                        // server is active.
+                        val isCurrentServer = server.name == currentServerName
 
                         Surface(
-                            color = if (isExpanded) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                            color = when {
+                                isExpanded -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                isCurrentServer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                             },
+                            border = if (isCurrentServer && !isExpanded) {
+                                androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                            } else null,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -183,6 +191,16 @@ fun QualitySheet(
                                         .padding(horizontal = 14.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
+                                    // "Playing" indicator on the current server
+                                    if (isCurrentServer) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Currently playing",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                        Spacer(modifier = Modifier.size(6.dp))
+                                    }
                                     Text(
                                         text = server.name,
                                         fontFamily = RobotoFamily,
@@ -342,21 +360,13 @@ fun SubtitleTracksSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    Text(
-                        text = "Subtitles",
-                        fontFamily = RobotoFamily,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Select a subtitle track",
-                        fontFamily = RobotoFamily,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = "Subtitles",
+                    fontFamily = RobotoFamily,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(50),

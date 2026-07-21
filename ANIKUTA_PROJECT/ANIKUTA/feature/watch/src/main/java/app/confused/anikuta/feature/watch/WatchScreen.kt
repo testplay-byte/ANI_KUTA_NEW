@@ -233,6 +233,11 @@ fun WatchScreen(
         stateHolder.setCurrentEpisodeIndex(finalIndex)
         stateHolder.setCurrentVideoTitle(watchRequest.videoTitle)
         stateHolder.setCurrentVideoUrl(watchRequest.videoUrl)
+        // CRITICAL: Also track the current episode URL + number for progress saving.
+        // These update when the user switches episodes, so progress is saved
+        // against the CORRECT episode (not the original watch request).
+        stateHolder.setCurrentEpisodeUrl(watchRequest.episodeUrl)
+        stateHolder.setCurrentEpisodeNumber(watchRequest.episodeNumber)
     }
 
     // ── MPV initialization ──
@@ -246,6 +251,7 @@ fun WatchScreen(
                             Log.i(TAG, "MPV_EVENT_FILE_LOADED")
                             stateHolder.setSwitchingEpisode(false)
                             stateHolder.setLoadingState(PlayerLoadingState.READY)
+                            stateHolder.setErrorMessage(null)
 
                             // ── Load external subtitle tracks via sub-add ──
                             // CRITICAL: sub-add MUST be sent AFTER FILE_LOADED.
@@ -307,21 +313,53 @@ fun WatchScreen(
                                 }
                             }
 
-                            // Resume position
+                            // ── Resume position ──
+                            // Use the CURRENT episode URL (not the original watch request)
+                            // so progress is looked up for the right episode after switching.
+                            val currentEpUrl = stateHolder.currentEpisodeUrl.value
                             val progress = watchProgressStore.get(
                                 watchRequest.anilistId,
-                                watchRequest.episodeUrl,
+                                currentEpUrl,
                             )
                             if (progress != null && progress.positionSeconds > 5) {
-                                try {
-                                    MPVLib.setPropertyInt("time-pos", progress.positionSeconds)
-                                    stateHolder.setShowStartOverOverlay(true)
-                                    scope.launch {
-                                        delay(10000)
-                                        stateHolder.setShowStartOverOverlay(false)
+                                // If the user watched >90% of the video, start from the
+                                // beginning instead of resuming at the end. This prevents
+                                // the "video loads at max position, can't seek back" issue.
+                                val duration = progress.durationSeconds
+                                val resumeThreshold = 0.9 // 90%
+                                val shouldStartOver = duration > 0 &&
+                                    progress.positionSeconds.toFloat() / duration.toFloat() >= resumeThreshold
+
+                                if (shouldStartOver) {
+                                    Log.i(TAG, "Watched >90% (pos=${progress.positionSeconds}s, dur=${duration}s) — starting from beginning")
+                                    try {
+                                        MPVLib.setPropertyInt("time-pos", 0)
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Failed to reset position to 0", e)
                                     }
+                                } else {
+                                    Log.i(TAG, "Resuming at ${progress.positionSeconds}s / ${duration}s")
+                                    try {
+                                        MPVLib.setPropertyInt("time-pos", progress.positionSeconds)
+                                        stateHolder.setShowStartOverOverlay(true)
+                                        scope.launch {
+                                            delay(10000)
+                                            stateHolder.setShowStartOverOverlay(false)
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Failed to seek to saved position", e)
+                                    }
+                                }
+                            } else {
+                                // No saved progress or <5s — start from beginning.
+                                // CRITICAL: Reset position to 0 on every new FILE_LOADED
+                                // to prevent the "position stuck at max" issue when
+                                // switching episodes. MPV sometimes inherits the previous
+                                // file's position if keep-open=true.
+                                try {
+                                    MPVLib.setPropertyInt("time-pos", 0)
                                 } catch (e: Exception) {
-                                    Log.w(TAG, "Failed to seek to saved position", e)
+                                    Log.w(TAG, "Failed to reset position to 0", e)
                                 }
                             }
                         }
@@ -360,8 +398,15 @@ fun WatchScreen(
 
                 override fun onFileEnded(errorMessage: String?) {
                     Log.w(TAG, "File ended: $errorMessage")
-                    if (errorMessage != null) {
+                    // MPV sends END_FILE for both normal end-of-file AND errors.
+                    // If there's an error message, show the error overlay so the
+                    // user knows the video failed (instead of a frozen player).
+                    // Only show the error if we're not already switching episodes
+                    // (switching triggers a deliberate END_FILE on the old file).
+                    if (errorMessage != null && !stateHolder.isSwitchingEpisode.value) {
                         stateHolder.setErrorMessage(errorMessage)
+                        stateHolder.setSwitchingEpisode(false)
+                        stateHolder.setLoadingState(PlayerLoadingState.ERROR)
                     }
                 }
             })
@@ -393,18 +438,20 @@ fun WatchScreen(
             try {
                 val pos = stateHolder.position.value
                 val dur = stateHolder.duration.value
-                if (dur > 0 && pos > 0) {
+                val currentEpUrl = stateHolder.currentEpisodeUrl.value
+                val currentEpNum = stateHolder.currentEpisodeNumber.value
+                if (dur > 0 && pos > 0 && currentEpUrl.isNotEmpty()) {
                     watchProgressStore.save(
                         anilistId = watchRequest.anilistId,
-                        episodeUrl = watchRequest.episodeUrl,
+                        episodeUrl = currentEpUrl,
                         positionSeconds = pos,
                         durationSeconds = dur,
-                        title = watchRequest.videoTitle,
+                        title = stateHolder.currentVideoTitle.value,
                         coverUrl = watchRequest.coverUrl,
                         animeTitle = watchRequest.animeTitle,
-                        episodeNumber = watchRequest.episodeNumber,
+                        episodeNumber = currentEpNum,
                     )
-                    Log.i(TAG, "Progress saved on dispose: ${pos}s / ${dur}s")
+                    Log.i(TAG, "Progress saved on dispose: ${pos}s / ${dur}s for ep $currentEpNum")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to save progress on dispose", e)
@@ -429,18 +476,20 @@ fun WatchScreen(
             try {
                 val pos = stateHolder.position.value
                 val dur = stateHolder.duration.value
-                if (dur > 0 && pos > 0) {
+                val currentEpUrl = stateHolder.currentEpisodeUrl.value
+                val currentEpNum = stateHolder.currentEpisodeNumber.value
+                if (dur > 0 && pos > 0 && currentEpUrl.isNotEmpty()) {
                     watchProgressStore.save(
                         anilistId = watchRequest.anilistId,
-                        episodeUrl = watchRequest.episodeUrl,
+                        episodeUrl = currentEpUrl,
                         positionSeconds = pos,
                         durationSeconds = dur,
-                        title = watchRequest.videoTitle,
+                        title = stateHolder.currentVideoTitle.value,
                         coverUrl = watchRequest.coverUrl,
                         animeTitle = watchRequest.animeTitle,
-                        episodeNumber = watchRequest.episodeNumber,
+                        episodeNumber = currentEpNum,
                     )
-                    Log.d(TAG, "Progress saved: ${pos}s / ${dur}s")
+                    Log.d(TAG, "Progress saved: ${pos}s / ${dur}s for ep $currentEpNum")
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Periodic progress save failed", e)
@@ -454,7 +503,16 @@ fun WatchScreen(
         if (episode != null && index != stateHolder.currentEpisodeIndex.value) {
             stateHolder.setSwitchingEpisode(true)
             stateHolder.setCurrentEpisodeIndex(index)
-            Log.i(TAG, "Switching to episode ${episode.episode_number}: ${episode.name}")
+            // CRITICAL: Update the current episode URL + number so that:
+            // 1. Progress is saved against the CORRECT episode (not the original)
+            // 2. Resume position lookup uses the CORRECT episode URL
+            stateHolder.setCurrentEpisodeUrl(episode.url)
+            stateHolder.setCurrentEpisodeNumber(episode.episode_number)
+            // Reset position + duration so the UI doesn't show the old episode's values
+            stateHolder.setPosition(0)
+            stateHolder.setDuration(0)
+            stateHolder.setErrorMessage(null)
+            Log.i(TAG, "Switching to episode ${episode.episode_number}: ${episode.name} (url=${episode.url})")
 
             scope.launch {
                 try {
@@ -462,6 +520,7 @@ fun WatchScreen(
                     if (source == null) {
                         Log.e(TAG, "Source not available for episode switching")
                         stateHolder.setSwitchingEpisode(false)
+                        stateHolder.setErrorMessage("Source not available for episode switching")
                     } else {
                         when (val result = resolverService.resolve(source, episode)) {
                             is ResolverResult.Success -> {
@@ -476,27 +535,37 @@ fun WatchScreen(
                                             firstVideo.videoTitle.ifBlank { episode.name }
                                         )
                                         stateHolder.setCurrentVideoUrl(firstVideo.url)
+                                        // Update resolved servers so the quality sheet
+                                        // shows the new episode's servers
+                                        resolvedServers = result.servers
                                     }
                                 } else {
                                     Log.w(TAG, "No videos found for episode ${episode.episode_number}")
                                     stateHolder.setSwitchingEpisode(false)
+                                    stateHolder.setErrorMessage("No videos found for this episode")
                                 }
                             }
                             is ResolverResult.NoSources -> {
                                 Log.w(TAG, "No sources for episode ${episode.episode_number}")
                                 stateHolder.setSwitchingEpisode(false)
+                                stateHolder.setErrorMessage("No sources available for this episode")
                             }
                             is ResolverResult.Error -> {
                                 Log.e(TAG, "Error resolving episode: ${result.message}")
                                 stateHolder.setSwitchingEpisode(false)
+                                stateHolder.setErrorMessage("Failed to resolve: ${result.message}")
                             }
                         }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Episode switch failed", e)
                     stateHolder.setSwitchingEpisode(false)
+                    stateHolder.setErrorMessage("Episode switch failed: ${e.message}")
                 }
             }
+        } else if (episode != null && index == stateHolder.currentEpisodeIndex.value) {
+            // Tapping the current episode — do nothing (it's already playing)
+            Log.d(TAG, "Tapped current episode (index=$index) — ignoring")
         }
     } }
 
@@ -679,9 +748,10 @@ private fun WatchScreenContent(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Top navigation bar — floating pill, ABOVE the player
+            // Top navigation bar — floating pill, ABOVE the player.
+            // Shows the app name "ANIKUTA" (not the episode title) per user request.
             WatchTopBar(
-                title = watchRequest.animeTitle.ifBlank { watchRequest.videoTitle },
+                title = "ANIKUTA",
                 onBack = onBack,
             )
 
@@ -707,25 +777,47 @@ private fun WatchScreenContent(
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    // Controls overlay
-                    if (isSwitching) {
-                        EpisodeSwitchingOverlay(
-                            episodeThumbnailUrl = null,
-                            episodeTitle = watchRequest.videoTitle,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        MinimizedControlsOverlay(
-                            stateHolder = stateHolder,
-                            playerPreferences = playerPreferences,
-                            onMaximize = {
-                                stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
-                                (context as? Activity)?.requestedOrientation =
-                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                            },
-                            onQualityClick = onQualityClick,
-                            onSubtitleClick = onSubtitleClick,
-                        )
+                    // Controls overlay — switching / error / normal
+                    val errorMessage = stateHolder.errorMessage.collectAsStateWithLifecycle().value
+                    when {
+                        isSwitching -> {
+                            EpisodeSwitchingOverlay(
+                                episodeThumbnailUrl = null,
+                                episodeTitle = stateHolder.currentVideoTitle.value,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        errorMessage != null -> {
+                            // Visual error state — shows when video fails to load
+                            // (MPV "fatal error", "error reading packet", etc.)
+                            PlayerErrorOverlay(
+                                message = errorMessage,
+                                onRetry = {
+                                    stateHolder.setErrorMessage(null)
+                                    // Re-load the current video URL
+                                    mpvView?.let { view ->
+                                        val currentUrl = stateHolder.currentVideoUrl.value
+                                        if (currentUrl.isNotEmpty()) {
+                                            PlayerInitializer.loadVideo(view, currentUrl, context)
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        else -> {
+                            MinimizedControlsOverlay(
+                                stateHolder = stateHolder,
+                                playerPreferences = playerPreferences,
+                                onMaximize = {
+                                    stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
+                                    (context as? Activity)?.requestedOrientation =
+                                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                },
+                                onQualityClick = onQualityClick,
+                                onSubtitleClick = onSubtitleClick,
+                            )
+                        }
                     }
                 }
             }
@@ -736,62 +828,80 @@ private fun WatchScreenContent(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                // Episode description — uses the CURRENT episode's info (not the
-                // original watch request, so it updates when the user switches episodes)
+                // Episode description — dedicated background card section.
+                // Uses the CURRENT episode's info (not the original watch request,
+                // so it updates when the user switches episodes).
                 item(key = "description") {
                     val currentEp = watchRequest.episodeList.getOrNull(stateHolder.currentEpisodeIndex.value)
-                    EpisodeDescriptionSection(
-                        episodeNumber = currentEp?.episode_number ?: watchRequest.episodeNumber,
-                        episodeTitle = currentEp?.name ?: watchRequest.videoTitle,
-                        summary = currentEp?.summary,
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    )
-                }
-
-                // Episodes header — accent-colored section header with count badge
-                item(key = "episodes_header") {
-                    Row(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        tonalElevation = 1.dp,
                     ) {
-                        Text(
-                            text = "Episodes",
-                            fontFamily = RobotoFamily,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onBackground,
+                        EpisodeDescriptionSection(
+                            episodeNumber = currentEp?.episode_number ?: watchRequest.episodeNumber,
+                            episodeTitle = currentEp?.name ?: watchRequest.videoTitle,
+                            summary = currentEp?.summary,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
                         )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(50),
-                        ) {
-                            Text(
-                                text = "${watchRequest.episodeList.size}",
-                                fontFamily = RobotoFamily,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            )
-                        }
                     }
                 }
 
-                // Episode list (plain Column inside item — NO nested LazyColumn)
-                item(key = "episodes") {
-                    Column {
-                        watchRequest.episodeList.forEachIndexed { index, ep ->
-                            EpisodeRow(
-                                episodeNumber = ep.episode_number,
-                                episodeTitle = ep.name,
-                                summary = ep.summary,
-                                isCurrent = index == stateHolder.currentEpisodeIndex.value,
-                                isSwitching = isSwitching && index == stateHolder.currentEpisodeIndex.value,
-                                onClick = { onSwitchEpisode(index) },
-                            )
+                // Episodes header + list — dedicated background card section.
+                item(key = "episodes_section") {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        tonalElevation = 1.dp,
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            // Episodes header — accent-colored with count badge
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Episodes",
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(50),
+                                ) {
+                                    Text(
+                                        text = "${watchRequest.episodeList.size}",
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+
+                            // Episode list (plain Column — NO nested LazyColumn)
+                            watchRequest.episodeList.forEachIndexed { index, ep ->
+                                EpisodeRow(
+                                    episodeNumber = ep.episode_number,
+                                    episodeTitle = ep.name,
+                                    summary = ep.summary,
+                                    isCurrent = index == stateHolder.currentEpisodeIndex.value,
+                                    isSwitching = isSwitching && index == stateHolder.currentEpisodeIndex.value,
+                                    onClick = { onSwitchEpisode(index) },
+                                )
+                            }
                         }
                     }
                 }
@@ -801,11 +911,14 @@ private fun WatchScreenContent(
 
     // ── Bottom-up sheets (rendered on top of everything) ──
     if (showQualitySheet) {
+        // Extract the current server name from the video title (format: "Server - SUB - 1080p")
+        val currentServerName = stateHolder.currentVideoTitle.value.substringBefore(" - ").trim()
         app.confused.anikuta.feature.watch.sheets.QualitySheet(
             servers = resolvedServers,
             currentVideoTitle = stateHolder.currentVideoTitle.value,
             onQualitySelected = onQualitySelected,
             onDismiss = onDismissSheet,
+            currentServerName = currentServerName,
         )
     }
 
@@ -1249,4 +1362,67 @@ private fun EpisodeRow(
 private fun formatEpisodeNumber(num: Float): String {
     if (num <= 0f) return "?"
     return if (num == num.toLong().toFloat()) num.toLong().toString() else num.toString()
+}
+
+/**
+ * Visual error overlay shown when a video fails to load or play.
+ * Displays the error message + a retry button. The overlay sits on top
+ * of the black player background so the user sees a clear error state
+ * instead of a frozen player.
+ */
+@Composable
+private fun PlayerErrorOverlay(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.background(Color.Black.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(24.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Playback Error",
+                fontFamily = RobotoFamily,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                fontFamily = RobotoFamily,
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.clickable { onRetry() },
+            ) {
+                Text(
+                    text = "Retry",
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                )
+            }
+        }
+    }
 }

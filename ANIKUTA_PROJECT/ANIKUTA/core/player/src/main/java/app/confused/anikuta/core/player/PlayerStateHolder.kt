@@ -103,6 +103,16 @@ class PlayerStateHolder {
     private val _currentVideoTitle = MutableStateFlow("")
     val currentVideoTitle: StateFlow<String> = _currentVideoTitle.asStateFlow()
 
+    // ── Current episode URL + number (for progress saving on episode switch) ──
+    // These track the CURRENTLY PLAYING episode, not the original watch request.
+    // When the user switches episodes, these update so progress is saved
+    // against the correct episode.
+    private val _currentEpisodeUrl = MutableStateFlow("")
+    val currentEpisodeUrl: StateFlow<String> = _currentEpisodeUrl.asStateFlow()
+
+    private val _currentEpisodeNumber = MutableStateFlow(0f)
+    val currentEpisodeNumber: StateFlow<Float> = _currentEpisodeNumber.asStateFlow()
+
     // ── Resume prompt ──
     private val _showStartOverOverlay = MutableStateFlow(false)
     val showStartOverOverlay: StateFlow<Boolean> = _showStartOverOverlay.asStateFlow()
@@ -133,6 +143,8 @@ class PlayerStateHolder {
     fun setCurrentVideoQuality(quality: Int) { _currentVideoQuality.value = quality }
     fun setCurrentVideoUrl(url: String) { _currentVideoUrl.value = url }
     fun setCurrentVideoTitle(title: String) { _currentVideoTitle.value = title }
+    fun setCurrentEpisodeUrl(url: String) { _currentEpisodeUrl.value = url }
+    fun setCurrentEpisodeNumber(num: Float) { _currentEpisodeNumber.value = num }
     fun setShowStartOverOverlay(show: Boolean) { _showStartOverOverlay.value = show }
 
     fun toggleControls() { _controlsVisible.value = !_controlsVisible.value }
