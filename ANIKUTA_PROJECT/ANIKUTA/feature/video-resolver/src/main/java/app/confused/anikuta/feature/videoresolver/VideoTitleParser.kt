@@ -105,6 +105,12 @@ object VideoTitleParser {
                                 videoHeaders = pv.video.headers?.let { headers ->
                                     headers.names().joinToString("\n") { "$it: ${headers[it]}" }
                                 },
+                                subtitleTracks = pv.video.subtitleTracks.map {
+                                    SubtitleTrack(it.url, it.lang)
+                                },
+                                audioTracks = pv.video.audioTracks.map {
+                                    SubtitleTrack(it.url, it.lang)
+                                },
                             )
                         },
                     )

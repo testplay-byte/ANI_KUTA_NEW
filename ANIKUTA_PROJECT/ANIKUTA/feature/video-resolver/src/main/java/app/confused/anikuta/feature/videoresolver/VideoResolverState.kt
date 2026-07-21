@@ -46,4 +46,15 @@ data class ResolverVideo(
     val url: String,
     val videoTitle: String = "",
     val videoHeaders: String? = null,
+    val subtitleTracks: List<SubtitleTrack> = emptyList(),
+    val audioTracks: List<SubtitleTrack> = emptyList(),
+)
+
+/**
+ * A subtitle or audio track from the Video object.
+ * Used for external track loading via MPV's sub-add/audio-add commands.
+ */
+data class SubtitleTrack(
+    val url: String,
+    val lang: String = "",
 )

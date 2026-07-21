@@ -249,6 +249,8 @@ private fun AnikutaApp() {
                         val target = resolveTarget
                         if (target != null) {
                             val (episode, source, episodeList) = target
+                            // Get the resolved servers from the current resolver state
+                            val servers = (resolverState as? VideoResolverState.Show)?.servers ?: emptyList()
                             watchTarget = WatchRequest(
                                 videoUrl = video.url,
                                 videoHeaders = video.videoHeaders,
@@ -265,6 +267,9 @@ private fun AnikutaApp() {
                                 videoAudio = "",
                                 videoQuality = 0,
                                 episodeList = episodeList,
+                                subtitleTracks = video.subtitleTracks,
+                                audioTracks = video.audioTracks,
+                                resolvedServers = servers,
                             )
                         }
                     },

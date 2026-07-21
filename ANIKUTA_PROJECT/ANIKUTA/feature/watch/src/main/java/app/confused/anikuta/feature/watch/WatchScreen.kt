@@ -5,6 +5,9 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -127,6 +130,44 @@ fun WatchScreen(
     val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
     val controlsVisible by stateHolder.controlsVisible.collectAsStateWithLifecycle()
 
+    // ── Immersive mode: hide/show system bars based on player mode ──
+    // Per OLD project's hideSystemBars()/showSystemBars() pattern.
+    DisposableEffect(playerMode) {
+        val activity = context as? Activity
+        if (playerMode == PlayerMode.FULLSCREEN) {
+            // Hide system bars (immersive sticky)
+            activity?.window?.let { window ->
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
+            @Suppress("DEPRECATION")
+            (context as? Activity)?.window?.decorView?.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
+        } else {
+            // Show system bars (minimized mode)
+            (context as? Activity)?.window?.let { window ->
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+            @Suppress("DEPRECATION")
+            (context as? Activity)?.window?.decorView?.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
+        }
+        onDispose { }
+    }
+
     // Auto-hide controls: 5s minimized, 4s fullscreen
     LaunchedEffect(controlsVisible, playerMode, isSwitching) {
         if (controlsVisible && !isSwitching) {
@@ -137,10 +178,12 @@ fun WatchScreen(
     }
 
     // Nested BackHandler for fullscreen → minimized (NOT exit watch page)
+    // CRITICAL: Force SENSOR_PORTRAIT on minimize so the screen rotates back
+    // to portrait. Using UNSPECIFIED leaves it in landscape.
     BackHandler(enabled = playerMode == PlayerMode.FULLSCREEN) {
         stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
         (context as? Activity)?.requestedOrientation =
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
     }
 
     // Initialize episode list from the watch request + set current episode index
@@ -159,10 +202,21 @@ fun WatchScreen(
                 )
             }
         )
-        // Find the index of the tapped episode (matching by URL) so the
-        // correct episode is highlighted as "currently playing".
+        // Find the index of the tapped episode. Match by URL first, then by
+        // episode_number as fallback (URLs may differ between source calls).
         val tappedIndex = watchRequest.episodeList.indexOfFirst { it.url == watchRequest.episodeUrl }
-        stateHolder.setCurrentEpisodeIndex(if (tappedIndex >= 0) tappedIndex else 0)
+        val fallbackIndex = watchRequest.episodeList.indexOfFirst {
+            it.episode_number == watchRequest.episodeNumber
+        }
+        val finalIndex = when {
+            tappedIndex >= 0 -> tappedIndex
+            fallbackIndex >= 0 -> fallbackIndex
+            else -> 0
+        }
+        Log.i(TAG, "Episode index: tappedUrl=${watchRequest.episodeUrl}, " +
+            "tappedIndex=$tappedIndex, fallbackIndex=$fallbackIndex, finalIndex=$finalIndex, " +
+            "listSize=${watchRequest.episodeList.size}")
+        stateHolder.setCurrentEpisodeIndex(finalIndex)
         stateHolder.setCurrentVideoTitle(watchRequest.videoTitle)
         stateHolder.setCurrentVideoUrl(watchRequest.videoUrl)
     }
@@ -178,14 +232,67 @@ fun WatchScreen(
                             Log.i(TAG, "MPV_EVENT_FILE_LOADED")
                             stateHolder.setSwitchingEpisode(false)
                             stateHolder.setLoadingState(PlayerLoadingState.READY)
-                            // Load tracks
-                            try {
-                                val (subs, audio) = view.loadTracks()
-                                stateHolder.setSubtitleTracks(subs)
-                                stateHolder.setAudioTracks(audio)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to load tracks", e)
+
+                            // ── Load external subtitle tracks via sub-add ──
+                            // CRITICAL: sub-add MUST be sent AFTER FILE_LOADED.
+                            // Sending before causes MPV to silently drop the track.
+                            // Run on Dispatchers.IO because each sub-add triggers
+                            // an HTTPS download inside MPV native code.
+                            val subsToAdd = watchRequest.subtitleTracks
+                            val audiosToAdd = watchRequest.audioTracks
+                            if (subsToAdd.isNotEmpty() || audiosToAdd.isNotEmpty()) {
+                                scope.launch {
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        // Set HTTP headers for subtitle downloads
+                                        val headers = watchRequest.videoHeaders
+                                        if (!headers.isNullOrBlank()) {
+                                            try {
+                                                MPVLib.setOptionString("http-header-fields", headers)
+                                            } catch (e: Exception) {
+                                                Log.w(TAG, "Failed to set headers for subs", e)
+                                            }
+                                        }
+                                        // Send sub-add for each external subtitle track
+                                        subsToAdd.forEach { sub ->
+                                            try {
+                                                Log.i(TAG, "sub-add: url=${sub.url.take(60)}... lang=${sub.lang}")
+                                                MPVLib.command(arrayOf("sub-add", sub.url, "auto", "", sub.lang))
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "sub-add failed for lang=${sub.lang}", e)
+                                            }
+                                        }
+                                        // Send audio-add for each external audio track
+                                        audiosToAdd.forEach { audio ->
+                                            try {
+                                                Log.i(TAG, "audio-add: url=${audio.url.take(60)}... lang=${audio.lang}")
+                                                MPVLib.command(arrayOf("audio-add", audio.url, "auto", "", audio.lang))
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "audio-add failed for lang=${audio.lang}", e)
+                                            }
+                                        }
+                                    }
+                                    // Re-read track-list after adding external tracks
+                                    try {
+                                        val (subs, audio) = view.loadTracks()
+                                        stateHolder.setSubtitleTracks(subs)
+                                        stateHolder.setAudioTracks(audio)
+                                        Log.i(TAG, "Tracks loaded: ${subs.size} subs, ${audio.size} audio")
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Failed to reload tracks after sub-add", e)
+                                    }
+                                }
+                            } else {
+                                // No external tracks — just read internal tracks
+                                try {
+                                    val (subs, audio) = view.loadTracks()
+                                    stateHolder.setSubtitleTracks(subs)
+                                    stateHolder.setAudioTracks(audio)
+                                    Log.i(TAG, "Internal tracks loaded: ${subs.size} subs, ${audio.size} audio")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Failed to load tracks", e)
+                                }
                             }
+
                             // Resume position
                             val progress = watchProgressStore.get(
                                 watchRequest.anilistId,
@@ -384,9 +491,14 @@ fun WatchScreen(
         generateDynamicScheme(it, darkTheme = true, amoled = false)
     }
 
-    // ── Quality switching: resolve servers on-demand when quality sheet opens ──
+    // ── Quality switching: use pre-resolved servers from WatchRequest, or resolve on-demand ──
     val onQualityClick: () -> Unit = {
-        // Pre-resolve the servers for the current episode if not cached
+        // Use pre-resolved servers from the WatchRequest if available
+        if (resolvedServers.isEmpty() && watchRequest.resolvedServers.isNotEmpty()) {
+            resolvedServers = watchRequest.resolvedServers
+            Log.i(TAG, "Using pre-resolved servers from WatchRequest: ${resolvedServers.size} servers")
+        }
+        // If still empty, resolve on-demand
         if (resolvedServers.isEmpty()) {
             scope.launch {
                 try {
@@ -396,6 +508,7 @@ fun WatchScreen(
                         when (val result = resolverService.resolve(source, episode)) {
                             is ResolverResult.Success -> {
                                 resolvedServers = result.servers
+                                Log.i(TAG, "Resolved servers for quality sheet: ${resolvedServers.size} servers")
                             }
                             else -> {
                                 Log.w(TAG, "Failed to resolve servers for quality sheet")
@@ -418,6 +531,8 @@ fun WatchScreen(
             PlayerInitializer.loadVideo(view, video.url, context)
             stateHolder.setCurrentVideoTitle(video.videoTitle)
             stateHolder.setCurrentVideoUrl(video.url)
+            // Update subtitle tracks for the new quality
+            // (will be loaded via sub-add on next FILE_LOADED)
         }
     }
 
@@ -753,7 +868,7 @@ private fun FullscreenControlsOverlay(
         onBack = {
             stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
             (context as? Activity)?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         },
         onTogglePlay = {
             try {
@@ -772,7 +887,7 @@ private fun FullscreenControlsOverlay(
         onMinimize = {
             stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
             (context as? Activity)?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         },
         onLockToggle = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
         onSubtitleClick = onSubtitleClick,

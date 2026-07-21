@@ -1,5 +1,7 @@
 package app.confused.anikuta.feature.watch
 
+import app.confused.anikuta.feature.videoresolver.ResolverServer
+import app.confused.anikuta.feature.videoresolver.SubtitleTrack
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 
@@ -10,7 +12,8 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
  * Per ADR-012: the watch page sits between the anime details page and the
  * fullscreen player. This data class threads ALL context the watch page
  * needs — the video URL, anime metadata (for theming + history), the episode
- * list (for switching), and the source (for re-resolution).
+ * list (for switching), the source (for re-resolution), subtitle/audio tracks
+ * (for external track loading), and the resolved servers (for quality switching).
  */
 data class WatchRequest(
     val videoUrl: String,
@@ -28,4 +31,7 @@ data class WatchRequest(
     val videoAudio: String,
     val videoQuality: Int,
     val episodeList: List<SEpisode>,
+    val subtitleTracks: List<SubtitleTrack> = emptyList(),
+    val audioTracks: List<SubtitleTrack> = emptyList(),
+    val resolvedServers: List<ResolverServer> = emptyList(),
 )

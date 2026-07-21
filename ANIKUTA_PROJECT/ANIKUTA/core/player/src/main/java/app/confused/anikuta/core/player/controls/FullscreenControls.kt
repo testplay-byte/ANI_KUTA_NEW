@@ -48,9 +48,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.detectTapGestures
 import app.confused.anikuta.core.player.PlayerLoadingState
 import app.confused.anikuta.core.player.PlayerPreferences
 import app.confused.anikuta.core.player.PlayerStateHolder
@@ -144,7 +146,9 @@ fun FullscreenControls(
             )
         } else {
             // ── NORMAL (UNLOCKED) STATE ────────────────────────────────
-            // Gradient scrims for readability
+            // Gradient scrims for readability — ALWAYS visible (outside
+            // AnimatedVisibility) so the top/bottom darkening persists even
+            // when controls are hidden. Matches OLD project pattern.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -156,6 +160,30 @@ fun FullscreenControls(
                             1f to Color.Black.copy(alpha = 0.65f),
                         ),
                     ),
+            )
+
+            // Tap-to-toggle overlay: captures taps anywhere on the screen
+            // to show/hide controls. This is ALWAYS present (not inside
+            // AnimatedVisibility) so the user can tap to show controls even
+            // when they're hidden. Matches OLD project's PlayerGestureHandler.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = {
+                                stateHolder.toggleControls()
+                            },
+                            onDoubleTap = { offset ->
+                                // Double-tap left/right = seek ±10s
+                                if (offset.x < size.width / 2) {
+                                    onSeekRelative(-10)
+                                } else {
+                                    onSeekRelative(10)
+                                }
+                            },
+                        )
+                    },
             )
 
             AnimatedVisibility(
