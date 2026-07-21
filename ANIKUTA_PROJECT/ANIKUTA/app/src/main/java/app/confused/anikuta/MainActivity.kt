@@ -259,6 +259,7 @@ private fun AnikutaApp() {
                                 episodeUrl = episode.url,
                                 episodeNumber = episode.episode_number,
                                 sourceId = source.id,
+                                source = source,
                                 videoServer = "",
                                 videoAudio = "",
                                 videoQuality = 0,

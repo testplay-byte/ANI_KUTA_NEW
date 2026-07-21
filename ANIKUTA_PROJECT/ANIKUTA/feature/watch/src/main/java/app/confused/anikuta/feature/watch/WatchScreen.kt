@@ -95,6 +95,7 @@ fun WatchScreen(
     val scope = rememberCoroutineScope()
     val playerPreferences = koinInject<PlayerPreferences>()
     val watchProgressStore = koinInject<WatchProgressStore>()
+    val resolverService = remember { app.confused.anikuta.feature.videoresolver.ResolverService() }
     val stateHolder = remember { PlayerStateHolder() }
 
     // Set the companion playerPreferences BEFORE inflating the view
@@ -287,6 +288,56 @@ fun WatchScreen(
         }
     }
 
+    // Episode switching: re-resolve video for the tapped episode
+    val switchEpisode: (Int) -> Unit = { index ->
+        val episode = watchRequest.episodeList.getOrNull(index)
+        if (episode != null) {
+            stateHolder.setSwitchingEpisode(true)
+            stateHolder.setCurrentEpisodeIndex(index)
+            Log.i(TAG, "Switching to episode ${episode.episode_number}: ${episode.name}")
+
+            scope.launch {
+                try {
+                    val source = watchRequest.source
+                    if (source == null) {
+                        Log.e(TAG, "Source not available for episode switching")
+                        stateHolder.setSwitchingEpisode(false)
+                    } else {
+                        when (val result = resolverService.resolve(source, episode)) {
+                            is app.confused.anikuta.feature.videoresolver.ResolverResult.Success -> {
+                                val firstVideo = result.servers.firstOrNull()
+                                    ?.audioVersions?.firstOrNull()
+                                    ?.videos?.firstOrNull()
+
+                                if (firstVideo != null) {
+                                    mpvView?.let { view ->
+                                        PlayerInitializer.loadVideo(view, firstVideo.url, context)
+                                        stateHolder.setCurrentVideoTitle(firstVideo.videoTitle.ifBlank { episode.name })
+                                        stateHolder.setCurrentVideoUrl(firstVideo.url)
+                                    }
+                                } else {
+                                    Log.w(TAG, "No videos found for episode ${episode.episode_number}")
+                                    stateHolder.setSwitchingEpisode(false)
+                                }
+                            }
+                            is app.confused.anikuta.feature.videoresolver.ResolverResult.NoSources -> {
+                                Log.w(TAG, "No sources for episode ${episode.episode_number}")
+                                stateHolder.setSwitchingEpisode(false)
+                            }
+                            is app.confused.anikuta.feature.videoresolver.ResolverResult.Error -> {
+                                Log.e(TAG, "Error resolving episode: ${result.message}")
+                                stateHolder.setSwitchingEpisode(false)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Episode switch failed", e)
+                    stateHolder.setSwitchingEpisode(false)
+                }
+            }
+        }
+    }
+
     // Cover-color dynamic theming (watch-page.md §7)
     val dynamicScheme = watchRequest.coverColor?.takeIf { it != 0 }?.let {
         generateDynamicScheme(it, darkTheme = true, amoled = false)
@@ -306,6 +357,7 @@ fun WatchScreen(
                 isSwitching = isSwitching,
                 context = context,
                 onBack = onBack,
+                onSwitchEpisode = switchEpisode,
             )
         }
     } else {
@@ -321,6 +373,7 @@ fun WatchScreen(
             isSwitching = isSwitching,
             context = context,
             onBack = onBack,
+            onSwitchEpisode = switchEpisode,
         )
     }
 }
@@ -338,6 +391,7 @@ private fun WatchScreenContent(
     isSwitching: Boolean,
     context: android.content.Context,
     onBack: () -> Unit,
+    onSwitchEpisode: (Int) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -542,8 +596,7 @@ private fun WatchScreenContent(
                                 isCurrent = index == stateHolder.currentEpisodeIndex.value,
                                 isSwitching = isSwitching && index == stateHolder.currentEpisodeIndex.value,
                                 onClick = {
-                                    // TODO: switch episode — re-resolve video
-                                    Log.i(TAG, "Episode ${ep.episode_number} tapped — switching not yet implemented")
+                                    onSwitchEpisode(index)
                                 },
                             )
                         }

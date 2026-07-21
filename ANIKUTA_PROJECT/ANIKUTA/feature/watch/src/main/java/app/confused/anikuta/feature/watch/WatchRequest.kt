@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.watch
 
+import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 
 /**
@@ -22,6 +23,7 @@ data class WatchRequest(
     val episodeUrl: String,
     val episodeNumber: Float,
     val sourceId: Long,
+    val source: AnimeSource? = null,
     val videoServer: String,
     val videoAudio: String,
     val videoQuality: Int,
