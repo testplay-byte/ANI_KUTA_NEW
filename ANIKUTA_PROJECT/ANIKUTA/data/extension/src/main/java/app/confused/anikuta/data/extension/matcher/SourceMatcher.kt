@@ -205,47 +205,82 @@ class SourceMatcher(
     }
 
     /**
-     * Searches ALL sources concurrently and returns every match (for the
-     * source-switcher UI). Matches are sorted by score descending.
+     * Searches trusted sources **sequentially in priority order** (top of the
+     * trusted list = highest priority) and returns matches.
+     *
+     * **Sequential priority-based search (per user request):**
+     * - Sources are searched ONE AT A TIME, in the order they appear in the
+     *   installed-extensions list (the "trusted sources list").
+     * - If a source returns an **exact match** (score = 1.0), that source is
+     *   used immediately — the remaining sources are NOT searched. This is
+     *   faster and avoids unnecessary network calls.
+     * - If no exact match, but there are fuzzy matches (score >= [THRESHOLD]),
+     *   those are collected and the search continues to the next source.
+     * - If a source fails (throws an exception), the error is recorded and the
+     *   search continues with the next source.
+     * - After all sources are searched (or an exact match short-circuits),
+     *   matches are sorted by score descending.
+     *
+     * This is different from the old concurrent approach (which searched all
+     * sources at once via `async + awaitAll`). The sequential approach is:
+     * - **Faster** when the first source has an exact match (only 1 network call)
+     * - **More predictable** — the first source's exact match always wins
+     * - **Less load** on extension servers (doesn't hit all of them simultaneously)
      *
      * Also populates [lastMatchAllErrors] with per-source errors so the UI
      * can show the user WHY auto-match failed (not just "no match").
      */
-    suspend fun matchAll(title: String): List<SourceMatch> = coroutineScope {
+    suspend fun matchAll(title: String): List<SourceMatch> {
         val sources = getCatalogueSources()
         if (sources.isEmpty()) {
             Log.w(TAG, "matchAll: no catalogue sources available")
             lastMatchAllErrors = listOf(
                 "(no sources)" to "No trusted extensions are installed. Install an anime extension from Settings → Extensions first.",
             )
-            return@coroutineScope emptyList()
+            return emptyList()
         }
 
-        Log.i(TAG, "matchAll: searching ${sources.size} sources for '$title': ${sources.map { it.name }}")
-        val results = sources.map { source ->
-            async {
-                Log.d(TAG, "matchAll: starting search on '${source.name}'")
-                searchSourceDetailed(source, title)
-            }
-        }.awaitAll()
+        Log.i(TAG, "matchAll: sequentially searching ${sources.size} sources for '$title': ${sources.map { it.name }}")
+        val allMatches = mutableListOf<SourceMatch>()
+        val errors = mutableListOf<Pair<String, String>>()
 
-        // Collect per-source errors for the UI.
-        val errors = results.mapNotNull { outcome ->
+        for ((index, source) in sources.withIndex()) {
+            Log.i(TAG, "matchAll: searching source ${index + 1}/${sources.size}: '${source.name}'")
+            val outcome = searchSourceDetailed(source, title)
+
             when (outcome) {
-                is SourceSearchOutcome.Failed -> outcome.sourceName to outcome.error
-                is SourceSearchOutcome.Success<*> -> null
+                is SourceSearchOutcome.Success -> {
+                    val matches = outcome.results
+                    if (matches.isNotEmpty()) {
+                        Log.i(TAG, "matchAll: '${source.name}' returned ${matches.size} matches")
+                        allMatches.addAll(matches)
+
+                        // Check for exact match (score = 1.0) — if found, stop searching.
+                        val exactMatch = matches.firstOrNull { it.score >= 1.0 }
+                        if (exactMatch != null) {
+                            Log.i(TAG, "matchAll: EXACT match found from '${source.name}' — stopping search (skipping ${sources.size - index - 1} remaining sources)")
+                            break
+                        }
+                    } else {
+                        Log.d(TAG, "matchAll: '${source.name}' returned 0 matches above threshold")
+                    }
+                }
+                is SourceSearchOutcome.Failed -> {
+                    Log.w(TAG, "matchAll: '${source.name}' failed: ${outcome.error}")
+                    errors.add(outcome.sourceName to outcome.error)
+                }
             }
         }
+
         lastMatchAllErrors = errors.ifEmpty { null }
 
-        val matches = results.filterIsInstance<SourceSearchOutcome.Success<SourceMatch>>()
-            .flatMap { it.results }
-            .sortedByDescending { it.score }
-        Log.i(TAG, "matchAll: found ${matches.size} matches for '$title'")
-        matches.forEach { m ->
+        // Sort by score descending so the best match is first.
+        val sorted = allMatches.sortedByDescending { it.score }
+        Log.i(TAG, "matchAll: found ${sorted.size} total matches for '$title'")
+        sorted.forEach { m ->
             Log.i(TAG, "matchAll: match '${m.sAnime.title}' (score=${m.score}) from '${m.source.name}'")
         }
-        matches
+        return sorted
     }
 
     /**

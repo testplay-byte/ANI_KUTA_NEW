@@ -21,6 +21,13 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // ── Crash handler (install FIRST, before anything that might throw) ──
+        // This ensures that if DI setup or extension loading crashes, the user
+        // gets the ErrorActivity screen instead of a silent crash.
+        Thread.setDefaultUncaughtExceptionHandler(
+            app.confused.anikuta.error.AnikutaCrashHandler(this),
+        )
+
         // Extension app holder — MUST be set before Koin so the extension loader
         // can hand the Application context to ConfigurableAnimeSource extensions.
         ExtensionAppHolder.init(this)

@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
@@ -53,6 +55,11 @@ fun VideoResolverSheet(
 ) {
     if (state is VideoResolverState.Hidden) return
 
+    // Height: max 70% of the screen height (per user request — "increase by a
+    // small amount but not more than 70% of the device's screen height").
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val maxHeight = screenHeight * 0.7f
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -61,7 +68,7 @@ fun VideoResolverSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 500.dp)
+                .heightIn(max = maxHeight)
                 .padding(16.dp),
         ) {
             // ── Header: "Episode N" + close button ──

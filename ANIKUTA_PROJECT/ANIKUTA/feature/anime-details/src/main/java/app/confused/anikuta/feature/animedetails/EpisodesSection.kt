@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -88,11 +87,13 @@ fun EpisodesSection(
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
 ) {
-    var showSourceSwitcher by remember { mutableStateOf(false) }
     var showManualSearch by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // ── Section header: "Episodes" + source indicator + search button ──
+        // ── Section header: "Episodes" + source name (clickable → manual search) ──
+        // Per user request: only ONE option on the right — the extension name.
+        // Clicking it opens the ManualSearchSheet (which has the source selector
+        // + search + link flow). No separate search icon, no SourceSwitcherDialog.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -108,93 +109,67 @@ fun EpisodesSection(
                 color = MaterialTheme.colorScheme.onBackground,
             )
 
-            // Right side: source indicator + search button
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                when {
-                    // Matched + multiple sources → tappable chip
-                    currentMatch != null && allMatches.size > 1 -> {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier.clickable { showSourceSwitcher = true },
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = currentMatch.source.name,
-                                    fontFamily = RobotoFamily,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Icon(
-                                    imageVector = Icons.Filled.ExpandMore,
-                                    contentDescription = "Switch source",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-                    }
-                    // Matched, single source → plain source name
-                    currentMatch != null -> {
-                        Text(
-                            text = currentMatch.source.name,
-                            fontFamily = RobotoFamily,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // No match → "Search manually" CTA button
-                    episodeState is EpisodeState.NoMatch -> {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier.clickable { showManualSearch = true },
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Spacer(modifier = Modifier.size(4.dp))
-                                Text(
-                                    text = "Search manually",
-                                    fontFamily = RobotoFamily,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            }
-                        }
-                    }
-                    else -> { /* searching / loading — source not yet known */ }
-                }
-
-                // Search icon (always available when a source is matched, so the
-                // user can re-search / switch even after a successful match).
-                // Hidden only in the NoMatch state (the CTA button covers it).
-                if (currentMatch != null || episodeState !is EpisodeState.NoMatch) {
-                    IconButton(
-                        onClick = { showManualSearch = true },
-                        modifier = Modifier.size(36.dp),
+            // Right side: the source name (or "Search manually" CTA when no match).
+            // Either way, clicking it opens the ManualSearchSheet.
+            when {
+                // Source matched → show source name as a tappable chip.
+                // Clicking it opens the manual search sheet (which lets the user
+                // switch sources or re-link).
+                currentMatch != null -> {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable { showManualSearch = true },
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "Search sources manually",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = currentMatch.source.name,
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.ExpandMore,
+                                contentDescription = "Search or switch source",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 }
+                // No match → "Search manually" CTA button
+                episodeState is EpisodeState.NoMatch -> {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable { showManualSearch = true },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(modifier = Modifier.size(4.dp))
+                            Text(
+                                text = "Search manually",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
+                }
+                else -> { /* searching / loading — source not yet known */ }
             }
         }
 
@@ -218,20 +193,9 @@ fun EpisodesSection(
         }
     }
 
-    // ── Source switcher dialog ──
-    if (showSourceSwitcher && allMatches.isNotEmpty()) {
-        SourceSwitcherDialog(
-            matches = allMatches,
-            currentSourceId = currentMatch?.source?.id,
-            onSelect = { match ->
-                onSwitchSource(match)
-                showSourceSwitcher = false
-            },
-            onDismiss = { showSourceSwitcher = false },
-        )
-    }
-
     // ── Manual search sheet ──
+    // Opens when the user taps the source name chip or the "Search manually" CTA.
+    // The sheet has the source selector + search bar + results list + link flow.
     if (showManualSearch) {
         ManualSearchSheet(
             initialQuery = initialSearchQuery,

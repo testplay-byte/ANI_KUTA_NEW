@@ -33,6 +33,18 @@
             </intent-filter>
         </activity>
 
+        <!--
+            ErrorActivity — shown by AnikutaCrashHandler when an uncaught
+            exception crashes the app. Shows the crash log + Copy / Restart /
+            Close buttons. Not exported (internal only). Not the launcher.
+        -->
+        <activity
+            android:name=".error.ErrorActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ANIKUTA"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
         <!-- Extension install service: foreground service hosting the PackageInstaller queue. -->
         <service
             android:name="app.confused.anikuta.data.extension.installer.ExtensionInstallService"

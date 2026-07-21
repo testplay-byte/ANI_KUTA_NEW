@@ -114,28 +114,48 @@ fun ManualSearchSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
+        // Design language principle #2: "No drag handle on bottom-up menus."
+        // The owner explicitly does not want the pill-shaped drag handle at the
+        // top of bottom sheets. This is a project-wide rule — always set false.
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 280.dp, max = 640.dp),
+                .heightIn(min = 280.dp, max = 640.dp)
+                .padding(top = 20.dp),
         ) {
             // ── Header ──
-            Text(
-                text = "Search sources manually",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                fontFamily = RobotoFamily,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "Pick a source below, then search. Only that source's results will show.",
-                modifier = Modifier.padding(horizontal = 20.dp),
-                fontFamily = RobotoFamily,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Search sources",
+                        fontFamily = RobotoFamily,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Pick a source, then search",
+                        fontFamily = RobotoFamily,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             // ── Source selector (FilterChip row, above the search bar) ──
             // The user picks ONE source. Only that source is searched.

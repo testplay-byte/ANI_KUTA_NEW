@@ -46,7 +46,10 @@ internal fun ShowContent(
     servers: List<ResolverServer>,
     onVideoSelected: (ResolverVideo) -> Unit,
 ) {
-    var expandedServers by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Accordion behavior: only ONE server expanded at a time.
+    // Tapping a new server auto-collapses the previously expanded one.
+    // null = all collapsed. Tapping an expanded server collapses it.
+    var expandedServer by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -54,10 +57,14 @@ internal fun ShowContent(
     ) {
         items(servers.size) { index ->
             val server = servers[index]
-            val isExpanded = expandedServers.contains(server.name)
+            val isExpanded = expandedServer == server.name
 
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                color = if (isExpanded) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                },
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -66,10 +73,10 @@ internal fun ShowContent(
                         server = server,
                         isExpanded = isExpanded,
                         onToggle = {
-                            expandedServers = if (isExpanded) {
-                                expandedServers - server.name
+                            expandedServer = if (isExpanded) {
+                                null  // collapse if already expanded
                             } else {
-                                expandedServers + server.name
+                                server.name  // expand this one (auto-collapses others)
                             }
                         },
                     )
