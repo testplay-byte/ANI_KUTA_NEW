@@ -30,6 +30,14 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
  * The screen creates an [AnimeDetailViewModel] scoped to `animeId` (survives
  * configuration changes) and observes its state flows.
  *
+ * UI features:
+ * - **Pull-to-refresh** — wraps the content in `PullToRefreshBox`; pulling
+ *   down triggers [AnimeDetailViewModel.refresh] (re-runs all three stages).
+ * - **Source indicator** — next to the "Episodes" header, shows the matched
+ *   source name (or a "Search manually" button when no source matched).
+ * - **Manual search** — a search icon button opens [ManualSearchSheet], where
+ *   the user can search extensions with a custom query and link a result.
+ *
  * @param animeId the AniList anime ID.
  * @param api the AniList API client.
  * @param extensionManager provides installed + trusted sources.
@@ -68,6 +76,9 @@ fun AnimeDetailScreen(
     val currentMatch by vm.currentMatch.collectAsState()
     val allMatches by vm.allMatches.collectAsState()
     val watchedEpisodes by vm.watchedEpisodes.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
+    val isSearching by vm.isSearching.collectAsState()
+    val manualSearchResults by vm.manualSearchResults.collectAsState()
 
     Box(
         modifier = Modifier
@@ -83,10 +94,17 @@ fun AnimeDetailScreen(
                 currentMatch = currentMatch,
                 allMatches = allMatches,
                 watchedEpisodes = watchedEpisodes,
+                isRefreshing = isRefreshing,
+                isSearching = isSearching,
+                manualSearchResults = manualSearchResults,
                 onBack = onBack,
                 onOpenEpisode = onOpenEpisode,
                 onToggleWatched = vm::toggleWatched,
                 onSwitchSource = vm::switchSource,
+                onRefresh = vm::refresh,
+                onManualSearch = { query -> vm.manualSearch(query) },
+                onLinkManual = vm::linkManual,
+                onClearManualSearch = vm::clearManualSearch,
             )
         }
     }

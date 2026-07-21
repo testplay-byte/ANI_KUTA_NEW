@@ -22,6 +22,12 @@ dependencies {
     implementation("io.reactivex:rxandroid:1.2.1")
     // NanoHTTPD (for HttpServer model, used by some anime sources)
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    // Injekt — extensions resolve NetworkHelper (and other singletons) via
+    // Injekt.get<T>(). AnimeHttpSource uses `by injectLazy()` to obtain the
+    // shared NetworkHelper instance registered by App.kt (ADR-029 extension compat).
+    // MUST be `api` so consumers (extensions loaded at runtime) can resolve
+    // the same injekt types from the host classpath.
+    api("com.github.mihonapp:injekt:91edab2317")
     // Compose stable marker (for @Stable annotation — compileOnly, not needed at runtime)
     compileOnly("com.github.skydoves:compose-stable-marker:1.0.5")
     // AndroidX Preference (for PreferenceScreen typealias)

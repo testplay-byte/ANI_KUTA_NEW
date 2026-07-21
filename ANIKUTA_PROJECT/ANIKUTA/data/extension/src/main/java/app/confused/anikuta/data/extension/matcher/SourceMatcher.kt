@@ -148,15 +148,33 @@ class SourceMatcher(
                 }
                 .filter { it.score >= THRESHOLD }
                 .maxByOrNull { it.score }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Catch Throwable (not Exception) so that binary-incompat errors like
+            // IncompatibleClassChangeError / NoClassDefFoundError don't crash the
+            // app — a broken extension is logged + skipped, and the search
+            // continues with the remaining sources.
             Log.e(TAG, "searchSource: Source '${source.name}' search failed for '$query'", e)
             null
         }
     }
 
-    /** Returns the catalogue sources from all installed + trusted extensions. */
+    /**
+     * Returns the catalogue sources from all installed + trusted extensions.
+     *
+     * **CRITICAL:** reads from [AnimeExtensionManager.getInstalledExtensions]
+     * (which reads the `installedMap` StateFlow's current value synchronously)
+     * rather than `installedExtensionsFlow.value`.
+     *
+     * `installedExtensionsFlow` is built with `stateIn(SharingStarted.Lazily, ...)`
+     * — its `.value` returns the empty initial list until the first subscriber
+     * arrives and the `map` operator runs. On a fresh app start where the user
+     * navigates directly to a detail page (without first visiting the Extensions
+     * screen), no subscriber has collected the flow yet, so `.value` was
+     * `emptyList()` → "no sources have this anime" even though 2 extensions
+     * were installed. Reading `getInstalledExtensions()` avoids this race.
+     */
     private fun getCatalogueSources(): List<AnimeCatalogueSource> {
-        return extensionManager.installedExtensionsFlow.value
+        return extensionManager.getInstalledExtensions()
             .flatMap { it.sources }
             .filterIsInstance<AnimeCatalogueSource>()
     }
@@ -190,7 +208,8 @@ class SourceMatcher(
                             thumbnailUrl = sAnime.thumbnail_url,
                         )
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
+                    // See searchSource: catch Throwable for extension isolation.
                     Log.e(TAG, "searchAllSources: '${source.name}' failed for '$query'", e)
                     emptyList()
                 }

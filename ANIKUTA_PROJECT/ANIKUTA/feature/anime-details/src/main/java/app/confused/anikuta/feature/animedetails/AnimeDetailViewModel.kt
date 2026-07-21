@@ -72,6 +72,25 @@ class AnimeDetailViewModel(
     private val _watchedEpisodes = MutableStateFlow<Set<String>>(emptySet())
     val watchedEpisodes: StateFlow<Set<String>> = _watchedEpisodes.asStateFlow()
 
+    /**
+     * `true` while a pull-to-refresh is in progress. Drives the
+     * `PullToRefreshBox` indicator. Set to `true` at the start of [refresh]
+     * and `false` when the full three-stage load completes (or fails).
+     */
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    /**
+     * `true` while a manual search (from the ManualSearchSheet) is running.
+     * Drives the sheet's loading indicator.
+     */
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
+
+    /** The latest manual-search results (for the ManualSearchSheet). */
+    private val _manualSearchResults = MutableStateFlow<List<ManualSearchResult>>(emptyList())
+    val manualSearchResults: StateFlow<List<ManualSearchResult>> = _manualSearchResults.asStateFlow()
+
     private val sourcePrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     init {
@@ -104,20 +123,41 @@ class AnimeDetailViewModel(
 
     /**
      * Refreshes everything: AniList data + source matching + episodes.
-     * Called when the user pulls to refresh.
+     * Called when the user pulls to refresh. Sets [isRefreshing] to `true`
+     * until the full three-stage load completes (or fails), so the
+     * `PullToRefreshBox` indicator stays visible for the duration.
      */
     fun refresh() {
+        if (_isRefreshing.value) return  // ignore double-pull
         Log.i(TAG, "Refreshing anime $anilistId")
-        loadAnimeDetails()
+        _isRefreshing.value = true
+        loadAnimeDetails(refreshing = true)
     }
 
     /**
      * Manually searches all sources with a custom query.
-     * Returns all results so the user can pick the right one.
+     * Updates [manualSearchResults] + [isSearching] so the ManualSearchSheet
+     * can observe them. Returns the results too (for callers that want them).
      */
     suspend fun manualSearch(query: String): List<ManualSearchResult> {
         Log.i(TAG, "Manual search: '$query'")
-        return sourceMatcher.searchAllSources(query)
+        _isSearching.value = true
+        return try {
+            val results = sourceMatcher.searchAllSources(query)
+            _manualSearchResults.value = results
+            results
+        } catch (e: Throwable) {
+            Log.e(TAG, "Manual search failed for '$query'", e)
+            _manualSearchResults.value = emptyList()
+            emptyList()
+        } finally {
+            _isSearching.value = false
+        }
+    }
+
+    /** Clears the manual-search results (when the sheet is dismissed). */
+    fun clearManualSearch() {
+        _manualSearchResults.value = emptyList()
     }
 
     /**
@@ -136,7 +176,7 @@ class AnimeDetailViewModel(
 
     // ── Internal: Stage 1 — Load AniList data ──
 
-    private fun loadAnimeDetails() {
+    private fun loadAnimeDetails(refreshing: Boolean = false) {
         viewModelScope.launch {
             _animeState.value = DetailState.Loading
             try {
@@ -147,9 +187,14 @@ class AnimeDetailViewModel(
                 } else {
                     _animeState.value = DetailState.Error("Anime not found")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Catch Throwable (not Exception) so binary-incompat Errors
+                // (IncompatibleClassChangeError, NoClassDefFoundError) don't
+                // crash the app — they're surfaced as an error state instead.
                 Log.e(TAG, "Failed to load anime $anilistId", e)
                 _animeState.value = DetailState.Error(e.message ?: "Unknown error")
+            } finally {
+                if (refreshing) _isRefreshing.value = false
             }
         }
     }
@@ -169,7 +214,7 @@ class AnimeDetailViewModel(
 
                 if (all.isEmpty()) {
                     _episodeState.value = EpisodeState.NoMatch
-                    Toast.makeText(appContext, "No sources found for this anime", Toast.LENGTH_LONG).show()
+                    Toast.makeText(appContext, "No sources found for this anime — try searching manually", Toast.LENGTH_LONG).show()
                     return@launch
                 }
 
@@ -180,7 +225,8 @@ class AnimeDetailViewModel(
                 _currentMatch.value = selected
                 Log.i(TAG, "Selected source: '${selected.source.name}' (score=${selected.score})")
                 loadEpisodes(selected)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Catch Throwable — see loadAnimeDetails for rationale.
                 Log.e(TAG, "Source matching failed for '$title'", e)
                 _episodeState.value = EpisodeState.Error("Search failed: ${e.message}")
                 Toast.makeText(appContext, "Failed to search sources: ${e.message}", Toast.LENGTH_LONG).show()
@@ -203,7 +249,8 @@ class AnimeDetailViewModel(
                     _episodeState.value = EpisodeState.Loaded(episodes, match.source.name)
                     Log.i(TAG, "Loaded ${episodes.size} episodes from '${match.source.name}'")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Catch Throwable — see loadAnimeDetails for rationale.
                 Log.e(TAG, "Failed to load episodes from '${match.source.name}'", e)
                 val msg = "Failed to load episodes: ${e.message}"
                 _episodeState.value = EpisodeState.Error(msg)

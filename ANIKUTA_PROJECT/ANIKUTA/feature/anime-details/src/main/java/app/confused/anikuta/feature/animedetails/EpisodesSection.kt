@@ -23,13 +23,12 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,18 +46,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 
 /**
- * The episodes section — shows the source indicator, source switcher, and the
- * episode list. Renders the appropriate state (searching / loading / loaded /
- * no-match / error) based on [episodeState].
+ * The episodes section — shows the source indicator, source switcher, manual
+ * search button, and the episode list. Renders the appropriate state
+ * (searching / loading / loaded / no-match / error) based on [episodeState].
  *
  * Per the design language spec (`DESIGN_LANGUAGE/04-screens/episode-list.md`):
  * - Episode rows have alternating backgrounds (zebra stripe).
  * - Watched episodes are grayscale + alpha 0.55f (RenderEffect, API 31+).
  * - The section header shows the source name (tappable → switcher).
+ *
+ * Header layout (next to "Episodes"):
+ * - **Matched, multiple sources:** source-name chip (tappable → switcher) + search icon.
+ * - **Matched, single source:** source name text + search icon.
+ * - **No match / error:** "No source" text + prominent "Search manually" button.
+ * - **Searching / loading:** search icon only (source not yet known).
+ *
+ * The search icon opens [ManualSearchSheet], where the user can search
+ * extensions with a custom query and manually link a result.
  */
 @Composable
 fun EpisodesSection(
@@ -66,14 +76,21 @@ fun EpisodesSection(
     currentMatch: SourceMatcher.SourceMatch?,
     allMatches: List<SourceMatcher.SourceMatch>,
     watchedEpisodes: Set<String>,
+    isSearching: Boolean,
+    manualSearchResults: List<SourceMatcher.ManualSearchResult>,
+    initialSearchQuery: String,
     onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
+    onManualSearch: suspend (String) -> Unit,
+    onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
+    onClearManualSearch: () -> Unit,
 ) {
     var showSourceSwitcher by remember { mutableStateOf(false) }
+    var showManualSearch by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // ── Section header: "Episodes" + source indicator ──
+        // ── Section header: "Episodes" + source indicator + search button ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -88,40 +105,94 @@ fun EpisodesSection(
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-            // Source indicator chip (tappable → switcher)
-            if (currentMatch != null && allMatches.size > 1) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.clickable { showSourceSwitcher = true },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+
+            // Right side: source indicator + search button
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                when {
+                    // Matched + multiple sources → tappable chip
+                    currentMatch != null && allMatches.size > 1 -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.clickable { showSourceSwitcher = true },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = currentMatch.source.name,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.ExpandMore,
+                                    contentDescription = "Switch source",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                    // Matched, single source → plain source name
+                    currentMatch != null -> {
                         Text(
                             text = currentMatch.source.name,
                             fontFamily = RobotoFamily,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    // No match → "Search manually" CTA button
+                    episodeState is EpisodeState.NoMatch -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.clickable { showManualSearch = true },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(modifier = Modifier.size(4.dp))
+                                Text(
+                                    text = "Search manually",
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            }
+                        }
+                    }
+                    else -> { /* searching / loading — source not yet known */ }
+                }
+
+                // Search icon (always available when a source is matched, so the
+                // user can re-search / switch even after a successful match).
+                // Hidden only in the NoMatch state (the CTA button covers it).
+                if (currentMatch != null || episodeState !is EpisodeState.NoMatch) {
+                    IconButton(
+                        onClick = { showManualSearch = true },
+                        modifier = Modifier.size(36.dp),
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.ExpandMore,
-                            contentDescription = "Switch source",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(16.dp),
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = "Search sources manually",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
-            } else if (currentMatch != null) {
-                Text(
-                    text = currentMatch.source.name,
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
 
@@ -137,7 +208,7 @@ fun EpisodesSection(
                 currentSource = currentMatch?.source,
                 onToggleWatched = onToggleWatched,
             )
-            is EpisodeState.NoMatch -> NoSourcesState()
+            is EpisodeState.NoMatch -> NoSourcesState(onSearchManually = { showManualSearch = true })
             is EpisodeState.Error -> EpisodesErrorState(episodeState.message)
         }
     }
@@ -152,6 +223,23 @@ fun EpisodesSection(
                 showSourceSwitcher = false
             },
             onDismiss = { showSourceSwitcher = false },
+        )
+    }
+
+    // ── Manual search sheet ──
+    if (showManualSearch) {
+        ManualSearchSheet(
+            initialQuery = initialSearchQuery,
+            isSearching = isSearching,
+            results = manualSearchResults,
+            onManualSearch = onManualSearch,
+            onLinkManual = { result ->
+                onLinkManual(result.source, result.sAnime)
+            },
+            onDismiss = {
+                showManualSearch = false
+                onClearManualSearch()
+            },
         )
     }
 }

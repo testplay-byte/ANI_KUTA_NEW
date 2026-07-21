@@ -17,8 +17,8 @@ import eu.kanade.tachiyomi.network.ProgressListener
 import eu.kanade.tachiyomi.network.asObservableSuccess
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.newCachelessCallWithProgress
-import eu.kanade.tachiyomi.network.DefaultNetworkHelper
 import eu.kanade.tachiyomi.util.awaitSingle
+import uy.kohesive.injekt.injectLazy
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -35,8 +35,20 @@ import java.security.MessageDigest
 abstract class AnimeHttpSource : AnimeCatalogueSource {
     /**
      * Network service.
+     *
+     * Resolved lazily via Injekt — the shared [NetworkHelper] instance is
+     * registered in `App.kt` (`Injekt.addSingleton(fullType<NetworkHelper>(), ...)`).
+     * This matches the reference Aniyomi `AnimeHttpSource` so that extension
+     * bytecode (compiled against the reference) resolves the same singleton.
+     *
+     * **Binary compat note:** the reference declares this as
+     * `protected val network: NetworkHelper by injectLazy()`. Extensions
+     * compiled against the reference expect this exact declaration. Using a
+     * direct field (`= DefaultNetworkHelper()`) would create a per-source
+     * client instead of the shared singleton, and would diverge from the
+     * reference's field layout.
      */
-    protected val network: NetworkHelper = DefaultNetworkHelper()
+    protected val network: NetworkHelper by injectLazy()
 
     /**
      * Base url of the website without the trailing slash, like: http://mysite.com
