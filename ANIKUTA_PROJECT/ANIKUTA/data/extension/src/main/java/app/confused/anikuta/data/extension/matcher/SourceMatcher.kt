@@ -71,14 +71,17 @@ class SourceMatcher(
     )
 
     /**
-     * The outcome of searching a single source during manual search.
+     * The outcome of searching a single source.
      * Either [Success] (with results) or [Failed] (with an error message).
      * The UI uses this to show per-source failure reasons so the user knows
      * WHY a source didn't return results — not just that it didn't.
+     *
+     * Generic in [T] so it can hold either [SourceMatch] (auto-match) or
+     * [ManualSearchResult] (manual search).
      */
-    sealed class SourceSearchOutcome {
-        data class Success(val results: List<ManualSearchResult>) : SourceSearchOutcome()
-        data class Failed(val sourceName: String, val error: String) : SourceSearchOutcome()
+    sealed class SourceSearchOutcome<out T> {
+        data class Success<T>(val results: List<T>) : SourceSearchOutcome<T>()
+        data class Failed(val sourceName: String, val error: String) : SourceSearchOutcome<Nothing>()
     }
 
     /**
@@ -112,7 +115,7 @@ class SourceMatcher(
 
         for (source in sources) {
             val outcome = searchSourceDetailed(source, title)
-            if (outcome is SourceSearchOutcome.Success && outcome.results.isNotEmpty()) {
+            if (outcome is SourceSearchOutcome.Success<*> && outcome.results.isNotEmpty()) {
                 val match = outcome.results.first()
                 Log.i(TAG, "Matched '${match.sAnime.title}' (score=${match.score}) from '${source.name}'")
                 return Result.Match(match)
@@ -152,12 +155,12 @@ class SourceMatcher(
         val errors = results.mapNotNull { outcome ->
             when (outcome) {
                 is SourceSearchOutcome.Failed -> outcome.sourceName to outcome.error
-                is SourceSearchOutcome.Success -> null
+                is SourceSearchOutcome.Success<*> -> null
             }
         }
         lastMatchAllErrors = errors.ifEmpty { null }
 
-        val matches = results.filterIsInstance<SourceSearchOutcome.Success>()
+        val matches = results.filterIsInstance<SourceSearchOutcome.Success<SourceMatch>>()
             .flatMap { it.results }
             .sortedByDescending { it.score }
         Log.i(TAG, "matchAll: found ${matches.size} matches for '$title'")
@@ -179,7 +182,7 @@ class SourceMatcher(
     private suspend fun searchSourceDetailed(
         source: AnimeCatalogueSource,
         query: String,
-    ): SourceSearchOutcome {
+    ): SourceSearchOutcome<SourceMatch> {
         return try {
             Log.d(TAG, "searchSource: calling getSearchAnime on '${source.name}' with query='$query'")
             val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
@@ -236,7 +239,7 @@ class SourceMatcher(
      */
     suspend fun searchAllSources(query: String): List<ManualSearchResult> = coroutineScope {
         searchAllSourcesDetailed(query)
-            .filterIsInstance<SourceSearchOutcome.Success>()
+            .filterIsInstance<SourceSearchOutcome.Success<ManualSearchResult>>()
             .flatMap { it.results }
     }
 
@@ -249,7 +252,7 @@ class SourceMatcher(
      *   [SourceSearchOutcome.Success] contains the results; [SourceSearchOutcome.Failed]
      *   contains the source name + error message.
      */
-    suspend fun searchAllSourcesDetailed(query: String): List<SourceSearchOutcome> = coroutineScope {
+    suspend fun searchAllSourcesDetailed(query: String): List<SourceSearchOutcome<ManualSearchResult>> = coroutineScope {
         val sources = getCatalogueSources()
         if (sources.isEmpty()) {
             Log.w(TAG, "searchAllSourcesDetailed: no catalogue sources available")
@@ -286,7 +289,7 @@ class SourceMatcher(
                 }
             }
         }.awaitAll().also { outcomes ->
-            val successCount = outcomes.count { it is SourceSearchOutcome.Success }
+            val successCount = outcomes.count { it is SourceSearchOutcome.Success<*> }
             val failCount = outcomes.count { it is SourceSearchOutcome.Failed }
             Log.i(TAG, "searchAllSourcesDetailed: $successCount sources succeeded, $failCount failed")
         }

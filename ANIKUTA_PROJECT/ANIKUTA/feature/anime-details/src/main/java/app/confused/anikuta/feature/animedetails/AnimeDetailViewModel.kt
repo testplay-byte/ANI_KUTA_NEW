@@ -169,12 +169,12 @@ class AnimeDetailViewModel(
         _isSearching.value = true
         return try {
             val outcomes = sourceMatcher.searchAllSourcesDetailed(query)
-            val results = outcomes.filterIsInstance<SourceMatcher.SourceSearchOutcome.Success>()
+            val results = outcomes.filterIsInstance<SourceMatcher.SourceSearchOutcome.Success<SourceMatcher.ManualSearchResult>>()
                 .flatMap { it.results }
             val errors = outcomes.mapNotNull {
                 when (it) {
                     is SourceMatcher.SourceSearchOutcome.Failed -> it.sourceName to it.error
-                    is SourceMatcher.SourceSearchOutcome.Success -> null
+                    is SourceMatcher.SourceSearchOutcome.Success<*> -> null
                 }
             }
             _manualSearchResults.value = results
