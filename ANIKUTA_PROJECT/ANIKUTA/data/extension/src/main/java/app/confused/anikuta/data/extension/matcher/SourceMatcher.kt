@@ -50,6 +50,18 @@ class SourceMatcher(
     )
 
     /**
+     * A raw search result from a source (for manual search).
+     * No similarity scoring — just the raw result.
+     */
+    data class ManualSearchResult(
+        val source: AnimeCatalogueSource,
+        val sAnime: SAnime,
+        val sourceName: String,
+        val title: String,
+        val thumbnailUrl: String?,
+    )
+
+    /**
      * The result of [match]. Either a single best match, no match, or an error.
      */
     sealed class Result {
@@ -150,6 +162,45 @@ class SourceMatcher(
     }
 
     // ── Title matching helpers (ported from OLD_ANIKUTA TitleMatcher.kt) ──
+
+    /**
+     * Searches ALL sources for a custom query (manual search).
+     * Returns raw results without similarity scoring — the user picks manually.
+     */
+    suspend fun searchAllSources(query: String): List<ManualSearchResult> = coroutineScope {
+        val sources = getCatalogueSources()
+        if (sources.isEmpty()) {
+            Log.w(TAG, "searchAllSources: no catalogue sources available")
+            return@coroutineScope emptyList()
+        }
+
+        Log.i(TAG, "searchAllSources: searching ${sources.size} sources for '$query'")
+        sources.map { source ->
+            async {
+                try {
+                    Log.d(TAG, "searchAllSources: searching '${source.name}' for '$query'")
+                    val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
+                    Log.d(TAG, "searchAllSources: '${source.name}' returned ${page.animes.size} results")
+                    page.animes.map { sAnime ->
+                        ManualSearchResult(
+                            source = source,
+                            sAnime = sAnime,
+                            sourceName = source.name,
+                            title = sAnime.title,
+                            thumbnailUrl = sAnime.thumbnail_url,
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "searchAllSources: '${source.name}' failed for '$query'", e)
+                    emptyList()
+                }
+            }
+        }.awaitAll().flatten().also {
+            Log.i(TAG, "searchAllSources: found ${it.size} total results from ${sources.size} sources")
+        }
+    }
+
+    // ── Title matching helpers ──
 
     private fun normalizeTitle(title: String): String {
         return title.lowercase()

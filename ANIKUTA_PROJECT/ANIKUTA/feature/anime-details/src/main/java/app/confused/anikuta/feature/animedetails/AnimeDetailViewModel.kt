@@ -110,6 +110,29 @@ class AnimeDetailViewModel(
         loadAnimeDetails()
     }
 
+    /**
+     * Manually searches all sources with a custom query.
+     * Returns all results so the user can pick the right one.
+     */
+    suspend fun manualSearch(query: String): List<ManualSearchResult> {
+        Log.i(TAG, "Manual search: '$query'")
+        return sourceMatcher.searchAllSources(query)
+    }
+
+    /**
+     * Links a specific source + SAnime to this anime (manual selection).
+     * Persists the source preference and loads episodes.
+     */
+    fun linkManual(source: eu.kanade.tachiyomi.animesource.AnimeCatalogueSource, sAnime: eu.kanade.tachiyomi.animesource.model.SAnime) {
+        val match = SourceMatcher.SourceMatch(source, sAnime, 1.0)
+        _currentMatch.value = match
+        _allMatches.value = listOf(match)
+        sourcePrefs.edit().putLong(sourcePrefKey(anilistId), source.id).apply()
+        Toast.makeText(appContext, "Linked to ${source.name}", Toast.LENGTH_SHORT).show()
+        Log.i(TAG, "Manual link: '${sAnime.title}' from '${source.name}'")
+        loadEpisodes(match)
+    }
+
     // ── Internal: Stage 1 — Load AniList data ──
 
     private fun loadAnimeDetails() {
