@@ -139,7 +139,7 @@ fun WatchScreen(
             val obs = PlayerObserver(object : PlayerObserver.Callback {
                 override fun onEvent(eventId: Int) {
                     when (eventId) {
-                        MPVLib.MPV_EVENT_FILE_LOADED -> {
+                        MPVLib.mpvEventId.MPV_EVENT_FILE_LOADED -> {
                             Log.i(TAG, "MPV_EVENT_FILE_LOADED")
                             stateHolder.setSwitchingEpisode(false)
                             stateHolder.setLoadingState(app.confused.anikuta.core.player.PlayerLoadingState.READY)
@@ -169,7 +169,7 @@ fun WatchScreen(
                                 }
                             }
                         }
-                        MPVLib.MPV_EVENT_END_FILE -> {
+                        MPVLib.mpvEventId.MPV_EVENT_END_FILE -> {
                             Log.i(TAG, "MPV_EVENT_END_FILE")
                         }
                     }
