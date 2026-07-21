@@ -18,17 +18,12 @@ ALTER TABLE animes ADD COLUMN last_watched INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_anilist_id
 ON animes(anilist_id) WHERE anilist_id IS NOT NULL;
 
--- ── categories: add hidden column + seed Default + delete trigger ──
+-- ── categories: add hidden column + seed Default ──
 ALTER TABLE categories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
 
 INSERT OR IGNORE INTO categories (_id, name, category_order, flags, hidden)
 VALUES (1, 'Default', 0, 0, 0);
 
-CREATE TRIGGER IF NOT EXISTS prevent_delete_default_category
-BEFORE DELETE ON categories
-FOR EACH ROW
-BEGIN
-    SELECT CASE
-        WHEN OLD._id = 1 THEN RAISE(ABORT, 'Default category cannot be deleted')
-    END;
-END;
+-- Note: Default-category deletion protection is enforced at the application
+-- layer (CategoryRepositoryImpl.delete throws for id=1). A DB trigger was
+-- omitted because SQLDelight's parser doesn't recognize OLD/NEW in triggers.

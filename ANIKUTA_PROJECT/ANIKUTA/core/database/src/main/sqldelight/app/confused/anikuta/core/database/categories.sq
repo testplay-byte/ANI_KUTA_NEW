@@ -13,15 +13,9 @@ CREATE TABLE categories (
 INSERT OR IGNORE INTO categories (_id, name, category_order, flags, hidden)
 VALUES (1, 'Default', 0, 0, 0);
 
--- Prevent deletion of the Default category at the DB layer (defense-in-depth).
-CREATE TRIGGER IF NOT EXISTS prevent_delete_default_category
-BEFORE DELETE ON categories
-FOR EACH ROW
-BEGIN
-    SELECT CASE
-        WHEN OLD._id = 1 THEN RAISE(ABORT, 'Default category cannot be deleted')
-    END;
-END;
+-- Note: Default-category deletion protection is enforced at the application
+-- layer (CategoryRepositoryImpl.delete throws for id=1). A DB trigger was
+-- removed because SQLDelight's parser doesn't recognize OLD/NEW in triggers.
 
 selectAll:
 SELECT * FROM categories ORDER BY category_order;

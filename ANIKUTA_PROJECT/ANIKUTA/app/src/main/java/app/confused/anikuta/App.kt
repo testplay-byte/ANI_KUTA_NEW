@@ -6,6 +6,7 @@ import android.util.Log
 import app.confused.anikuta.di.databaseModule
 import app.confused.anikuta.di.extensionModule
 import app.confused.anikuta.di.repositoryModule
+import app.confused.anikuta.feature.library.di.libraryModule
 import app.confused.anikuta.core.common.repository.CategoryRepository
 import app.confused.anikuta.core.preferences.di.preferenceModule
 import app.confused.anikuta.core.player.di.playerModule
@@ -79,6 +80,7 @@ class App : Application() {
                 extensionModule,
                 preferenceModule,
                 playerModule,
+                libraryModule,
             )
         }
 
