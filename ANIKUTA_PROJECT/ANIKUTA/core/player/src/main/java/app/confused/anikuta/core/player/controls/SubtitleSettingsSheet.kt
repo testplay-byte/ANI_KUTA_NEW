@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,6 +48,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.core.player.PlayerPreferences
 
 /**
@@ -90,33 +93,76 @@ fun SubtitleSettingsSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
         // Principle #2 — no drag handle (custom header instead).
         dragHandle = null,
     ) {
+        // STICKY HEADER + SCROLLABLE BODY layout.
+        // The header (title + close button) stays visible at the top of the sheet
+        // while the settings panel scrolls below it. This fixes the user's complaint
+        // that the "Subtitle Settings" text was small, normal-weight, and scrolled
+        // away when scrolling down.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // Increased from 420dp to 450dp — user wanted slightly taller.
-                .heightIn(max = 450.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 4.dp),
+                .heightIn(max = 550.dp),
         ) {
-            // Title at the very top-left of the sheet (minimal top padding
-            // so it sits right at the top of the sheet).
-            Text(
-                text = "Subtitle Settings",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 10.dp),
+            // ── STICKY HEADER (does NOT scroll) ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = "Subtitle Settings",
+                        fontFamily = RobotoFamily,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Customize how subtitles look",
+                        fontFamily = RobotoFamily,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.size(32.dp).clickable { onDismiss() },
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
             )
-            // The settings panel scrolls internally
-            SubtitleSettingsPanel(
-                playerPreferences = playerPreferences,
-                onSettingsChanged = onApplySettings,
-            )
+
+            // ── SCROLLABLE BODY (settings panel) ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                SubtitleSettingsPanel(
+                    playerPreferences = playerPreferences,
+                    onSettingsChanged = onApplySettings,
+                )
+            }
         }
     }
 }

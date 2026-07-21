@@ -10,6 +10,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,12 +45,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
 import app.confused.anikuta.core.player.AnikutaMPVView
 import app.confused.anikuta.core.player.EpisodeListItem
@@ -668,51 +673,60 @@ private fun WatchScreenContent(
         }
     } else {
         // ── Minimized mode (YouTube-style watch page) ──
-        // Top bar → Player (16:9) → Scrollable content (description + episodes)
+        // Top bar → Player (16:9, rounded, padded) → Scrollable content
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Top navigation bar — ABOVE the player, always visible
+            // Top navigation bar — floating pill, ABOVE the player
             WatchTopBar(
                 title = watchRequest.animeTitle.ifBlank { watchRequest.videoTitle },
                 onBack = onBack,
             )
 
-            // Player area — 16:9, always present, NEVER disposed
+            // Player area — 16:9, rounded corners, horizontal padding,
+            // small top gap below the top bar. Always present, NEVER disposed.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(Color.Black),
+                    .padding(top = 4.dp)
+                    .padding(horizontal = 6.dp),
             ) {
-                PlayerSurface(
-                    mpvView = mpvView,
-                    initMpv = initMpv,
-                    onMpvViewCreated = onMpvViewCreated,
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                // Controls overlay
-                if (isSwitching) {
-                    EpisodeSwitchingOverlay(
-                        episodeThumbnailUrl = null,
-                        episodeTitle = watchRequest.videoTitle,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.Black),
+                ) {
+                    PlayerSurface(
+                        mpvView = mpvView,
+                        initMpv = initMpv,
+                        onMpvViewCreated = onMpvViewCreated,
                         modifier = Modifier.fillMaxSize(),
                     )
-                } else {
-                    MinimizedControlsOverlay(
-                        stateHolder = stateHolder,
-                        playerPreferences = playerPreferences,
-                        onMaximize = {
-                            stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
-                            (context as? Activity)?.requestedOrientation =
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        },
-                        onQualityClick = onQualityClick,
-                        onSubtitleClick = onSubtitleClick,
-                    )
+
+                    // Controls overlay
+                    if (isSwitching) {
+                        EpisodeSwitchingOverlay(
+                            episodeThumbnailUrl = null,
+                            episodeTitle = watchRequest.videoTitle,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        MinimizedControlsOverlay(
+                            stateHolder = stateHolder,
+                            playerPreferences = playerPreferences,
+                            onMaximize = {
+                                stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
+                                (context as? Activity)?.requestedOrientation =
+                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            },
+                            onQualityClick = onQualityClick,
+                            onSubtitleClick = onSubtitleClick,
+                        )
+                    }
                 }
             }
 
@@ -722,33 +736,48 @@ private fun WatchScreenContent(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                // Episode description
+                // Episode description — uses the CURRENT episode's info (not the
+                // original watch request, so it updates when the user switches episodes)
                 item(key = "description") {
+                    val currentEp = watchRequest.episodeList.getOrNull(stateHolder.currentEpisodeIndex.value)
                     EpisodeDescriptionSection(
-                        episodeNumber = watchRequest.episodeNumber,
-                        episodeTitle = watchRequest.videoTitle,
-                        summary = watchRequest.episodeList.getOrNull(0)?.summary,
+                        episodeNumber = currentEp?.episode_number ?: watchRequest.episodeNumber,
+                        episodeTitle = currentEp?.name ?: watchRequest.videoTitle,
+                        summary = currentEp?.summary,
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                     )
                 }
 
-                // Divider
-                item(key = "divider") {
-                    androidx.compose.material3.HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                    )
-                }
-
-                // Episodes header
+                // Episodes header — accent-colored section header with count badge
                 item(key = "episodes_header") {
-                    Text(
-                        text = "Episodes",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Episodes",
+                            fontFamily = RobotoFamily,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(50),
+                        ) {
+                            Text(
+                                text = "${watchRequest.episodeList.size}",
+                                fontFamily = RobotoFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                 }
 
                 // Episode list (plain Column inside item — NO nested LazyColumn)
@@ -950,39 +979,90 @@ private fun FullscreenControlsOverlay(
 // Helper composables
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The floating pill-shaped top navigation bar.
+ *
+ * Per design language: floating (not edge-to-edge), pill-shaped (rounded
+ * corners), with proper spacing on all sides (top/bottom/left/right).
+ * Contains: back button (circular, secondaryContainer) + anime title
+ * (primary, ExtraBold) + settings button (circular, secondaryContainer).
+ *
+ * Ported from the old project's PlayerScreen.kt floating top bar, adapted
+ * to the new project's design language (#B1F256, RobotoFamily ExtraBold).
+ */
 @Composable
 private fun WatchTopBar(title: String, onBack: () -> Unit) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 2.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp,
     ) {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            IconButton(onClick = onBack) {
+            // Back button — circular, secondaryContainer
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onSurface,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(20.dp),
                 )
             }
+            // Title — centered, ExtraBold, primary color
             Text(
                 text = title.ifBlank { "Now Playing" },
-                style = MaterialTheme.typography.titleMedium,
+                fontFamily = RobotoFamily,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp),
             )
+            // Settings button — circular, secondaryContainer (placeholder for now)
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .clickable { /* TODO: open player settings */ },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
 
+/**
+ * Episode description section — shows the current episode's number, title,
+ * and synopsis in a beautiful card. Per design language: accent-colored
+ * episode number badge, large ExtraBold title, muted summary.
+ */
 @Composable
 private fun EpisodeDescriptionSection(
     episodeNumber: Float,
@@ -990,39 +1070,77 @@ private fun EpisodeDescriptionSection(
     summary: String?,
     modifier: Modifier = Modifier,
 ) {
+    var expanded by remember { mutableStateOf(false) }
+
     Column(modifier = modifier) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // Episode number badge — accent-colored pill
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = "EPISODE ${episodeNumber.toInt()}",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
+            Surface(
+                shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+            ) {
+                Text(
+                    text = "EP ${episodeNumber.toInt()}",
+                    fontFamily = RobotoFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+        // Episode title — large, ExtraBold
         Text(
             text = episodeTitle,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+            fontFamily = RobotoFamily,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
+        // Summary — expandable (3 lines collapsed, full when expanded)
         if (!summary.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = summary,
-                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = RobotoFamily,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 5,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                overflow = if (expanded) TextOverflow.Visible else TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { expanded = !expanded },
+            )
+            Text(
+                text = if (expanded) "Show less" else "Show more",
+                fontFamily = RobotoFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clickable { expanded = !expanded },
             )
         }
     }
 }
 
+/**
+ * A single episode row in the watch page episode list.
+ *
+ * Per design language:
+ * - Alternating card backgrounds (surfaceContainerLow / surfaceContainerHigh)
+ * - Current episode: highlighted with primary border + tonal elevation + "now playing" icon
+ * - Episode number badge (primaryContainer pill)
+ * - Title (Medium weight, onSurface)
+ * - Proper spacing and rounded corners (12dp)
+ * - Switching animation: pulsing background on current episode
+ */
 @Composable
 private fun EpisodeRow(
     episodeNumber: Float,
@@ -1032,46 +1150,103 @@ private fun EpisodeRow(
     isSwitching: Boolean,
     onClick: () -> Unit,
 ) {
+    // Alternating background colors (zebra stripe)
+    val isEven = episodeNumber.toInt() % 2 == 0
+    val baseColor = if (isEven) {
+        MaterialTheme.colorScheme.surfaceContainerLow
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
+    }
+    val cardColor = if (isCurrent) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        baseColor
+    }
+
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isCurrent) MaterialTheme.colorScheme.surfaceContainerHigh
-                else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = if (isCurrent) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        color = cardColor,
+        border = if (isCurrent) {
+            androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
         tonalElevation = if (isCurrent) 3.dp else 0.dp,
+        shadowElevation = if (isCurrent) 2.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = 12.dp, vertical = 3.dp)
             .clickable(onClick = onClick),
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (isCurrent) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Now playing",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.size(8.dp))
+            // Episode number badge — primaryContainer pill
+            Surface(
+                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = formatEpisodeNumber(episodeNumber),
+                        fontFamily = RobotoFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimary
+                               else MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
             }
+            Spacer(modifier = Modifier.size(12.dp))
+            // Episode title + "now playing" indicator
             Column(modifier = Modifier.weight(1f)) {
+                if (isCurrent) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Now playing",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = "Now Playing",
+                            fontFamily = RobotoFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 Text(
-                    text = "EP ${episodeNumber.toInt()}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = episodeTitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = episodeTitle.ifBlank { "Episode ${formatEpisodeNumber(episodeNumber)}" },
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // Switching indicator on current episode
+            if (isCurrent && isSwitching) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
     }
+}
+
+/** Formats an episode number: 5.0f → "5", 5.5f → "5.5", -1f → "?". */
+private fun formatEpisodeNumber(num: Float): String {
+    if (num <= 0f) return "?"
+    return if (num == num.toLong().toFloat()) num.toLong().toString() else num.toString()
 }
