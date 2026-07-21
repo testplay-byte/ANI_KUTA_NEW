@@ -65,6 +65,7 @@ import app.confused.anikuta.core.player.PlayerStateHolder
 import app.confused.anikuta.core.player.WatchProgressStore
 import app.confused.anikuta.core.player.controls.EpisodeSwitchingOverlay
 import app.confused.anikuta.core.player.controls.MinimizedControls
+import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
 import `is`.xyz.mpv.MPVLib
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -106,6 +107,16 @@ fun WatchScreen(
 
     val playerMode by stateHolder.playerMode.collectAsStateWithLifecycle()
     val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
+    val controlsVisible by stateHolder.controlsVisible.collectAsStateWithLifecycle()
+
+    // Auto-hide controls: 5s minimized, 4s fullscreen, 3s lock button
+    LaunchedEffect(controlsVisible, playerMode, isSwitching) {
+        if (controlsVisible && !isSwitching) {
+            val delayMs = if (playerMode == PlayerMode.FULLSCREEN) 4000L else 5000L
+            delay(delayMs)
+            stateHolder.setControlsVisible(false)
+        }
+    }
 
     // Nested BackHandler for fullscreen → minimized
     BackHandler(enabled = playerMode == PlayerMode.FULLSCREEN) {
@@ -275,6 +286,60 @@ fun WatchScreen(
             }
         }
     }
+
+    // Cover-color dynamic theming (watch-page.md §7)
+    val dynamicScheme = watchRequest.coverColor?.takeIf { it != 0 }?.let {
+        generateDynamicScheme(it, darkTheme = true, amoled = false)
+    }
+
+    if (dynamicScheme != null) {
+        MaterialTheme(colorScheme = dynamicScheme) {
+            WatchScreenContent(
+                watchRequest = watchRequest,
+                stateHolder = stateHolder,
+                playerPreferences = playerPreferences,
+                mpvView = mpvView,
+                observer = observer,
+                mpvInitialized = mpvInitialized,
+                initMpv = initMpv,
+                playerMode = playerMode,
+                isSwitching = isSwitching,
+                context = context,
+                onBack = onBack,
+            )
+        }
+    } else {
+        WatchScreenContent(
+            watchRequest = watchRequest,
+            stateHolder = stateHolder,
+            playerPreferences = playerPreferences,
+            mpvView = mpvView,
+            observer = observer,
+            mpvInitialized = mpvInitialized,
+            initMpv = initMpv,
+            playerMode = playerMode,
+            isSwitching = isSwitching,
+            context = context,
+            onBack = onBack,
+        )
+    }
+}
+
+@Composable
+private fun WatchScreenContent(
+    watchRequest: WatchRequest,
+    stateHolder: PlayerStateHolder,
+    playerPreferences: PlayerPreferences,
+    mpvView: AnikutaMPVView?,
+    observer: PlayerObserver?,
+    mpvInitialized: Boolean,
+    initMpv: (AnikutaMPVView) -> Unit,
+    playerMode: PlayerMode,
+    isSwitching: Boolean,
+    context: android.content.Context,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
 
     if (playerMode == PlayerMode.FULLSCREEN) {
         // ── Fullscreen mode ──

@@ -12,4 +12,7 @@ dependencies {
 
     // Coroutines
     implementation(kotlinx.coroutines.core)
+
+    // Palette — for cover-color dynamic theming (watch-page.md §7)
+    implementation("androidx.palette:palette-ktx:1.0.0")
 }
