@@ -60,6 +60,8 @@ dependencies {
     implementation(projects.feature.animeDetails)
     implementation(projects.feature.extensionsSettings)
     implementation(projects.feature.videoResolver)
+    implementation(projects.feature.watch)
+    implementation(projects.feature.player)
 
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)

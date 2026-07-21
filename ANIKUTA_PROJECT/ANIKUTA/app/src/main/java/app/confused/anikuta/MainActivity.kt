@@ -60,6 +60,8 @@ import app.confused.anikuta.feature.videoresolver.ResolverResult
 import app.confused.anikuta.feature.videoresolver.ResolverService
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
+import app.confused.anikuta.feature.watch.WatchRequest
+import app.confused.anikuta.feature.watch.WatchScreen
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.launch
@@ -93,6 +95,7 @@ private fun AnikutaApp() {
     var showSettings by remember { mutableStateOf(false) }
     var showRepoSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
+    var watchTarget by remember { mutableStateOf<WatchRequest?>(null) }
     val anilistApi = remember { AniListApi() }
     val extensionManager: AnimeExtensionManager = koinInject()
     val sourceMatcher: SourceMatcher = koinInject()
@@ -110,8 +113,9 @@ private fun AnikutaApp() {
     }
 
     // Handle back gesture for sub-screens + resolver sheet
-    BackHandler(enabled = detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden) {
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden) {
         when {
+            watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
             detailAnimeId != null -> {
                 detailAnimeId = null
@@ -156,6 +160,13 @@ private fun AnikutaApp() {
             .background(MaterialTheme.colorScheme.background),
     ) {
         when {
+            // Watch page (full screen, no bottom nav) — MUST come before detailAnimeId
+            watchTarget != null -> {
+                WatchScreen(
+                    watchRequest = watchTarget!!,
+                    onBack = { watchTarget = null },
+                )
+            }
             // Detail screen (full screen, no bottom nav)
             detailAnimeId != null -> {
                 AnimeDetailScreen(
@@ -234,8 +245,26 @@ private fun AnikutaApp() {
                     onVideoSelected = { video ->
                         Log.i("AnikutaResolver", "Video selected: ${video.quality} (${video.url})")
                         resolverState = VideoResolverState.Hidden
-                        Toast.makeText(context, "Playing ${video.quality}\u2026", Toast.LENGTH_SHORT).show()
-                        // Phase 6: open the watch page / player with this video
+                        val episode = resolveTarget?.first
+                        val source = resolveTarget?.second
+                        if (episode != null && source != null) {
+                            watchTarget = WatchRequest(
+                                videoUrl = video.url,
+                                videoHeaders = video.videoHeaders,
+                                videoTitle = video.videoTitle.ifBlank { episode.name },
+                                anilistId = detailAnimeId ?: 0,
+                                animeTitle = "",
+                                coverUrl = null,
+                                coverColor = null,
+                                episodeUrl = episode.url,
+                                episodeNumber = episode.episode_number,
+                                sourceId = source.id,
+                                videoServer = "",
+                                videoAudio = "",
+                                videoQuality = 0,
+                                episodeList = listOf(episode),
+                            )
+                        }
                     },
                     onRetry = {
                         resolveTarget?.let { (episode, source) ->

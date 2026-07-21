@@ -103,7 +103,7 @@ object VideoTitleParser {
                                 url = pv.video.videoUrl,
                                 videoTitle = pv.video.videoTitle,
                                 videoHeaders = pv.video.headers?.let { headers ->
-                                    headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+                                    headers.names().joinToString("\n") { "$it: ${headers[it]}" }
                                 },
                             )
                         },
