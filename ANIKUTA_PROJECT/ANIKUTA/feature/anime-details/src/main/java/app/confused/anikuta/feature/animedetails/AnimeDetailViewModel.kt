@@ -10,6 +10,7 @@ import app.confused.anikuta.core.anilist.model.AniListAnime
 import app.confused.anikuta.core.anilist.model.displayTitle
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
+import app.confused.anikuta.data.extension.matcher.SourceMatcher.ManualSearchResult
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.Dispatchers
