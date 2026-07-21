@@ -78,6 +78,9 @@ fun EpisodesSection(
     watchedEpisodes: Set<String>,
     isSearching: Boolean,
     manualSearchResults: List<SourceMatcher.ManualSearchResult>,
+    manualSearchErrors: List<Pair<String, String>>,
+    autoMatchErrors: List<Pair<String, String>>?,
+    hasSearched: Boolean,
     initialSearchQuery: String,
     onOpenEpisode: (SEpisode, AnimeSource) -> Unit,
     onToggleWatched: (String) -> Unit,
@@ -208,7 +211,10 @@ fun EpisodesSection(
                 currentSource = currentMatch?.source,
                 onToggleWatched = onToggleWatched,
             )
-            is EpisodeState.NoMatch -> NoSourcesState(onSearchManually = { showManualSearch = true })
+            is EpisodeState.NoMatch -> NoSourcesState(
+                onSearchManually = { showManualSearch = true },
+                autoMatchErrors = autoMatchErrors,
+            )
             is EpisodeState.Error -> EpisodesErrorState(episodeState.message)
         }
     }
@@ -232,6 +238,8 @@ fun EpisodesSection(
             initialQuery = initialSearchQuery,
             isSearching = isSearching,
             results = manualSearchResults,
+            errors = manualSearchErrors,
+            hasSearched = hasSearched,
             onManualSearch = onManualSearch,
             onLinkManual = { result ->
                 onLinkManual(result.source, result.sAnime)

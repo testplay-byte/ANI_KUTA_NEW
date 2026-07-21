@@ -91,6 +91,28 @@ class AnimeDetailViewModel(
     private val _manualSearchResults = MutableStateFlow<List<ManualSearchResult>>(emptyList())
     val manualSearchResults: StateFlow<List<ManualSearchResult>> = _manualSearchResults.asStateFlow()
 
+    /**
+     * Per-source errors from the most recent manual search.
+     * Each pair is (sourceName, errorMessage). Empty if all sources succeeded.
+     * The ManualSearchSheet shows these so the user knows WHY a source didn't
+     * return results — not just that it didn't.
+     */
+    private val _manualSearchErrors = MutableStateFlow<List<Pair<String, String>>>(emptyList())
+    val manualSearchErrors: StateFlow<List<Pair<String, String>>> = _manualSearchErrors.asStateFlow()
+
+    /**
+     * Per-source errors from the most recent auto-match (matchAll).
+     * `null` if matchAll hasn't run. Empty if all sources succeeded.
+     * The NoSourcesState UI shows these so the user knows WHY auto-match failed.
+     */
+    private val _autoMatchErrors = MutableStateFlow<List<Pair<String, String>>?>(null)
+    val autoMatchErrors: StateFlow<List<Pair<String, String>>?> = _autoMatchErrors.asStateFlow()
+
+    /** `true` if at least one manual search has been performed (so the sheet
+     *  can distinguish "haven't searched yet" from "searched, 0 results"). */
+    private val _hasSearched = MutableStateFlow(false)
+    val hasSearched: StateFlow<Boolean> = _hasSearched.asStateFlow()
+
     private val sourcePrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     init {
@@ -136,28 +158,52 @@ class AnimeDetailViewModel(
 
     /**
      * Manually searches all sources with a custom query.
-     * Updates [manualSearchResults] + [isSearching] so the ManualSearchSheet
-     * can observe them. Returns the results too (for callers that want them).
+     * Uses [SourceMatcher.searchAllSourcesDetailed] so per-source errors are
+     * captured and shown in the UI (not just swallowed).
+     *
+     * Updates [manualSearchResults], [manualSearchErrors], [isSearching],
+     * and [hasSearched] so the ManualSearchSheet can render all states.
      */
     suspend fun manualSearch(query: String): List<ManualSearchResult> {
         Log.i(TAG, "Manual search: '$query'")
         _isSearching.value = true
         return try {
-            val results = sourceMatcher.searchAllSources(query)
+            val outcomes = sourceMatcher.searchAllSourcesDetailed(query)
+            val results = outcomes.filterIsInstance<SourceMatcher.SourceSearchOutcome.Success>()
+                .flatMap { it.results }
+            val errors = outcomes.mapNotNull {
+                when (it) {
+                    is SourceMatcher.SourceSearchOutcome.Failed -> it.sourceName to it.error
+                    is SourceMatcher.SourceSearchOutcome.Success -> null
+                }
+            }
             _manualSearchResults.value = results
+            _manualSearchErrors.value = errors
+            _hasSearched.value = true
+            if (results.isEmpty() && errors.isNotEmpty()) {
+                Toast.makeText(
+                    appContext,
+                    "All sources failed: ${errors.first().second}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
             results
         } catch (e: Throwable) {
             Log.e(TAG, "Manual search failed for '$query'", e)
             _manualSearchResults.value = emptyList()
+            _manualSearchErrors.value = listOf("(search)" to (e.message ?: e::class.java.simpleName))
+            _hasSearched.value = true
             emptyList()
         } finally {
             _isSearching.value = false
         }
     }
 
-    /** Clears the manual-search results (when the sheet is dismissed). */
+    /** Clears the manual-search results + errors (when the sheet is dismissed). */
     fun clearManualSearch() {
         _manualSearchResults.value = emptyList()
+        _manualSearchErrors.value = emptyList()
+        _hasSearched.value = false
     }
 
     /**
@@ -211,10 +257,21 @@ class AnimeDetailViewModel(
                 // Search all sources (for the switcher) + get all matches.
                 val all = sourceMatcher.matchAll(title)
                 _allMatches.value = all
+                // Capture per-source errors so the UI can show WHY auto-match failed.
+                _autoMatchErrors.value = sourceMatcher.lastMatchAllErrors
 
                 if (all.isEmpty()) {
                     _episodeState.value = EpisodeState.NoMatch
-                    Toast.makeText(appContext, "No sources found for this anime — try searching manually", Toast.LENGTH_LONG).show()
+                    val errors = sourceMatcher.lastMatchAllErrors
+                    if (errors != null && errors.isNotEmpty()) {
+                        Toast.makeText(
+                            appContext,
+                            "Sources failed: ${errors.first().second}",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    } else {
+                        Toast.makeText(appContext, "No sources found for this anime — try searching manually", Toast.LENGTH_LONG).show()
+                    }
                     return@launch
                 }
 

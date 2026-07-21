@@ -1,40 +1,36 @@
 package eu.kanade.tachiyomi.network
 
 import android.content.Context
+import eu.kanade.tachiyomi.network.interceptor.IgnoreGzipInterceptor
+import eu.kanade.tachiyomi.network.interceptor.UncaughtExceptionInterceptor
+import eu.kanade.tachiyomi.network.interceptor.UserAgentInterceptor
 import okhttp3.Cache
-import okhttp3.Headers
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import rx.Observable
-import eu.kanade.tachiyomi.util.awaitSingle
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
- * NetworkHelper — provides the OkHttpClient and a JSON parser.
+ * NetworkHelper — provides the OkHttpClient used by all extension sources.
  *
  * **CRITICAL — binary compatibility (ADR-029):**
  * This MUST be a `class` (not an `interface`). Keiyoushi/Aniyomi extensions
  * are compiled against the reference `eu.kanade.tachiyomi.network.NetworkHelper`
  * which is a class. If this is declared as an interface, the extension's
  * bytecode (which uses `invokevirtual NetworkHelper.getClient()`) throws
- * `IncompatibleClassChangeError: Found interface NetworkHelper, but class was
- * expected` at runtime — crashing the app whenever a source tries to make an
- * HTTP request.
- *
- * Ported from the Aniyomi reference's `NetworkHelper.kt` (in `:core:common`),
- * simplified to remove DoH / Cloudflare / verbose-logging interceptors that
- * require additional modules we don't have yet. The essential API surface
- * (`client`, `cloudflareClient`, `defaultUserAgentProvider()`) is preserved
- * so extension bytecode resolves correctly.
+ * `IncompatibleClassChangeError` at runtime.
  *
  * Registered in Injekt by `App.kt` so extensions that call
  * `Injekt.get<NetworkHelper>()` (via `injectLazy()` in `AnimeHttpSource`)
  * can resolve it.
+ *
+ * **Interceptors:**
+ * The client is configured with the same interceptor chain as the reference:
+ * - [UncaughtExceptionInterceptor] — wraps non-IOExceptions as IOExceptions
+ * - [UserAgentInterceptor] — adds a default User-Agent header
+ * - [IgnoreGzipInterceptor] — allows Brotli to handle compression
+ *
+ * Cloudflare and DoH interceptors are omitted (they require WebView and
+ * additional deps that aren't set up yet).
  *
  * @param context used for the OkHttp cache directory (optional — null skips caching).
  */
@@ -48,6 +44,9 @@ class NetworkHelper(
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(2, TimeUnit.MINUTES)
+        .addInterceptor(UncaughtExceptionInterceptor())
+        .addInterceptor(UserAgentInterceptor(::defaultUserAgentProvider))
+        .addNetworkInterceptor(IgnoreGzipInterceptor())
         .apply {
             // Cache (5 MiB) — only if we have a context with a cache dir.
             cacheDir?.let { dir ->
@@ -84,81 +83,3 @@ class NetworkHelper(
  * `DefaultNetworkHelper()` ≡ `NetworkHelper()` (no-arg → no cache).
  */
 typealias DefaultNetworkHelper = NetworkHelper
-
-// ── Request builders (extensions import these top-level functions) ──
-
-/** GET request builder. Extensions call this to create GET requests. */
-fun GET(
-    url: String,
-    headers: Headers = Headers.Builder().build(),
-    cache: okhttp3.CacheControl? = null,
-): Request {
-    val builder = Request.Builder().url(url).headers(headers)
-    if (cache != null) builder.cacheControl(cache)
-    return builder.build()
-}
-
-/** POST request builder. Extensions call this to create POST requests. */
-fun POST(
-    url: String,
-    body: okhttp3.RequestBody,
-    headers: Headers = Headers.Builder().build(),
-    cache: okhttp3.CacheControl? = null,
-): Request {
-    val builder = Request.Builder().url(url).post(body).headers(headers)
-    if (cache != null) builder.cacheControl(cache)
-    return builder.build()
-}
-
-/** ProgressListener — for download progress tracking. */
-interface ProgressListener {
-    fun onProgress(progress: Long, total: Long, done: Boolean)
-}
-
-/** Extension function: convert an OkHttp Call to an RxJava Observable. */
-fun okhttp3.Call.asObservableSuccess(): Observable<Response> {
-    return Observable.create { subscriber ->
-        try {
-            val response = execute()
-            if (response.isSuccessful) {
-                subscriber.onNext(response)
-                subscriber.onCompleted()
-            } else {
-                subscriber.onError(Exception("HTTP ${response.code}"))
-            }
-        } catch (e: Exception) {
-            subscriber.onError(e)
-        }
-    }
-}
-
-/** Extension function: await the success of an RxJava Observable.
- * Delegates to eu.kanade.tachiyomi.util.awaitSingle (from RxExtension.kt). */
-suspend fun <T> Observable<T>.awaitSuccess(): T = this.awaitSingle()
-
-/** Extension function: suspend and await an OkHttp Call's response directly. */
-suspend fun okhttp3.Call.awaitSuccess(): okhttp3.Response {
-    return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-        enqueue(object : okhttp3.Callback {
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                if (response.isSuccessful) {
-                    cont.resume(response)
-                } else {
-                    cont.resumeWithException(Exception("HTTP ${response.code}"))
-                }
-            }
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                cont.resumeWithException(e)
-            }
-        })
-    }
-}
-
-/** Extension function: create a cacheless OkHttp call with progress. */
-fun OkHttpClient.newCachelessCallWithProgress(
-    request: Request,
-    listener: ProgressListener,
-): okhttp3.Call {
-    // Simple implementation — wraps the call with a progress-tracking interceptor
-    return newCall(request)
-}

@@ -7,13 +7,27 @@ android {
     namespace = "app.confused.anikuta.core.sourceapi"
 }
 
+// Enable context receivers — the reference's OkHttpExtensions.kt uses
+// `context(Json)` for Response.parseAs<T>() / decodeFromJsonResponse().
+// Extensions compiled against the reference call these with a context receiver,
+// so we MUST match the compiled signature (context receiver → extra parameter).
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xcontext-receivers")
+    }
+}
+
 dependencies {
     // OkHttp (for Headers in Video, networking in HttpSource)
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     // Jsoup (for ParsedAnimeHttpSource, used by extensions)
     implementation("org.jsoup:jsoup:1.19.1")
-    // kotlinx-serialization (for Video serialization)
+    // kotlinx-serialization (for Video serialization + Response.parseAs<T>())
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+    // kotlinx-serialization-json-okio — for decodeFromBufferedSource() used by
+    // OkHttpExtensions.parseAs<T>() (extensions call response.parseAs<T>() to
+    // parse JSON responses). Without this, NoClassDefFoundError at runtime.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-okio:1.9.0")
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
     // RxJava 1.x (for the deprecated fetch* API that extensions use — ADR-029 extension compat)

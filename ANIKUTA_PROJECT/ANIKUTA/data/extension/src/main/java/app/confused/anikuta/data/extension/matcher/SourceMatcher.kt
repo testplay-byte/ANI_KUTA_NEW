@@ -37,6 +37,15 @@ class SourceMatcher(
 ) {
 
     /**
+     * Per-source errors from the most recent [matchAll] call.
+     * `null` if [matchAll] hasn't been called yet. Empty if all sources succeeded.
+     * The UI reads this to show the user WHY auto-match failed (not just "no match").
+     */
+    @Volatile
+    var lastMatchAllErrors: List<Pair<String, String>>? = null
+        private set
+
+    /**
      * A single source + SAnime match with a similarity score.
      *
      * @param source the catalogue source that returned the match.
@@ -60,6 +69,17 @@ class SourceMatcher(
         val title: String,
         val thumbnailUrl: String?,
     )
+
+    /**
+     * The outcome of searching a single source during manual search.
+     * Either [Success] (with results) or [Failed] (with an error message).
+     * The UI uses this to show per-source failure reasons so the user knows
+     * WHY a source didn't return results — not just that it didn't.
+     */
+    sealed class SourceSearchOutcome {
+        data class Success(val results: List<ManualSearchResult>) : SourceSearchOutcome()
+        data class Failed(val sourceName: String, val error: String) : SourceSearchOutcome()
+    }
 
     /**
      * The result of [match]. Either a single best match, no match, or an error.
@@ -91,9 +111,12 @@ class SourceMatcher(
         Log.i(TAG, "Searching ${sources.size} sources for '$title'")
 
         for (source in sources) {
-            val match = searchSource(source, title) ?: continue
-            Log.i(TAG, "Matched '${match.sAnime.title}' (score=${match.score}) from '${source.name}'")
-            return Result.Match(match)
+            val outcome = searchSourceDetailed(source, title)
+            if (outcome is SourceSearchOutcome.Success && outcome.results.isNotEmpty()) {
+                val match = outcome.results.first()
+                Log.i(TAG, "Matched '${match.sAnime.title}' (score=${match.score}) from '${source.name}'")
+                return Result.Match(match)
+            }
         }
         Log.i(TAG, "No source has '$title'")
         return Result.NoMatch
@@ -103,11 +126,17 @@ class SourceMatcher(
      * Searches ALL sources concurrently and returns every match (for the
      * source-switcher UI). Matches are sorted by score descending so the
      * best match is first.
+     *
+     * Also populates [lastMatchAllErrors] with per-source errors so the UI
+     * can show the user WHY auto-match failed (not just "no match").
      */
     suspend fun matchAll(title: String): List<SourceMatch> = coroutineScope {
         val sources = getCatalogueSources()
         if (sources.isEmpty()) {
             Log.w(TAG, "matchAll: no catalogue sources available")
+            lastMatchAllErrors = listOf(
+                "(no sources)" to "No trusted extensions are installed. Install an anime extension from Settings → Extensions first.",
+            )
             return@coroutineScope emptyList()
         }
 
@@ -115,11 +144,22 @@ class SourceMatcher(
         val results = sources.map { source ->
             async {
                 Log.d(TAG, "matchAll: starting search on '${source.name}'")
-                searchSource(source, title)
+                searchSourceDetailed(source, title)
             }
         }.awaitAll()
 
-        val matches = results.filterNotNull().sortedByDescending { it.score }
+        // Collect per-source errors for the UI.
+        val errors = results.mapNotNull { outcome ->
+            when (outcome) {
+                is SourceSearchOutcome.Failed -> outcome.sourceName to outcome.error
+                is SourceSearchOutcome.Success -> null
+            }
+        }
+        lastMatchAllErrors = errors.ifEmpty { null }
+
+        val matches = results.filterIsInstance<SourceSearchOutcome.Success>()
+            .flatMap { it.results }
+            .sortedByDescending { it.score }
         Log.i(TAG, "matchAll: found ${matches.size} matches for '$title'")
         matches.forEach { m ->
             Log.i(TAG, "matchAll: match '${m.sAnime.title}' (score=${m.score}) from '${m.source.name}'")
@@ -128,33 +168,38 @@ class SourceMatcher(
     }
 
     /**
-     * Searches one source and returns the best match if any result clears the
-     * similarity threshold. Returns `null` on no match or error (errors are
-     * logged and swallowed so the search continues with the next source).
+     * Searches one source and returns the outcome: [SourceSearchOutcome.Success]
+     * (with matches above the threshold, or empty if the source returned results
+     * but none matched) or [SourceSearchOutcome.Failed] (if the source threw).
+     *
+     * Unlike the old `searchSource` (which returned `null` for both no-match and
+     * error), this lets [matchAll] distinguish "no results" from "error" so the
+     * UI can show per-source failure reasons.
      */
-    private suspend fun searchSource(
+    private suspend fun searchSourceDetailed(
         source: AnimeCatalogueSource,
         query: String,
-    ): SourceMatch? {
+    ): SourceSearchOutcome {
         return try {
             Log.d(TAG, "searchSource: calling getSearchAnime on '${source.name}' with query='$query'")
             val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
             Log.d(TAG, "searchSource: '${source.name}' returned ${page.animes.size} results")
             val normalizedQuery = normalizeTitle(query)
-            page.animes
+            val matches = page.animes
                 .map { sAnime ->
                     val score = similarity(normalizedQuery, normalizeTitle(sAnime.title))
                     SourceMatch(source, sAnime, score)
                 }
                 .filter { it.score >= THRESHOLD }
-                .maxByOrNull { it.score }
+            SourceSearchOutcome.Success(matches)
         } catch (e: Throwable) {
             // Catch Throwable (not Exception) so that binary-incompat errors like
             // IncompatibleClassChangeError / NoClassDefFoundError don't crash the
             // app — a broken extension is logged + skipped, and the search
             // continues with the remaining sources.
+            val msg = e.cause?.message ?: e.message ?: e::class.java.simpleName
             Log.e(TAG, "searchSource: Source '${source.name}' search failed for '$query'", e)
-            null
+            SourceSearchOutcome.Failed(source.name, msg)
         }
     }
 
@@ -184,22 +229,46 @@ class SourceMatcher(
     /**
      * Searches ALL sources for a custom query (manual search).
      * Returns raw results without similarity scoring — the user picks manually.
+     *
+     * **Note:** per-source errors are swallowed here (logged but not returned).
+     * For a version that returns per-source errors so the UI can show them,
+     * use [searchAllSourcesDetailed].
      */
     suspend fun searchAllSources(query: String): List<ManualSearchResult> = coroutineScope {
+        searchAllSourcesDetailed(query)
+            .filterIsInstance<SourceSearchOutcome.Success>()
+            .flatMap { it.results }
+    }
+
+    /**
+     * Searches ALL sources for a custom query, returning per-source outcomes
+     * (success OR failure). The UI uses this to show the user WHY a source
+     * didn't return results — not just that it didn't.
+     *
+     * @return a list of [SourceSearchOutcome] — one per source searched.
+     *   [SourceSearchOutcome.Success] contains the results; [SourceSearchOutcome.Failed]
+     *   contains the source name + error message.
+     */
+    suspend fun searchAllSourcesDetailed(query: String): List<SourceSearchOutcome> = coroutineScope {
         val sources = getCatalogueSources()
         if (sources.isEmpty()) {
-            Log.w(TAG, "searchAllSources: no catalogue sources available")
-            return@coroutineScope emptyList()
+            Log.w(TAG, "searchAllSourcesDetailed: no catalogue sources available")
+            return@coroutineScope listOf(
+                SourceSearchOutcome.Failed(
+                    sourceName = "(no sources)",
+                    error = "No trusted extensions are installed. Install an anime extension from Settings → Extensions first.",
+                ),
+            )
         }
 
-        Log.i(TAG, "searchAllSources: searching ${sources.size} sources for '$query'")
+        Log.i(TAG, "searchAllSourcesDetailed: searching ${sources.size} sources for '$query'")
         sources.map { source ->
             async {
                 try {
-                    Log.d(TAG, "searchAllSources: searching '${source.name}' for '$query'")
+                    Log.d(TAG, "searchAllSourcesDetailed: searching '${source.name}' for '$query'")
                     val page = source.getSearchAnime(1, query, AnimeFilterList(emptyList()))
-                    Log.d(TAG, "searchAllSources: '${source.name}' returned ${page.animes.size} results")
-                    page.animes.map { sAnime ->
+                    Log.d(TAG, "searchAllSourcesDetailed: '${source.name}' returned ${page.animes.size} results")
+                    val results = page.animes.map { sAnime ->
                         ManualSearchResult(
                             source = source,
                             sAnime = sAnime,
@@ -208,14 +277,18 @@ class SourceMatcher(
                             thumbnailUrl = sAnime.thumbnail_url,
                         )
                     }
+                    SourceSearchOutcome.Success(results)
                 } catch (e: Throwable) {
-                    // See searchSource: catch Throwable for extension isolation.
-                    Log.e(TAG, "searchAllSources: '${source.name}' failed for '$query'", e)
-                    emptyList()
+                    // Catch Throwable — see searchSource for rationale.
+                    val errorMsg = e.cause?.message ?: e.message ?: e::class.java.simpleName
+                    Log.e(TAG, "searchAllSourcesDetailed: '${source.name}' failed for '$query'", e)
+                    SourceSearchOutcome.Failed(source.name, errorMsg)
                 }
             }
-        }.awaitAll().flatten().also {
-            Log.i(TAG, "searchAllSources: found ${it.size} total results from ${sources.size} sources")
+        }.awaitAll().also { outcomes ->
+            val successCount = outcomes.count { it is SourceSearchOutcome.Success }
+            val failCount = outcomes.count { it is SourceSearchOutcome.Failed }
+            Log.i(TAG, "searchAllSourcesDetailed: $successCount sources succeeded, $failCount failed")
         }
     }
 

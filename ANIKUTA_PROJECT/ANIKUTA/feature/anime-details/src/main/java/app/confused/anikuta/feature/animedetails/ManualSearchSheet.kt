@@ -61,15 +61,22 @@ import kotlinx.coroutines.launch
  *  3. Pick the right result from the list — tapping one links it to this
  *     anime and loads its episode list.
  *
- * The sheet observes [SourceMatcher.ManualSearchResult] from the ViewModel
- * (via [onManualSearch] + [results] + [isSearching]) so the search state
- * survives configuration changes.
+ * The sheet shows these states:
+ *  - **Haven't searched:** placeholder prompt ("Type a title and tap search")
+ *  - **Searching:** spinner ("Searching all sources…")
+ *  - **Searched, results found:** scrollable results list
+ *  - **Searched, no results, all sources failed:** error cards showing
+ *    per-source failure reasons — so the user knows WHY, not just that it failed
+ *  - **Searched, no results, sources succeeded:** "No results found" message
  *
  * @param initialQuery the anime's display title (pre-fills the search field).
  * @param isSearching `true` while the search is running (drives the spinner).
  * @param results the current search results (empty until a search completes).
+ * @param errors per-source errors from the most recent search. Each pair is
+ *   (sourceName, errorMessage). Empty if all sources succeeded.
+ * @param hasSearched `true` if at least one search has been performed.
  * @param onManualSearch called when the user taps search (suspend — the VM
- *   updates [results] + [isSearching]).
+ *   updates [results] + [errors] + [isSearching]).
  * @param onLinkManual called when the user taps a result (links source + anime).
  * @param onDismiss called when the sheet is dismissed (swipe-down or back).
  */
@@ -79,6 +86,8 @@ fun ManualSearchSheet(
     initialQuery: String,
     isSearching: Boolean,
     results: List<SourceMatcher.ManualSearchResult>,
+    errors: List<Pair<String, String>>,
+    hasSearched: Boolean,
     onManualSearch: suspend (String) -> Unit,
     onLinkManual: (SourceMatcher.ManualSearchResult) -> Unit,
     onDismiss: () -> Unit,
@@ -159,7 +168,7 @@ fun ManualSearchSheet(
                 }
             }
 
-            // ── Results ──
+            // ── Results / states ──
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     isSearching && results.isEmpty() -> {
@@ -182,7 +191,8 @@ fun ManualSearchSheet(
                             )
                         }
                     }
-                    results.isEmpty() -> {
+                    !hasSearched -> {
+                        // Haven't searched yet — prompt the user
                         Text(
                             text = "Type a title and tap the search icon.\nResults from every trusted extension will appear here.",
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -191,12 +201,93 @@ fun ManualSearchSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    results.isEmpty() && errors.isNotEmpty() -> {
+                        // Searched but ALL sources failed — show per-source errors
+                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text(
+                                text = "All sources failed to search.",
+                                fontFamily = RobotoFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Check the error details below — this usually means the app is missing classes the extension needs.",
+                                fontFamily = RobotoFamily,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            errors.forEach { (sourceName, error) ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 3.dp),
+                                ) {
+                                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                        Text(
+                                            text = sourceName,
+                                            fontFamily = RobotoFamily,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                        Text(
+                                            text = error,
+                                            fontFamily = RobotoFamily,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                                            maxLines = 4,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    results.isEmpty() -> {
+                        // Searched, sources succeeded, but no results found
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = "No results found.",
+                                fontFamily = RobotoFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Try a different title or spelling.",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     else -> {
                         LazyColumn(
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
+                            // Show per-source errors at the top (if any sources failed)
+                            if (errors.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "${errors.size} source(s) failed — showing results from successful sources only.",
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
                             items(results, key = { "${it.sourceName}_${it.sAnime.url}" }) { result ->
                                 ManualSearchResultRow(
                                     result = result,

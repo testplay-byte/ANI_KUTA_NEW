@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
@@ -78,10 +79,20 @@ internal fun EpisodesLoadingState(sourceName: String) {
  * section header) so the user can search extensions with a custom query and
  * link a result — this is the fallback when automatic title matching fails.
  *
+ * If [autoMatchErrors] is non-null and non-empty, also shows per-source failure
+ * reasons so the user knows WHY auto-match failed — not just that it did.
+ * This is critical for debugging: the user sees "Source 'Anikoto' failed:
+ * NoClassDefFoundError: ..." instead of a generic "no match" message.
+ *
  * @param onSearchManually opens the [ManualSearchSheet].
+ * @param autoMatchErrors per-source errors from the most recent auto-match,
+ *   or null if auto-match hasn't run. Each pair is (sourceName, errorMessage).
  */
 @Composable
-internal fun NoSourcesState(onSearchManually: () -> Unit) {
+internal fun NoSourcesState(
+    onSearchManually: () -> Unit,
+    autoMatchErrors: List<Pair<String, String>>? = null,
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -102,13 +113,54 @@ internal fun NoSourcesState(onSearchManually: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Automatic title matching didn\u2019t find a match.\nSearch your extensions manually to link a source.",
+            text = if (autoMatchErrors.isNullOrEmpty()) {
+                "Automatic title matching didn\u2019t find a match.\nSearch your extensions manually to link a source."
+            } else {
+                "Automatic title matching failed — sources returned errors.\nSearch manually or check the errors below."
+            },
             fontFamily = RobotoFamily,
             fontSize = 12.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+
+        // ── Per-source error details ──
+        // Shows the user WHY each source failed. This is critical: without it,
+        // the user sees "no sources" but doesn't know if it's because extensions
+        // aren't installed, sources are broken, or the anime just isn't in the
+        // source's catalog.
+        if (!autoMatchErrors.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            autoMatchErrors.forEach { (sourceName, error) ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            text = sourceName,
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            text = error,
+                            fontFamily = RobotoFamily,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(14.dp))
         // Prominent "Search manually" CTA — mirrors the one in the section header
         // but larger, so the user sees it even if they miss the header button.

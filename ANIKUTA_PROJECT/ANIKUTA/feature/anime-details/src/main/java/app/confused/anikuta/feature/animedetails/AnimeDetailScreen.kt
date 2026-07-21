@@ -79,6 +79,9 @@ fun AnimeDetailScreen(
     val isRefreshing by vm.isRefreshing.collectAsState()
     val isSearching by vm.isSearching.collectAsState()
     val manualSearchResults by vm.manualSearchResults.collectAsState()
+    val manualSearchErrors by vm.manualSearchErrors.collectAsState()
+    val autoMatchErrors by vm.autoMatchErrors.collectAsState()
+    val hasSearched by vm.hasSearched.collectAsState()
 
     Box(
         modifier = Modifier
@@ -97,6 +100,9 @@ fun AnimeDetailScreen(
                 isRefreshing = isRefreshing,
                 isSearching = isSearching,
                 manualSearchResults = manualSearchResults,
+                manualSearchErrors = manualSearchErrors,
+                autoMatchErrors = autoMatchErrors,
+                hasSearched = hasSearched,
                 onBack = onBack,
                 onOpenEpisode = onOpenEpisode,
                 onToggleWatched = vm::toggleWatched,
