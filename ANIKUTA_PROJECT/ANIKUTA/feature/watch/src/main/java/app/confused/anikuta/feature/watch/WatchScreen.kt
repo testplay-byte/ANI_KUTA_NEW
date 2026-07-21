@@ -185,6 +185,22 @@ fun WatchScreen(
         }
     }
 
+    // Switching timeout safety net: if isSwitching stays true for 30 seconds
+    // without FILE_LOADED clearing it, force-clear it and show an error.
+    // This prevents the loading overlay from being stuck forever if a video
+    // fails to load (e.g. server returns an empty stream, HLS parse error).
+    LaunchedEffect(isSwitching) {
+        if (isSwitching) {
+            delay(30000) // 30 seconds
+            if (stateHolder.isSwitchingEpisode.value) {
+                Log.e(TAG, "Switching timeout — force-clearing after 30s")
+                stateHolder.setSwitchingEpisode(false)
+                stateHolder.setErrorMessage("Video failed to load (timeout). Try a different server or quality.")
+                stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+            }
+        }
+    }
+
     // Nested BackHandler for fullscreen → minimized (NOT exit watch page)
     // CRITICAL: Force SENSOR_PORTRAIT on minimize so the screen rotates back
     // to portrait. Using UNSPECIFIED leaves it in landscape.
@@ -397,16 +413,21 @@ fun WatchScreen(
                 override fun onEventProperty(property: String, value: Double) {}
 
                 override fun onFileEnded(errorMessage: String?) {
-                    Log.w(TAG, "File ended: $errorMessage")
+                    Log.w(TAG, "File ended: $errorMessage (switching=${stateHolder.isSwitchingEpisode.value})")
                     // MPV sends END_FILE for both normal end-of-file AND errors.
                     // If there's an error message, show the error overlay so the
                     // user knows the video failed (instead of a frozen player).
                     // Only show the error if we're not already switching episodes
                     // (switching triggers a deliberate END_FILE on the old file).
                     if (errorMessage != null && !stateHolder.isSwitchingEpisode.value) {
+                        Log.e(TAG, "Playback error: $errorMessage")
                         stateHolder.setErrorMessage(errorMessage)
                         stateHolder.setSwitchingEpisode(false)
                         stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+                    } else if (errorMessage != null && stateHolder.isSwitchingEpisode.value) {
+                        // We're switching — the END_FILE is from the OLD file being
+                        // replaced. Don't show an error; the new file will load next.
+                        Log.d(TAG, "END_FILE during switch — old file ended, new file loading")
                     }
                 }
             })
@@ -498,6 +519,10 @@ fun WatchScreen(
     }
 
     // ── Episode switching ──
+    // Remembers the current server name, audio version, and quality from the
+    // current video title, and tries to match them when resolving the new episode.
+    // Only auto-switches to a different server/audio/quality if the preferred
+    // one isn't available.
     val switchEpisode: (Int) -> Unit = remember(watchRequest, stateHolder) { { index ->
         val episode = watchRequest.episodeList.getOrNull(index)
         if (episode != null && index != stateHolder.currentEpisodeIndex.value) {
@@ -514,6 +539,16 @@ fun WatchScreen(
             stateHolder.setErrorMessage(null)
             Log.i(TAG, "Switching to episode ${episode.episode_number}: ${episode.name} (url=${episode.url})")
 
+            // Parse the current video title to remember the preferred server/audio/quality.
+            // Format: "ServerName - SUB - 1080p" (parsed by VideoTitleParser).
+            val currentTitle = stateHolder.currentVideoTitle.value
+            val preferredServer = currentTitle.substringBefore(" - ").trim().ifBlank { "" }
+            val preferredAudio = Regex("""\b(SUB|DUB|HSUB|HARDSUB|SUBBED|DUBBED)\b""", RegexOption.IGNORE_CASE)
+                .find(currentTitle)?.value?.uppercase() ?: ""
+            val preferredQuality = Regex("""\b(\d{3,4})p\b""", RegexOption.IGNORE_CASE)
+                .find(currentTitle)?.groupValues?.get(1)?.toIntOrNull()
+            Log.i(TAG, "Preferred: server='$preferredServer', audio='$preferredAudio', quality=$preferredQuality")
+
             scope.launch {
                 try {
                     val source = watchRequest.source
@@ -524,17 +559,28 @@ fun WatchScreen(
                     } else {
                         when (val result = resolverService.resolve(source, episode)) {
                             is ResolverResult.Success -> {
-                                val firstVideo = result.servers.firstOrNull()
-                                    ?.audioVersions?.firstOrNull()
-                                    ?.videos?.firstOrNull()
+                                // Try to find the best video matching the preferred server/audio/quality.
+                                // Selection priority:
+                                // 1. Exact match: same server + same audio + same quality
+                                // 2. Same server + same audio (highest quality)
+                                // 3. Same server (prefer same audio, highest quality)
+                                // 4. Same audio (any server, highest quality)
+                                // 5. First available (highest quality)
+                                val selectedVideo = selectBestVideo(
+                                    servers = result.servers,
+                                    preferredServer = preferredServer,
+                                    preferredAudio = preferredAudio,
+                                    preferredQuality = preferredQuality,
+                                )
 
-                                if (firstVideo != null) {
+                                if (selectedVideo != null) {
+                                    Log.i(TAG, "Selected video: ${selectedVideo.videoTitle} (${selectedVideo.quality})")
                                     mpvView?.let { view ->
-                                        PlayerInitializer.loadVideo(view, firstVideo.url, context)
+                                        PlayerInitializer.loadVideo(view, selectedVideo.url, context)
                                         stateHolder.setCurrentVideoTitle(
-                                            firstVideo.videoTitle.ifBlank { episode.name }
+                                            selectedVideo.videoTitle.ifBlank { episode.name }
                                         )
-                                        stateHolder.setCurrentVideoUrl(firstVideo.url)
+                                        stateHolder.setCurrentVideoUrl(selectedVideo.url)
                                         // Update resolved servers so the quality sheet
                                         // shows the new episode's servers
                                         resolvedServers = result.servers
@@ -705,6 +751,12 @@ private fun WatchScreenContent(
     onOpenSubtitleSettings: () -> Unit,
 ) {
     val context = LocalContext.current
+    // CRITICAL: Collect currentEpisodeIndex as state so the UI updates reactively
+    // when the user switches episodes. Reading stateHolder.currentEpisodeIndex.value
+    // as a snapshot does NOT trigger recomposition — the description + episode list
+    // highlight would stay on the old episode until something else triggered a
+    // recompose. This was the root cause of "selection not showing properly".
+    val currentEpisodeIndex by stateHolder.currentEpisodeIndex.collectAsStateWithLifecycle()
     if (playerMode == PlayerMode.FULLSCREEN) {
         // ── Fullscreen mode ──
         // Player fills the entire screen. No top bar, no scrollable content.
@@ -832,7 +884,7 @@ private fun WatchScreenContent(
                 // Uses the CURRENT episode's info (not the original watch request,
                 // so it updates when the user switches episodes).
                 item(key = "description") {
-                    val currentEp = watchRequest.episodeList.getOrNull(stateHolder.currentEpisodeIndex.value)
+                    val currentEp = watchRequest.episodeList.getOrNull(currentEpisodeIndex)
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -897,8 +949,8 @@ private fun WatchScreenContent(
                                     episodeNumber = ep.episode_number,
                                     episodeTitle = ep.name,
                                     summary = ep.summary,
-                                    isCurrent = index == stateHolder.currentEpisodeIndex.value,
-                                    isSwitching = isSwitching && index == stateHolder.currentEpisodeIndex.value,
+                                    isCurrent = index == currentEpisodeIndex,
+                                    isSwitching = isSwitching && index == currentEpisodeIndex,
                                     onClick = { onSwitchEpisode(index) },
                                 )
                             }
@@ -1362,6 +1414,113 @@ private fun EpisodeRow(
 private fun formatEpisodeNumber(num: Float): String {
     if (num <= 0f) return "?"
     return if (num == num.toLong().toFloat()) num.toLong().toString() else num.toString()
+}
+
+/**
+ * Selects the best video from a list of resolved servers, trying to match
+ * the preferred server name, audio version, and quality.
+ *
+ * Selection priority:
+ * 1. Exact match: same server + same audio + same quality
+ * 2. Same server + same audio (highest quality available)
+ * 3. Same server (prefer same audio, highest quality)
+ * 4. Same audio (any server, highest quality)
+ * 5. First available (highest quality from first server)
+ *
+ * This ensures the user's previous selection is remembered when switching
+ * episodes — they don't get jumped to a different server/quality unexpectedly.
+ *
+ * @param servers the resolved servers for the new episode
+ * @param preferredServer the server name from the previously-playing video
+ * @param preferredAudio the audio version (SUB/DUB/HSUB) from the previous video
+ * @param preferredQuality the quality (e.g. 1080) from the previous video
+ * @return the best matching [ResolverVideo], or null if no videos available
+ */
+private fun selectBestVideo(
+    servers: List<app.confused.anikuta.feature.videoresolver.ResolverServer>,
+    preferredServer: String,
+    preferredAudio: String,
+    preferredQuality: Int?,
+): app.confused.anikuta.feature.videoresolver.ResolverVideo? {
+    if (servers.isEmpty()) return null
+    Log.d(TAG, "selectBestVideo: ${servers.size} servers, preferred: server='$preferredServer' audio='$preferredAudio' quality=$preferredQuality")
+
+    // Helper: parse quality string ("1080p" → 1080) from a ResolverVideo
+    fun parseQuality(q: String): Int? = Regex("""(\d{3,4})""").find(q)?.groupValues?.get(1)?.toIntOrNull()
+    // Helper: parse audio from videoTitle
+    fun parseAudio(title: String): String = Regex("""\b(SUB|DUB|HSUB|HARDSUB|SUBBED|DUBBED)\b""", RegexOption.IGNORE_CASE)
+        .find(title)?.value?.uppercase() ?: ""
+    // Helper: parse server from videoTitle
+    fun parseServer(title: String): String = title.substringBefore(" - ").trim().ifBlank { "Unknown" }
+
+    // Priority 1: Exact match (same server + same audio + same quality)
+    if (preferredServer.isNotBlank()) {
+        for (server in servers) {
+            if (server.name == preferredServer) {
+                for (audio in server.audioVersions) {
+                    if (preferredAudio.isBlank() || audio.label == preferredAudio) {
+                        for (video in audio.videos) {
+                            val vq = parseQuality(video.quality)
+                            if (preferredQuality != null && vq == preferredQuality) {
+                                Log.d(TAG, "  → exact match: ${video.videoTitle}")
+                                return video
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Priority 2: Same server + same audio (highest quality)
+    if (preferredServer.isNotBlank()) {
+        val server = servers.firstOrNull { it.name == preferredServer }
+        if (server != null) {
+            val audio = if (preferredAudio.isNotBlank()) {
+                server.audioVersions.firstOrNull { it.label == preferredAudio }
+            } else null
+            // Try preferred audio first, then any audio
+            val audioToUse = audio ?: server.audioVersions.firstOrNull()
+            if (audioToUse != null && audioToUse.videos.isNotEmpty()) {
+                Log.d(TAG, "  → same server+audio (highest q): ${audioToUse.videos.first().videoTitle}")
+                return audioToUse.videos.first() // already sorted highest-first
+            }
+        }
+    }
+
+    // Priority 3: Same server (any audio, highest quality)
+    if (preferredServer.isNotBlank()) {
+        val server = servers.firstOrNull { it.name == preferredServer }
+        if (server != null) {
+            // Find highest quality across all audio versions
+            val best = server.audioVersions
+                .flatMap { it.videos }
+                .maxByOrNull { parseQuality(it.quality) ?: 0 }
+            if (best != null) {
+                Log.d(TAG, "  → same server (any audio): ${best.videoTitle}")
+                return best
+            }
+        }
+    }
+
+    // Priority 4: Same audio (any server, highest quality)
+    if (preferredAudio.isNotBlank()) {
+        val best = servers
+            .flatMap { server -> server.audioVersions.filter { it.label == preferredAudio } }
+            .flatMap { it.videos }
+            .maxByOrNull { parseQuality(it.quality) ?: 0 }
+        if (best != null) {
+            Log.d(TAG, "  → same audio (any server): ${best.videoTitle}")
+            return best
+        }
+    }
+
+    // Priority 5: First available (highest quality from first server)
+    val fallback = servers.firstOrNull()
+        ?.audioVersions?.firstOrNull()
+        ?.videos?.firstOrNull()
+    Log.d(TAG, "  → fallback (first available): ${fallback?.videoTitle}")
+    return fallback
 }
 
 /**
