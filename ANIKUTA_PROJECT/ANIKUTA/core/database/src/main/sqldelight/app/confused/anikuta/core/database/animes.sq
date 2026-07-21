@@ -1,4 +1,4 @@
--- animes.sq — Anime table with status-tracking columns (ADR-024)
+-- animes.sq — Anime table with status-tracking columns (ADR-024) + library columns
 
 CREATE TABLE animes (
     _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -23,14 +23,31 @@ CREATE TABLE animes (
     release_date INTEGER,            -- when the anime was first released
     last_refresh INTEGER NOT NULL DEFAULT 0,    -- last time refreshed from source
     last_metadata_fetch INTEGER,     -- last time metadata was fetched (AniList/ext)
-    next_episode_check INTEGER       -- when to next check for new episodes (ADR-014)
+    next_episode_check INTEGER,      -- when to next check for new episodes (ADR-014)
+
+    -- Library columns (Phase A — library page)
+    anilist_id INTEGER,              -- AniList media ID (nullable for non-AniList entries)
+    cover_color TEXT,                -- hex color extracted from cover (e.g. "#B1F256")
+    score REAL,                      -- AniList average score (0-100)
+    total_episodes INTEGER,          -- AniList total episodes count
+    last_watched INTEGER NOT NULL DEFAULT 0  -- epoch ms of last watch activity
 );
+
+-- Partial unique index: anilist_id is unique when not null
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_anilist_id
+ON animes(anilist_id) WHERE anilist_id IS NOT NULL;
 
 selectAll:
 SELECT * FROM animes;
 
 selectById:
 SELECT * FROM animes WHERE _id = :id;
+
+selectByAnilistId:
+SELECT * FROM animes WHERE anilist_id = :anilistId;
+
+selectIdByAnilistId:
+SELECT _id FROM animes WHERE anilist_id = :anilistId;
 
 selectFavorites:
 SELECT * FROM animes WHERE favorite = 1 ORDER BY title COLLATE NOCASE;
@@ -46,12 +63,14 @@ INSERT INTO animes (
     url, title, artist, author, description, genre, cover_url, status,
     thumbnail_url, favorite, source_id, date_added, viewer_flags,
     next_update, update_strategy, cover_last_modified,
-    release_date, last_refresh, last_metadata_fetch, next_episode_check
+    release_date, last_refresh, last_metadata_fetch, next_episode_check,
+    anilist_id, cover_color, score, total_episodes, last_watched
 ) VALUES (
     :url, :title, :artist, :author, :description, :genre, :coverUrl, :status,
     :thumbnailUrl, :favorite, :sourceId, :dateAdded, :viewerFlags,
     :nextUpdate, :updateStrategy, :coverLastModified,
-    :releaseDate, :lastRefresh, :lastMetadataFetch, :nextEpisodeCheck
+    :releaseDate, :lastRefresh, :lastMetadataFetch, :nextEpisodeCheck,
+    :anilistId, :coverColor, :score, :totalEpisodes, :lastWatched
 );
 
 update:
@@ -63,11 +82,16 @@ UPDATE animes SET
     next_update = :nextUpdate, update_strategy = :updateStrategy,
     cover_last_modified = :coverLastModified,
     release_date = :releaseDate, last_refresh = :lastRefresh,
-    last_metadata_fetch = :lastMetadataFetch, next_episode_check = :nextEpisodeCheck
+    last_metadata_fetch = :lastMetadataFetch, next_episode_check = :nextEpisodeCheck,
+    anilist_id = :anilistId, cover_color = :coverColor,
+    score = :score, total_episodes = :totalEpisodes, last_watched = :lastWatched
 WHERE _id = :id;
 
 updateFavorite:
 UPDATE animes SET favorite = :favorite, date_added = :dateAdded WHERE _id = :id;
+
+updateFavoriteByAnilistId:
+UPDATE animes SET favorite = :favorite, date_added = :dateAdded WHERE anilist_id = :anilistId;
 
 updateLastRefresh:
 UPDATE animes SET last_refresh = :lastRefresh WHERE _id = :id;
@@ -77,6 +101,24 @@ UPDATE animes SET last_metadata_fetch = :lastMetadataFetch WHERE _id = :id;
 
 updateNextEpisodeCheck:
 UPDATE animes SET next_episode_check = :nextEpisodeCheck WHERE _id = :id;
+
+updateLastWatched:
+UPDATE animes SET last_watched = :lastWatched WHERE _id = :id;
+
+updateLastWatchedByAnilistId:
+UPDATE animes SET last_watched = :lastWatched WHERE anilist_id = :anilistId;
+
+updateAnilistMetadataByAnilistId:
+UPDATE animes SET
+    title = :title,
+    cover_url = :coverUrl,
+    cover_color = :coverColor,
+    score = :score,
+    total_episodes = :totalEpisodes
+WHERE anilist_id = :anilistId;
+
+lastInsertedRowId:
+SELECT last_insert_rowid();
 
 delete:
 DELETE FROM animes WHERE _id = :id;

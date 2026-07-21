@@ -58,6 +58,7 @@ dependencies {
     // Feature modules
     implementation(projects.feature.browse)
     implementation(projects.feature.animeDetails)
+    implementation(projects.feature.library)
     implementation(projects.feature.extensionsSettings)
     implementation(projects.feature.videoResolver)
     implementation(projects.feature.watch)
