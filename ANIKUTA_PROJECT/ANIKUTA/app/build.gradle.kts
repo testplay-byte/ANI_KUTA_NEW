@@ -5,10 +5,12 @@ plugins {
 
 android {
     // ABI splits: arm64-v8a only (ADR-032)
-    // Disabled for Phase 1 (no native libs yet); enable when MPV is added
     splits {
         abi {
-            isEnable = false
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
@@ -43,6 +45,7 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.database)
     implementation(projects.core.anilist)
+    implementation(projects.core.preferences)
     // source-api — for ExtensionAppHolder.init() in App.kt (ADR-029)
     implementation(projects.core.sourceApi)
 

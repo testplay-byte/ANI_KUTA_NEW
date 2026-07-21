@@ -6,6 +6,8 @@ import android.util.Log
 import app.confused.anikuta.di.databaseModule
 import app.confused.anikuta.di.extensionModule
 import app.confused.anikuta.di.repositoryModule
+import app.confused.anikuta.core.preferences.di.preferenceModule
+import app.confused.anikuta.core.player.di.playerModule
 import eu.kanade.tachiyomi.animesource.ExtensionAppHolder
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.serialization.json.Json
@@ -70,6 +72,8 @@ class App : Application() {
                 databaseModule,
                 repositoryModule,
                 extensionModule,
+                preferenceModule,
+                playerModule,
             )
         }
 
