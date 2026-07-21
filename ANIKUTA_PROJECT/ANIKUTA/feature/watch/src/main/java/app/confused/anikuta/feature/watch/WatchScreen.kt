@@ -358,6 +358,7 @@ fun WatchScreen(
                 context = context,
                 onBack = onBack,
                 onSwitchEpisode = switchEpisode,
+                onMpvViewCreated = { v -> mpvView = v },
             )
         }
     } else {
@@ -374,6 +375,7 @@ fun WatchScreen(
             context = context,
             onBack = onBack,
             onSwitchEpisode = switchEpisode,
+            onMpvViewCreated = { v -> mpvView = v },
         )
     }
 }
@@ -392,6 +394,7 @@ private fun WatchScreenContent(
     context: android.content.Context,
     onBack: () -> Unit,
     onSwitchEpisode: (Int) -> Unit,
+    onMpvViewCreated: (AnikutaMPVView) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -414,7 +417,7 @@ private fun WatchScreenContent(
                     factory = { ctx ->
                         val view = LayoutInflater.from(ctx)
                             .inflate(app.confused.anikuta.core.player.R.layout.mpv_view, null) as AnikutaMPVView
-                        mpvView = view
+                        onMpvViewCreated(view)
                         initMpv(view)
                         view
                     },
@@ -511,7 +514,7 @@ private fun WatchScreenContent(
                                 factory = { ctx ->
                                     val view = LayoutInflater.from(ctx)
                                         .inflate(app.confused.anikuta.core.player.R.layout.mpv_view, null) as AnikutaMPVView
-                                    mpvView = view
+                                    onMpvViewCreated(view)
                                     initMpv(view)
                                     view
                                 },
