@@ -45,4 +45,5 @@ data class ResolverVideo(
     val quality: String,
     val url: String,
     val videoTitle: String = "",
+    val videoHeaders: String? = null,
 )

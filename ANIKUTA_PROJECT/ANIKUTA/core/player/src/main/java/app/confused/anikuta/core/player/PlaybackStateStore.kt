@@ -5,8 +5,6 @@ import app.confused.anikuta.core.preferences.PreferenceStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.MapSerializer
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
@@ -48,15 +46,10 @@ class PlaybackStateStore(
     private val statePref: Preference<Map<String, PlaybackState>> = store.getObject(
         "pref_playback_state_map",
         emptyMap<String, PlaybackState>(),
-        { map ->
-            json.encodeToString(MapSerializer(String.serializer(), PlaybackState.serializer()), map)
-        },
+        { map -> json.encodeToString(map) },
         { str ->
-            try {
-                json.decodeFromString(MapSerializer(String.serializer(), PlaybackState.serializer()), str)
-            } catch (e: Exception) {
-                emptyMap()
-            }
+            try { json.decodeFromString<Map<String, PlaybackState>>(str) }
+            catch (e: Exception) { emptyMap() }
         },
     )
 

@@ -102,6 +102,9 @@ object VideoTitleParser {
                                 quality = pv.quality?.let { "${it}p" } ?: "Unknown",
                                 url = pv.video.videoUrl,
                                 videoTitle = pv.video.videoTitle,
+                                videoHeaders = pv.video.headers?.let { headers ->
+                                    headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+                                },
                             )
                         },
                     )
