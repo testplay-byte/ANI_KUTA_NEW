@@ -46,6 +46,7 @@ dependencies {
     implementation(projects.core.database)
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
+    implementation(projects.core.player)
     // source-api — for ExtensionAppHolder.init() in App.kt (ADR-029)
     implementation(projects.core.sourceApi)
 
