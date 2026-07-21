@@ -147,7 +147,19 @@ class PlayerStateHolder {
     fun setCurrentEpisodeNumber(num: Float) { _currentEpisodeNumber.value = num }
     fun setShowStartOverOverlay(show: Boolean) { _showStartOverOverlay.value = show }
 
-    fun toggleControls() { _controlsVisible.value = !_controlsVisible.value }
+    /**
+     * Toggles controls visibility. When [forceVisible] is true (e.g. video
+     * finished), the controls are forced visible and can't be hidden by tapping.
+     * This prevents the user from accidentally hiding controls when the video
+     * is done and they need to restart or switch episodes.
+     */
+    fun toggleControls(forceVisible: Boolean = false) {
+        if (forceVisible) {
+            _controlsVisible.value = true
+        } else {
+            _controlsVisible.value = !_controlsVisible.value
+        }
+    }
     fun togglePlayPause() { /* handled by MPV host */ }
 
     companion object {

@@ -90,11 +90,9 @@ fun SubtitleSettingsSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // Hard-coded max height: 60% of the screen height.
-    // Per user request: "the bottom-up menu of the subtitle settings cannot
-    // have a height greater than 60%."
+    // Hard-coded max height: 65% of the screen height.
     val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-    val maxHeight = screenHeight * 0.6f
+    val maxHeight = screenHeight * 0.65f
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,

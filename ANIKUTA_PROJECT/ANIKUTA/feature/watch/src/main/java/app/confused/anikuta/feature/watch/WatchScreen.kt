@@ -138,9 +138,24 @@ fun WatchScreen(
     val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
     val controlsVisible by stateHolder.controlsVisible.collectAsStateWithLifecycle()
     val position by stateHolder.position.collectAsStateWithLifecycle()
+    val duration by stateHolder.duration.collectAsStateWithLifecycle()
     val isPlaying by stateHolder.isPlaying.collectAsStateWithLifecycle()
     val buffering by stateHolder.buffering.collectAsStateWithLifecycle()
     val errorMessage by stateHolder.errorMessage.collectAsStateWithLifecycle()
+
+    // ── "Video finished" state ──
+    // When the video reaches the end (position >= duration - 2), the controls
+    // are permanently shown — they do NOT auto-hide. The user must tap to
+    // restart or switch episodes. This prevents the confusion of controls
+    // disappearing when the video is done.
+    val isVideoFinished = duration > 0 && position >= duration - 2 && !isPlaying
+
+    // Force controls visible when video is finished (can't be hidden by tapping)
+    LaunchedEffect(isVideoFinished) {
+        if (isVideoFinished) {
+            stateHolder.setControlsVisible(true)
+        }
+    }
 
     // ── Immersive mode: hide/show system bars based on player mode ──
     // Per OLD project's hideSystemBars()/showSystemBars() pattern.
@@ -180,12 +195,19 @@ fun WatchScreen(
         onDispose { }
     }
 
-    // Auto-hide controls: 5s minimized, 4s fullscreen
-    LaunchedEffect(controlsVisible, playerMode, isSwitching) {
-        if (controlsVisible && !isSwitching) {
+    // Auto-hide controls: 5s minimized, 4s fullscreen.
+    // CRITICAL: Do NOT auto-hide when the video is finished (position at end).
+    // When the video is done, the controls stay permanently visible so the
+    // user can restart or switch episodes. Per user request: "If the video is
+    // fully complete... the controls of the videos will be permanently shown."
+    LaunchedEffect(controlsVisible, playerMode, isSwitching, isVideoFinished) {
+        if (controlsVisible && !isSwitching && !isVideoFinished) {
             val delayMs = if (playerMode == PlayerMode.FULLSCREEN) 4000L else 5000L
             delay(delayMs)
-            stateHolder.setControlsVisible(false)
+            // Re-check isVideoFinished after the delay (it may have changed)
+            if (!isVideoFinished) {
+                stateHolder.setControlsVisible(false)
+            }
         }
     }
 
@@ -210,21 +232,32 @@ fun WatchScreen(
     // actually play — e.g. the HLS stream returns "error reading packet:
     // Invalid argument" + "treating it as fatal error". MPV doesn't send an
     // END_FILE event for this type of demuxer error, so the player just sits
-    // frozen with the position at 0.
+    // frozen.
     //
-    // Watchdog logic: after the video is loaded (not switching, mpvInitialized),
-    // if the position stays at 0 for 15 seconds AND the player is not actively
-    // playing, show a fatal error. This means the stream is broken — the server
-    // is not responding or the HLS segments are invalid.
-    LaunchedEffect(mpvInitialized, isSwitching, position, isPlaying) {
-        if (mpvInitialized && !isSwitching && position == 0 && !isPlaying && errorMessage == null) {
-            Log.w(TAG, "Watchdog: video loaded but not playing (pos=0) — starting 15s watchdog")
-            delay(15000) // 15 seconds
-            // Re-check: if position is STILL 0 and not playing, it's a fatal error
-            if (stateHolder.position.value == 0 && !stateHolder.isPlaying.value && stateHolder.errorMessage.value == null) {
-                Log.e(TAG, "Watchdog: FATAL — video stuck at position 0 for 15s after load. Server is not responding.")
-                stateHolder.setErrorMessage("This server is not responding. The video stream may be broken. Try a different server or quality.")
-                stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+    // Two failure modes:
+    // 1. Position stays at 0 (stream never started) — position==0 && !playing
+    // 2. Position jumped to end (keep-open=true after fatal demuxer error) —
+    //    position >= duration-2 && !playing && duration > 0
+    //
+    // Watchdog: if either condition persists for 15 seconds after load, show
+    // a fatal error so the user knows the server is broken.
+    LaunchedEffect(mpvInitialized, isSwitching, position, isPlaying, duration) {
+        if (mpvInitialized && !isSwitching && !isPlaying && errorMessage == null && duration > 0) {
+            // Check both failure modes
+            val stuckAtStart = position == 0
+            val stuckAtEnd = position >= duration - 2
+            if (stuckAtStart || stuckAtEnd) {
+                val mode = if (stuckAtStart) "pos=0" else "pos>=dur-2 (pos=$position, dur=$duration)"
+                Log.w(TAG, "Watchdog: video loaded but not playing ($mode) — starting 15s watchdog")
+                delay(15000) // 15 seconds
+                // Re-check: if still stuck, it's a fatal error
+                val stillStuck = stateHolder.position.value == 0 ||
+                    stateHolder.position.value >= stateHolder.duration.value - 2
+                if (stillStuck && !stateHolder.isPlaying.value && stateHolder.errorMessage.value == null) {
+                    Log.e(TAG, "Watchdog: FATAL — video stuck for 15s after load. Server is not responding.")
+                    stateHolder.setErrorMessage("This server is not responding. The video stream may be broken. Try a different server or quality.")
+                    stateHolder.setLoadingState(PlayerLoadingState.ERROR)
+                }
             }
         }
     }
