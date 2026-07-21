@@ -1,5 +1,6 @@
 plugins {
     id("anikuta.library.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {

@@ -109,6 +109,12 @@ fun WatchScreen(
     val resolverService = remember { ResolverService() }
     val stateHolder = remember { PlayerStateHolder() }
 
+    // Sheet visibility state (bottom-up menus)
+    var showQualitySheet by remember { mutableStateOf(false) }
+    var showSubtitleSheet by remember { mutableStateOf(false) }
+    // Cached resolved servers for quality switching
+    var resolvedServers by remember { mutableStateOf<List<app.confused.anikuta.feature.videoresolver.ResolverServer>>(emptyList()) }
+
     // Set the companion playerPreferences BEFORE inflating the view
     AnikutaMPVView.playerPreferences = playerPreferences
 
@@ -137,7 +143,7 @@ fun WatchScreen(
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
-    // Initialize episode list from the watch request
+    // Initialize episode list from the watch request + set current episode index
     LaunchedEffect(watchRequest) {
         stateHolder.setEpisodeList(
             watchRequest.episodeList.map { ep ->
@@ -153,6 +159,12 @@ fun WatchScreen(
                 )
             }
         )
+        // Find the index of the tapped episode (matching by URL) so the
+        // correct episode is highlighted as "currently playing".
+        val tappedIndex = watchRequest.episodeList.indexOfFirst { it.url == watchRequest.episodeUrl }
+        stateHolder.setCurrentEpisodeIndex(if (tappedIndex >= 0) tappedIndex else 0)
+        stateHolder.setCurrentVideoTitle(watchRequest.videoTitle)
+        stateHolder.setCurrentVideoUrl(watchRequest.videoUrl)
     }
 
     // ── MPV initialization ──
@@ -372,6 +384,60 @@ fun WatchScreen(
         generateDynamicScheme(it, darkTheme = true, amoled = false)
     }
 
+    // ── Quality switching: resolve servers on-demand when quality sheet opens ──
+    val onQualityClick: () -> Unit = {
+        // Pre-resolve the servers for the current episode if not cached
+        if (resolvedServers.isEmpty()) {
+            scope.launch {
+                try {
+                    val source = watchRequest.source
+                    val episode = watchRequest.episodeList.getOrNull(stateHolder.currentEpisodeIndex.value)
+                    if (source != null && episode != null) {
+                        when (val result = resolverService.resolve(source, episode)) {
+                            is ResolverResult.Success -> {
+                                resolvedServers = result.servers
+                            }
+                            else -> {
+                                Log.w(TAG, "Failed to resolve servers for quality sheet")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Quality resolve failed", e)
+                }
+            }
+        }
+        showQualitySheet = true
+    }
+
+    // ── Quality selection handler ──
+    val onQualitySelected: (app.confused.anikuta.feature.videoresolver.ResolverVideo) -> Unit = { video ->
+        Log.i(TAG, "Quality selected: ${video.quality} (${video.url})")
+        stateHolder.setSwitchingEpisode(true)
+        mpvView?.let { view ->
+            PlayerInitializer.loadVideo(view, video.url, context)
+            stateHolder.setCurrentVideoTitle(video.videoTitle)
+            stateHolder.setCurrentVideoUrl(video.url)
+        }
+    }
+
+    // ── Subtitle track selection handler ──
+    val onSubtitleSelected: (Int) -> Unit = { trackId ->
+        try {
+            if (trackId <= 0) {
+                MPVLib.setPropertyString("sid", "no")
+                stateHolder.setCurrentSubtitleId(-1)
+                Log.i(TAG, "Subtitles disabled")
+            } else {
+                MPVLib.setPropertyInt("sid", trackId)
+                stateHolder.setCurrentSubtitleId(trackId)
+                Log.i(TAG, "Subtitle track set to $trackId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set subtitle track", e)
+        }
+    }
+
     val screenContent: @Composable () -> Unit = {
         WatchScreenContent(
             watchRequest = watchRequest,
@@ -384,6 +450,17 @@ fun WatchScreen(
             onBack = onBack,
             onSwitchEpisode = switchEpisode,
             onMpvViewCreated = { v -> mpvView = v },
+            showQualitySheet = showQualitySheet,
+            showSubtitleSheet = showSubtitleSheet,
+            resolvedServers = resolvedServers,
+            onQualityClick = onQualityClick,
+            onQualitySelected = onQualitySelected,
+            onSubtitleClick = { showSubtitleSheet = true },
+            onSubtitleSelected = onSubtitleSelected,
+            onDismissSheet = {
+                showQualitySheet = false
+                showSubtitleSheet = false
+            },
         )
     }
 
@@ -411,6 +488,14 @@ private fun WatchScreenContent(
     onBack: () -> Unit,
     onSwitchEpisode: (Int) -> Unit,
     onMpvViewCreated: (AnikutaMPVView) -> Unit,
+    showQualitySheet: Boolean,
+    showSubtitleSheet: Boolean,
+    resolvedServers: List<app.confused.anikuta.feature.videoresolver.ResolverServer>,
+    onQualityClick: () -> Unit,
+    onQualitySelected: (app.confused.anikuta.feature.videoresolver.ResolverVideo) -> Unit,
+    onSubtitleClick: () -> Unit,
+    onSubtitleSelected: (Int) -> Unit,
+    onDismissSheet: () -> Unit,
 ) {
     val context = LocalContext.current
     if (playerMode == PlayerMode.FULLSCREEN) {
@@ -443,6 +528,8 @@ private fun WatchScreenContent(
                     stateHolder = stateHolder,
                     playerPreferences = playerPreferences,
                     onBack = onBack,
+                    onQualityClick = onQualityClick,
+                    onSubtitleClick = onSubtitleClick,
                 )
             }
         }
@@ -490,6 +577,8 @@ private fun WatchScreenContent(
                             (context as? Activity)?.requestedOrientation =
                                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                         },
+                        onQualityClick = { showQualitySheet = true },
+                        onSubtitleClick = { showSubtitleSheet = true },
                     )
                 }
             }
@@ -547,6 +636,25 @@ private fun WatchScreenContent(
             }
         }
     }
+
+    // ── Bottom-up sheets (rendered on top of everything) ──
+    if (showQualitySheet) {
+        app.confused.anikuta.feature.watch.sheets.QualitySheet(
+            servers = resolvedServers,
+            currentVideoTitle = stateHolder.currentVideoTitle.value,
+            onQualitySelected = onQualitySelected,
+            onDismiss = onDismissSheet,
+        )
+    }
+
+    if (showSubtitleSheet) {
+        app.confused.anikuta.feature.watch.sheets.SubtitleTracksSheet(
+            tracks = stateHolder.subtitleTracks.value,
+            currentTrackId = stateHolder.currentSubtitleId.value,
+            onTrackSelected = onSubtitleSelected,
+            onDismiss = onDismissSheet,
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -602,6 +710,8 @@ private fun MinimizedControlsOverlay(
     stateHolder: PlayerStateHolder,
     playerPreferences: PlayerPreferences,
     onMaximize: () -> Unit,
+    onQualityClick: () -> Unit = {},
+    onSubtitleClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     MinimizedControls(
@@ -622,8 +732,8 @@ private fun MinimizedControlsOverlay(
             try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
         },
         onMaximize = onMaximize,
-        onSubtitleClick = { /* TODO: open subtitle sheet */ },
-        onQualityClick = { /* TODO: open quality sheet */ },
+        onSubtitleClick = onSubtitleClick,
+        onQualityClick = onQualityClick,
     )
 }
 
@@ -633,6 +743,8 @@ private fun FullscreenControlsOverlay(
     stateHolder: PlayerStateHolder,
     playerPreferences: PlayerPreferences,
     onBack: () -> Unit,
+    onQualityClick: () -> Unit = {},
+    onSubtitleClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     app.confused.anikuta.core.player.controls.FullscreenControls(
@@ -663,12 +775,12 @@ private fun FullscreenControlsOverlay(
                 android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         },
         onLockToggle = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
-        onSubtitleClick = { /* TODO: open sheet */ },
-        onAudioClick = { /* TODO: open sheet */ },
-        onQualityClick = { /* TODO: open sheet */ },
-        onSpeedClick = { /* TODO: open sheet */ },
-        onServerClick = { /* TODO: open sheet */ },
-        onMoreClick = { /* TODO: open sheet */ },
+        onSubtitleClick = onSubtitleClick,
+        onAudioClick = { /* TODO: open audio sheet */ },
+        onQualityClick = onQualityClick,
+        onSpeedClick = { /* TODO: open speed sheet */ },
+        onServerClick = { /* TODO: open server sheet */ },
+        onMoreClick = { /* TODO: open more sheet */ },
         onSkipForward = {
             try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
         },
