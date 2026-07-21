@@ -116,7 +116,8 @@ class SourceMatcher(
         for (source in sources) {
             val outcome = searchSourceDetailed(source, title)
             if (outcome is SourceSearchOutcome.Success<*> && outcome.results.isNotEmpty()) {
-                val match = outcome.results.first()
+                @Suppress("UNCHECKED_CAST")
+                val match = outcome.results.first() as SourceMatch
                 Log.i(TAG, "Matched '${match.sAnime.title}' (score=${match.score}) from '${source.name}'")
                 return Result.Match(match)
             }
