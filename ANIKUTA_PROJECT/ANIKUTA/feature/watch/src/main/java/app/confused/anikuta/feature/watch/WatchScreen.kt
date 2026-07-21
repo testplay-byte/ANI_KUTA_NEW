@@ -40,11 +40,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,8 +104,8 @@ fun WatchScreen(
     var observer by remember { mutableStateOf<PlayerObserver?>(null) }
     var mpvInitialized by remember { mutableStateOf(false) }
 
-    val playerMode by stateHolder.playerMode.collectAsStateLifecycleAware()
-    val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateLifecycleAware()
+    val playerMode by stateHolder.playerMode.collectAsStateWithLifecycle()
+    val isSwitching by stateHolder.isSwitchingEpisode.collectAsStateWithLifecycle()
 
     // Nested BackHandler for fullscreen → minimized
     BackHandler(enabled = playerMode == PlayerMode.FULLSCREEN) {
@@ -222,7 +224,7 @@ fun WatchScreen(
             mpvInitialized = true
 
             // Load the initial video
-            PlayerInitializer.loadVideo(view, watchRequest.videoUrl)
+            PlayerInitializer.loadVideo(view, watchRequest.videoUrl, context)
         }
     }
 
@@ -304,6 +306,7 @@ fun WatchScreen(
             // Fullscreen controls overlay
             if (isSwitching) {
                 EpisodeSwitchingOverlay(
+                    episodeThumbnailUrl = null,
                     episodeTitle = watchRequest.videoTitle,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -311,6 +314,11 @@ fun WatchScreen(
                 app.confused.anikuta.core.player.controls.FullscreenControls(
                     stateHolder = stateHolder,
                     playerPreferences = playerPreferences,
+                    onBack = {
+                        stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
+                        (context as? Activity)?.requestedOrientation =
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    },
                     onTogglePlay = {
                         try {
                             val paused = MPVLib.getPropertyBoolean("pause") ?: false
@@ -325,27 +333,26 @@ fun WatchScreen(
                     onSeekRelative = { delta ->
                         try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
                     },
-                    onToggleControls = { stateHolder.toggleControls() },
                     onMinimize = {
                         stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
                         (context as? Activity)?.requestedOrientation =
                             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                     },
-                    onToggleLock = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
-                    onOpenSubtitlesSheet = { /* TODO: open sheet */ },
-                    onOpenAudioSheet = { /* TODO: open sheet */ },
-                    onOpenQualitySheet = { /* TODO: open sheet */ },
-                    onOpenSpeedSheet = { /* TODO: open sheet */ },
-                    onOpenServerSheet = { /* TODO: open sheet */ },
-                    onOpenMoreSheet = { /* TODO: open sheet */ },
-                    onSkip = {
+                    onLockToggle = { stateHolder.setControlsLocked(!stateHolder.controlsLocked.value) },
+                    onSubtitleClick = { /* TODO: open sheet */ },
+                    onAudioClick = { /* TODO: open sheet */ },
+                    onQualityClick = { /* TODO: open sheet */ },
+                    onSpeedClick = { /* TODO: open sheet */ },
+                    onServerClick = { /* TODO: open sheet */ },
+                    onMoreClick = { /* TODO: open sheet */ },
+                    onSkipForward = {
                         try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
                     },
-                    onRotate = {
+                    onRotateClick = {
                         (context as? Activity)?.requestedOrientation =
                             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                     },
-                    onPip = {
+                    onPiPClick = {
                         try {
                             (context as? Activity)?.enterPictureInPictureMode(
                                 android.app.PictureInPictureParams.Builder().build()
@@ -396,6 +403,7 @@ fun WatchScreen(
                         // Controls overlay
                         if (isSwitching) {
                             EpisodeSwitchingOverlay(
+                                episodeThumbnailUrl = null,
                                 episodeTitle = watchRequest.videoTitle,
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -417,14 +425,13 @@ fun WatchScreen(
                                 onSeekRelative = { delta ->
                                     try { MPVLib.command(arrayOf("seek", delta.toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Seek relative failed", e) }
                                 },
-                                onToggleControls = { stateHolder.toggleControls() },
-                                onFullscreen = {
+                                onMaximize = {
                                     stateHolder.setPlayerMode(PlayerMode.FULLSCREEN)
                                     (context as? Activity)?.requestedOrientation =
                                         android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 },
-                                onOpenSubtitlesSheet = { /* TODO */ },
-                                onOpenQualitySheet = { /* TODO */ },
+                                onSubtitleClick = { /* TODO: open subtitle sheet */ },
+                                onQualityClick = { /* TODO: open quality sheet */ },
                             )
                         }
                     }
@@ -625,9 +632,3 @@ private fun EpisodeRow(
         }
     }
 }
-
-// ── Compose lifecycle helpers ──
-
-@Composable
-private fun <T> kotlinx.coroutines.flow.StateFlow<T>.collectAsStateLifecycleAware() =
-    androidx.lifecycle.compose.collectAsStateWithLifecycle(this)

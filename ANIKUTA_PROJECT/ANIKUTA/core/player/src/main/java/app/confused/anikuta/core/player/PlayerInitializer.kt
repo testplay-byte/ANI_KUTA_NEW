@@ -119,8 +119,8 @@ object PlayerInitializer {
      * 500ms so SurfaceView's surfaceCreated fires first (prevents
      * `assertion WinID != 0` crash).
      */
-    fun loadVideo(view: AnikutaMPVView, url: String) {
-        val resolvedUrl = PlayerUtils.resolveUrlForMpv(url)
+    fun loadVideo(view: AnikutaMPVView, url: String, context: Context) {
+        val resolvedUrl = resolveUrlForMpv(url, context)
         Log.i(TAG, "Loading video: $resolvedUrl")
 
         if (resolvedUrl.startsWith("fd://") || resolvedUrl.startsWith("content://")) {
