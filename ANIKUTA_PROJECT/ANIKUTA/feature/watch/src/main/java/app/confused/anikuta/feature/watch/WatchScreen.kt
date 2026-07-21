@@ -412,6 +412,7 @@ private fun WatchScreenContent(
     onSwitchEpisode: (Int) -> Unit,
     onMpvViewCreated: (AnikutaMPVView) -> Unit,
 ) {
+    val context = LocalContext.current
     if (playerMode == PlayerMode.FULLSCREEN) {
         // ── Fullscreen mode ──
         // Player fills the entire screen. No top bar, no scrollable content.
