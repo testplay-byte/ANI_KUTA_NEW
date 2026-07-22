@@ -190,7 +190,7 @@ fun SearchTopBar(
                     shrinkVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)),
             ) {
                 Column {
-                    Spacer(Modifier.padding(top = 8.dp))
+                    Spacer(Modifier.padding(top = 4.dp))
                     SearchBar(
                         value = query,
                         onChange = onQueryChange,
@@ -203,9 +203,6 @@ fun SearchTopBar(
             }
 
             // ── Row 3: quick row — Filters (left) + Sort (right) ──
-            // Smooth slide animation: the row slides down + fades when collapsing,
-            // and slides up + fades in when expanding. This gives a smoother feel
-            // than just fadeOut + shrinkVertically.
             AnimatedVisibility(
                 visible = !collapsed,
                 enter = fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing)) +
@@ -216,7 +213,7 @@ fun SearchTopBar(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = 8.dp),
+                        .padding(top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {

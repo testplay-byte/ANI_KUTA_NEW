@@ -9,12 +9,12 @@ package app.confused.anikuta.core.common.model
  * [Progress] sort is computed in Kotlin (not SQL) because watch progress
  * lives in [WatchProgressStore] (JSON-in-prefs), not in the SQLDelight database.
  */
-enum class LibrarySortType {
-    TITLE,
-    DATE_ADDED,
-    LAST_WATCHED,
-    PROGRESS,
-    TOTAL_EPISODES,
+enum class LibrarySortType(val displayName: String) {
+    TITLE("Title"),
+    DATE_ADDED("Date Added"),
+    LAST_WATCHED("Last Watched"),
+    PROGRESS("Progress"),
+    TOTAL_EPISODES("Total Episodes"),
 }
 
 /**

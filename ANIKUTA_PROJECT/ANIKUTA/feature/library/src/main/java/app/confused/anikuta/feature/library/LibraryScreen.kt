@@ -113,57 +113,50 @@ fun LibraryScreen(
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Pinned header ──
-            // Search bar is SEPARATE from the header (not inside CollapsingHeader
-            // actions). It sits in its own row below the title, aligned to the
-            // right side, with the settings button to its right.
+            // Search button + settings button are BOTH in the header actions,
+            // on the same row. Search is on the LEFT of settings.
             CollapsingHeader(
                 title = headerTitle,
                 collapsed = collapsed,
                 actions = {
                     if (!state.selectionMode) {
-                        // Options button (settings) — on the far right
+                        // Search button (LEFT of settings)
+                        HeaderActionButton(
+                            icon = Icons.Filled.Search,
+                            contentDescription = "Search library",
+                            onClick = { viewModel.setSearchQuery(" ") }, // activate search mode
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        // Settings button (FAR RIGHT)
                         HeaderActionButton(
                             icon = Icons.Filled.Tune,
-                            contentDescription = "Library options",
-                            onClick = { viewModel.showOptionsSheet() },
+                            contentDescription = "Library settings",
+                            onClick = { viewModel.showCustomizeSheet() },
                         )
                     }
                 },
             )
 
-            // ── Search bar row — separate from header, right-aligned ──
-            // The search icon button toggles an expandable text field.
-            // When active, the text field fills the width (left of the settings button).
-            if (!state.selectionMode) {
+            // ── Search bar (appears when search is activated) ──
+            if (!state.selectionMode && state.hasActiveSearch) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (state.hasActiveSearch) {
-                        // Active search: text field fills width + close button
-                        SearchField(
-                            query = state.searchQuery.trim(),
-                            onQueryChange = { viewModel.setSearchQuery(it) },
-                            placeholder = "Search library",
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        HeaderActionButton(
-                            icon = Icons.Filled.Close,
-                            contentDescription = "Close search",
-                            onClick = { viewModel.setSearchQuery("") },
-                        )
-                    } else {
-                        // Inactive: search icon button on the right
-                        Spacer(Modifier.weight(1f))
-                        HeaderActionButton(
-                            icon = Icons.Filled.Search,
-                            contentDescription = "Search library",
-                            onClick = { viewModel.setSearchQuery(" ") }, // activate search mode
-                        )
-                    }
+                    SearchField(
+                        query = state.searchQuery.trim(),
+                        onQueryChange = { viewModel.setSearchQuery(it) },
+                        placeholder = "Search library",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    HeaderActionButton(
+                        icon = Icons.Filled.Close,
+                        contentDescription = "Close search",
+                        onClick = { viewModel.setSearchQuery("") },
+                    )
                 }
             }
 
@@ -265,15 +258,6 @@ fun LibraryScreen(
 
         // ── Sheets + dialogs ──
         when (val dialog = state.dialog) {
-            is LibraryDialog.OptionsSheet -> OptionsSheet(
-                displayMode = state.displayMode,
-                onSort = { viewModel.showSortSheet() },
-                onDisplayMode = {
-                    viewModel.setDisplayMode(it)
-                },
-                onCustomize = { viewModel.showCustomizeSheet() },
-                onDismiss = { viewModel.dismissDialog() },
-            )
             is LibraryDialog.CustomizeSheet -> CustomizeSheet(
                 displayMode = state.displayMode,
                 columns = state.columns,
@@ -282,6 +266,8 @@ fun LibraryScreen(
                 showContinueWatching = state.showContinueWatching,
                 showTotalEntries = state.showTotalEntries,
                 titleLines = state.titleLines,
+                sortType = state.sort.type,
+                sortAscending = state.sort.ascending,
                 onDisplayModeChange = { viewModel.setDisplayMode(it) },
                 onColumnsChange = { viewModel.setColumns(it) },
                 onEpisodeBadgeModeChange = { viewModel.setEpisodeBadgeMode(it) },
@@ -289,14 +275,11 @@ fun LibraryScreen(
                 onShowContinueWatchingChange = { viewModel.setShowContinueWatching(it) },
                 onShowTotalEntriesChange = { viewModel.setShowTotalEntries(it) },
                 onTitleLinesChange = { viewModel.setTitleLines(it) },
-                onDismiss = { viewModel.dismissDialog() },
-            )
-            is LibraryDialog.SortSheet -> SortSheet(
-                sortType = state.sort.type,
-                ascending = state.sort.ascending,
                 onSortChange = { type, asc -> viewModel.setSort(type, asc) },
                 onDismiss = { viewModel.dismissDialog() },
             )
+            is LibraryDialog.OptionsSheet -> { /* deprecated — merged into CustomizeSheet */ }
+            is LibraryDialog.SortSheet -> { /* deprecated — merged into CustomizeSheet */ }
             is LibraryDialog.MoveToCategorySheet -> {
                 var showAddCategory by remember { mutableStateOf(false) }
                 if (!showAddCategory) {
