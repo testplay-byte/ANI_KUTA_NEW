@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -292,34 +293,43 @@ private fun EpisodeList(
 }
 
 /**
- * A single episode row — fully customizable display with thumbnail, title,
- * description, date, audio pills, and episode number.
+ * A single episode row — the PRIMARY two-section view (per user spec).
  *
- * Design (rebuilt to match the OLD ANIKUTA project's `EpisodeRowContent` —
- * minimal, high-contrast, theme-aware):
- * - Episode number badge: black 70%-alpha pill, 6dp corners, "EP N" in
- *   `labelSmall` Bold White (overlay variant, default). Badge variant uses
- *   `primaryContainer`/`onPrimaryContainer`. Circle fallback (no thumbnail)
- *   is a 40dp `surfaceVariant` disc with the bare number.
- * - Title: `titleSmall` Bold, `maxLines = titleMaxLines` (default 1 per user
- *   request — "force it to be on one single line"), `Ellipsis`. NO heavy
- *   surface background — plain text on the card (like the old project).
- * - Date: `outlineVariant` pill, `labelSmall` Medium, `onSurfaceVariant`,
- *   format "MMM d, yyyy". Shown when `showDates` + data available.
- * - Audio pills: single `outlineVariant` surface holding SUB/DUB/HSUB. When
- *   2+ versions are present, uses short letters ("S", "D") separated by
- *   3dp dots; when only one, uses the full label. Derived from
- *   `episode.scanlator` AND `episode.name` (many extensions put the audio
- *   token in the episode name).
- * - Thumbnail: `metadata.thumbnailUrl ?: episode.preview_url` (fallback so
- *   thumbnails render even when metadata is missing).
- * - Synopsis: plain text on card (no surface background), `bodySmall`,
- *   `maxLines = synopsisMaxLines`, `Ellipsis`.
+ * Layout:
+ * ```
+ * ┌───────────────────────────────────────────────────┐
+ * │  TOP SECTION (height driven by thumbnail)          │
+ * │  ┌──────────┐  ┌─ Title (bg) ──────────────────┐  │
+ * │  │          │  │ EP 3  The Dragon's Labyrinth   │  │
+ * │  │ Thumbnail│  └────────────────────────────────┘  │
+ * │  │  EP 3   │  ┌─ Date + Audio (bg) ────────────┐  │
+ * │  │          │  │ Mar 15, 2024  SUB•DUB          │  │
+ * │  └──────────┘  └────────────────────────────────┘  │
+ * ├───────────────────────────────────────────────────┤
+ * │  BOTTOM SECTION                                    │
+ * │  ┌─ Synopsis (bg) ──────────────────────────────┐  │
+ * │  │ A young adventurer discovers a hidden...     │  │
+ * │  └──────────────────────────────────────────────┘  │
+ * └───────────────────────────────────────────────────┘
+ * ```
+ *
+ * - The top section's right side is divided into TWO equal sub-sections:
+ *   title (top) + date/audio (bottom). Height is driven by the thumbnail.
+ * - Each element (title, date+audio, synopsis) gets a dedicated background
+ *   container (toggleable via [EpisodeDisplayPrefs.showTitleBackground] etc.).
+ * - NO alternating zebra-stripe colors — all rows use the same lighter shade.
+ * - Episode number badge: black 70%-alpha pill overlay on the thumbnail.
+ * - Audio pills: ALWAYS show full names ("SUB", "DUB") with dot separators →
+ *   "SUB•DUB" (per user request — not short letters).
+ * - Pill heights are minimal: `labelSmall` typography + tight 6dp/1dp padding
+ *   (per user: "the background height is way too much").
+ * - Thumbnail: `metadata.thumbnailUrl ?: episode.preview_url` (fallback).
  * - Watched effect: grayscale + alpha 0.55f via [watchedEpisodeEffect].
  *
- * @param displayPrefs The current display-prefs snapshot. NOW WIRED — previously
- *   this was always null and the row fell back to hardcoded defaults, which is
- *   why settings changes never affected the actual rendered list.
+ * NOTE: Layout position prefs (thumbnailPosition, titlePosition, etc.) are
+ * DORMANT for now — the row uses this single fixed view. Per user: "we are
+ * only going to focus on one single view for the current time being."
+ * The thumbnail SIZE pref is still active (small/medium/large).
  */
 @Composable
 private fun EpisodeRow(
@@ -331,28 +341,22 @@ private fun EpisodeRow(
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
 ) {
-    val isEven = index % 2 == 0
-    val cardColor = if (isEven) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
-    }
+    // Single lighter shade for ALL rows — no alternating zebra-stripe (per user request).
+    val cardColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
 
-    // Apply preferences or use defaults (defaults aligned with EpisodeDisplayPreferences)
+    // Apply preferences or use defaults
     val showThumbnail = displayPrefs?.showThumbnails ?: true
     val showTitle = displayPrefs?.showTitles ?: true
     val showSummary = displayPrefs?.showSummaries ?: true
     val showDate = displayPrefs?.showDates ?: true
     val showNumber = displayPrefs?.showEpisodeNumber ?: true
     val showAudioPills = displayPrefs?.showAudioPills ?: true
-    val thumbPos = displayPrefs?.thumbnailPosition ?: "left"
-    val titlePos = displayPrefs?.titlePosition ?: "right"
-    val synopsisPos = displayPrefs?.synopsisPosition ?: "below"
-    val datePos = displayPrefs?.datePosition ?: "right_below_synopsis"
-    val epNumPos = displayPrefs?.episodeNumberPosition ?: "overlay"
     val thumbSize = displayPrefs?.thumbnailSize ?: "medium"
     val titleMaxLines = displayPrefs?.titleMaxLines ?: 1
     val synopsisMaxLines = displayPrefs?.synopsisMaxLines ?: 3
+    val showTitleBg = displayPrefs?.showTitleBackground ?: true
+    val showMetaBg = displayPrefs?.showMetaBackground ?: true
+    val showSynopsisBg = displayPrefs?.showSynopsisBackground ?: true
 
     // Use metadata title if available, otherwise parse the extension title
     val displayTitle = metadata?.title
@@ -363,8 +367,6 @@ private fun EpisodeRow(
 
     val description = metadata?.description ?: episode.summary
     // Thumbnail fallback: prefer metadata, fall back to the extension's preview_url.
-    // Previously this used metadata ONLY, so thumbnails never rendered when
-    // metadata was missing — even though extensions often provide preview_url.
     val thumbnailUrl = if (showThumbnail) {
         metadata?.thumbnailUrl ?: episode.preview_url
     } else {
@@ -381,10 +383,6 @@ private fun EpisodeRow(
     }
 
     // Audio availability — parse BOTH scanlator AND episode name.
-    // Many anime extensions put "SUB"/"DUB" in the episode name because the
-    // scanlator field is rarely populated. This is the pragmatic episode-list-
-    // time approach; true per-episode audio-track data is only available after
-    // getVideoList() at watch time.
     val audio = parseAudioAvailability(episode.scanlator, episode.name)
     val hasSub = audio.hasSub
     val hasDub = audio.hasDub
@@ -401,6 +399,8 @@ private fun EpisodeRow(
         }
     } else null
 
+    val hasMetaRow = dateText != null || hasAnyAudioPills
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -411,104 +411,149 @@ private fun EpisodeRow(
             .clickable(onClick = onClick)
             .padding(10.dp),
     ) {
-        // ── Top row: thumbnail + title (side by side) ──
+        // ══ TOP SECTION: thumbnail (left) + title/date-audio (right, 2 equal sub-sections) ══
+        // The thumbnail drives the top-section height. The right column fills
+        // the thumbnail height and is split equally between title and meta.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
-            // Thumbnail (left position)
-            if (thumbnailUrl != null && thumbPos == "left") {
+            // ── Thumbnail (left) with episode-number overlay ──
+            if (thumbnailUrl != null) {
                 EpisodeThumbnail(
                     url = thumbnailUrl,
                     width = thumbWidth,
                     height = thumbHeight,
                     contentDescription = displayTitle,
                     showNumber = showNumber,
-                    epNumPos = epNumPos,
                     epNumText = epNumText,
-                    alignEnd = false,
                 )
                 Spacer(modifier = Modifier.size(10.dp))
-            } else if (showNumber && epNumPos == "badge") {
-                // Inline badge (when no thumbnail, or explicit badge mode)
-                InlineEpisodeNumberBadge(epNumText)
-                Spacer(modifier = Modifier.size(10.dp))
-            } else if (thumbnailUrl == null && showNumber && epNumPos != "badge") {
-                // Circle fallback (no thumbnail at all)
+            } else if (showNumber) {
+                // No thumbnail — show the circle episode-number as the left element
                 CircleEpisodeNumber(bareEpNum)
                 Spacer(modifier = Modifier.size(10.dp))
             }
 
-            // Title column (when title is "right" of thumbnail)
-            if (showTitle && titlePos == "right") {
-                Column(modifier = Modifier.weight(1f)) {
-                    EpisodeTitle(displayTitle, titleMaxLines)
-                    // Date + audio pills beside title (when date position is "right_*")
-                    if (showDate && datePos == "right_above_synopsis" && (dateText != null || hasAnyAudioPills)) {
-                        Spacer(Modifier.size(4.dp))
-                        DateAndAudioRow(dateText, showDate, hasAnyAudioPills, hasSub, hasDub, hasHsub, showAudioPills)
+            // ── Right column: two equal sub-sections (title on top, meta on bottom) ──
+            if (showTitle || hasMetaRow) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(IntrinsicSize.Min),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    // Top sub-section: Title (with optional background)
+                    if (showTitle) {
+                        if (showTitleBg) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = displayTitle,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = titleMaxLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = displayTitle,
+                                fontFamily = RobotoFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = titleMaxLines,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
-                    if (showSummary && !description.isNullOrBlank() && synopsisPos == "right") {
-                        Spacer(Modifier.size(4.dp))
-                        EpisodeSynopsis(description, synopsisMaxLines)
-                    }
-                    if (showDate && datePos == "right_below_synopsis" && (dateText != null || hasAnyAudioPills)) {
-                        Spacer(Modifier.size(4.dp))
-                        DateAndAudioRow(dateText, showDate, hasAnyAudioPills, hasSub, hasDub, hasHsub, showAudioPills)
+
+                    // Bottom sub-section: Date + Audio (with optional shared background)
+                    if (hasMetaRow) {
+                        if (showMetaBg) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                DateAndAudioRow(
+                                    dateText = dateText,
+                                    showDate = showDate,
+                                    hasSub = hasSub,
+                                    hasDub = hasDub,
+                                    hasHsub = hasHsub,
+                                    showAudioPills = showAudioPills,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        } else {
+                            DateAndAudioRow(
+                                dateText = dateText,
+                                showDate = showDate,
+                                hasSub = hasSub,
+                                hasDub = hasDub,
+                                hasHsub = hasHsub,
+                                showAudioPills = showAudioPills,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 }
-            } else if (showTitle && titlePos == "below" && (thumbnailUrl != null || epNumPos == "badge" || (thumbnailUrl == null && showNumber && epNumPos != "badge"))) {
-                // Title is below — fill remaining horizontal space in the top row so the
-                // thumbnail/badge stays at its natural size instead of stretching to fill width.
-                Spacer(modifier = Modifier.weight(1f))
-            } else if (!showTitle && (thumbnailUrl != null || epNumPos == "badge")) {
-                // No title — fill remaining horizontal space so the thumbnail/badge doesn't stretch
+            } else if (thumbnailUrl != null || showNumber) {
+                // No title and no meta — fill remaining space so thumbnail keeps natural size
                 Spacer(modifier = Modifier.weight(1f))
             }
+        }
 
-            // Thumbnail (right position)
-            if (thumbnailUrl != null && thumbPos == "right") {
-                Spacer(modifier = Modifier.size(10.dp))
-                EpisodeThumbnail(
-                    url = thumbnailUrl,
-                    width = thumbWidth,
-                    height = thumbHeight,
-                    contentDescription = displayTitle,
-                    showNumber = showNumber,
-                    epNumPos = epNumPos,
-                    epNumText = epNumText,
-                    alignEnd = true,
+        // ══ BOTTOM SECTION: Synopsis (with optional background) ══
+        if (showSummary && !description.isNullOrBlank()) {
+            Spacer(Modifier.size(8.dp))
+            if (showSynopsisBg) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = description,
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = synopsisMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+            } else {
+                Text(
+                    text = description,
+                    fontFamily = RobotoFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = synopsisMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
-
-        // Title "below" thumbnail (full width)
-        if (showTitle && titlePos == "below") {
-            Spacer(Modifier.size(8.dp))
-            EpisodeTitle(displayTitle, titleMaxLines)
-        }
-
-        // Synopsis "below" (full width)
-        if (showSummary && !description.isNullOrBlank() && synopsisPos == "below") {
-            Spacer(Modifier.size(6.dp))
-            EpisodeSynopsis(description, synopsisMaxLines)
-        }
-
-        // Date + audio pills "below" (full-width row)
-        if (showDate && datePos == "below" && (dateText != null || hasAnyAudioPills)) {
-            Spacer(Modifier.size(6.dp))
-            DateAndAudioRow(dateText, showDate, hasAnyAudioPills, hasSub, hasDub, hasHsub, showAudioPills)
         }
     }
 }
 
 /**
- * The episode thumbnail with an optional overlay episode-number badge.
+ * The episode thumbnail with the overlay episode-number badge.
  *
- * The overlay badge is the OLD ANIKUTA design: a semi-transparent BLACK pill
- * (70% alpha — NOT a theme color) at the top-start/top-end corner, so it stays
- * high-contrast on any thumbnail. 6dp corners, `labelSmall` Bold White text,
- * 6dp/2dp inner padding.
+ * The overlay badge: semi-transparent BLACK pill (70% alpha) at the top-left
+ * corner. 6dp corners, `labelSmall` Bold White text, tight 6dp/1dp padding.
  */
 @Composable
 private fun EpisodeThumbnail(
@@ -517,9 +562,7 @@ private fun EpisodeThumbnail(
     height: androidx.compose.ui.unit.Dp,
     contentDescription: String,
     showNumber: Boolean,
-    epNumPos: String,
     epNumText: String,
-    alignEnd: Boolean,
 ) {
     Box {
         coil3.compose.AsyncImage(
@@ -530,42 +573,27 @@ private fun EpisodeThumbnail(
                 .clip(RoundedCornerShape(10.dp)),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
         )
-        if (showNumber && epNumPos == "overlay") {
+        if (showNumber) {
             Surface(
                 shape = RoundedCornerShape(6.dp),
                 color = Color.Black.copy(alpha = 0.7f),
                 modifier = Modifier
-                    .align(if (alignEnd) Alignment.TopEnd else Alignment.TopStart)
+                    .align(Alignment.TopStart)
                     .padding(4.dp),
             ) {
                 Text(
                     text = epNumText,
                     fontFamily = RobotoFamily,
                     fontSize = 11.sp,
+                    lineHeight = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
         }
-    }
-}
-
-/** The inline badge variant — `primaryContainer` pill beside the title. */
-@Composable
-private fun InlineEpisodeNumberBadge(epNumText: String) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-    ) {
-        Text(
-            text = epNumText,
-            fontFamily = RobotoFamily,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-        )
     }
 }
 
@@ -589,57 +617,30 @@ private fun CircleEpisodeNumber(bareEpNum: String) {
     }
 }
 
-/** Plain-text title on the card (no surface background — matches old project). */
-@Composable
-private fun EpisodeTitle(title: String, maxLines: Int) {
-    Text(
-        text = title,
-        fontFamily = RobotoFamily,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
-/** Plain-text synopsis on the card (no surface background). */
-@Composable
-private fun EpisodeSynopsis(text: String, maxLines: Int) {
-    Text(
-        text = text,
-        fontFamily = RobotoFamily,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Normal,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
 /**
  * The date pill + audio pills row.
  *
- * Date pill: `outlineVariant` surface, `labelSmall` Medium, `onSurfaceVariant`,
- * 8dp/3dp padding, single line.
+ * Per user request: pills have MINIMAL height. Uses `labelSmall`-equivalent
+ * sizing with tight 6dp/1dp padding (was 8dp/3dp — too tall per user feedback).
  *
- * Audio pills: a SINGLE `outlineVariant` surface holding all detected versions.
- * When 2+ versions → short letters ("S", "D") separated by 3dp dots; when only
- * one → full label ("SUB"). Mirrors the old project's `AudioPills`.
+ * Audio pills ALWAYS show full names: "SUB", "DUB", "HSUB" with dot separators
+ * → "SUB•DUB" (per user: "make sure that it shows the full name, like SUB•DUB").
  */
 @Composable
 private fun DateAndAudioRow(
     dateText: String?,
     showDate: Boolean,
-    hasAnyAudioPills: Boolean,
     hasSub: Boolean,
     hasDub: Boolean,
     hasHsub: Boolean,
     showAudioPills: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    if (!showDate && !hasAnyAudioPills) return
+    val hasAudio = showAudioPills && (hasSub || hasDub || hasHsub)
+    if (!showDate && !hasAudio) return
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showDate && dateText != null) {
@@ -651,15 +652,16 @@ private fun DateAndAudioRow(
                     text = dateText,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                     maxLines = 1,
                     softWrap = false,
                 )
             }
         }
-        if (showAudioPills && hasAnyAudioPills) {
+        if (hasAudio) {
             AudioPills(hasSub = hasSub, hasDub = hasDub, hasHsub = hasHsub)
         }
     }
@@ -667,28 +669,27 @@ private fun DateAndAudioRow(
 
 /**
  * The audio-pills composable — one `outlineVariant` surface holding all detected
- * audio versions. 2+ versions → short letters + 3dp dots; 1 version → full label.
+ * audio versions. ALWAYS uses full names ("SUB", "DUB", "HSUB") separated by
+ * 3dp dots → "SUB•DUB" (per user request — not short letters).
  */
 @Composable
 private fun AudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
-    data class Audio(val full: String, val short: String)
     val parts = buildList {
-        if (hasSub) add(Audio("SUB", "S"))
-        if (hasDub) add(Audio("DUB", "D"))
-        if (hasHsub) add(Audio("HSUB", "H"))
+        if (hasSub) add("SUB")
+        if (hasDub) add("DUB")
+        if (hasHsub) add("HSUB")
     }
     if (parts.isEmpty()) return
-    val useShort = parts.size >= 2
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            parts.forEachIndexed { idx, audio ->
+            parts.forEachIndexed { idx, label ->
                 if (idx > 0) {
                     Box(
                         modifier = Modifier
@@ -698,9 +699,10 @@ private fun AudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
                     )
                 }
                 Text(
-                    text = if (useShort) audio.short else audio.full,
+                    text = label,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -755,10 +757,14 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
     val thumbSize by prefs.thumbnailSize().changes().collectAsState(initial = prefs.thumbnailSize().get())
     val titleLines by prefs.titleMaxLines().changes().collectAsState(initial = prefs.titleMaxLines().get())
     val synopsisLines by prefs.synopsisMaxLines().changes().collectAsState(initial = prefs.synopsisMaxLines().get())
+    val showTitleBg by prefs.showTitleBackground().changes().collectAsState(initial = prefs.showTitleBackground().get())
+    val showMetaBg by prefs.showMetaBackground().changes().collectAsState(initial = prefs.showMetaBackground().get())
+    val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
 
     return remember(
         showNumber, showTitles, showSummaries, showThumbnails, showDates, showAudioPills,
         thumbPos, titlePos, synopsisPos, datePos, epNumPos, thumbSize, titleLines, synopsisLines,
+        showTitleBg, showMetaBg, showSynopsisBg,
     ) {
         EpisodeDisplayPrefs(
             showThumbnails = showThumbnails,
@@ -775,6 +781,9 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
             thumbnailSize = thumbSize,
             titleMaxLines = titleLines,
             synopsisMaxLines = synopsisLines,
+            showTitleBackground = showTitleBg,
+            showMetaBackground = showMetaBg,
+            showSynopsisBackground = showSynopsisBg,
         )
     }
 }
@@ -805,6 +814,10 @@ data class EpisodeDisplayPrefs(
     val thumbnailSize: String = "medium",
     val titleMaxLines: Int = 1,
     val synopsisMaxLines: Int = 3,
+    // ── Background toggles (per user request: show/hide element backgrounds) ──
+    val showTitleBackground: Boolean = true,
+    val showMetaBackground: Boolean = true,
+    val showSynopsisBackground: Boolean = true,
 )
 
 /** Formats an episode number: 5.0f → "5", 5.5f → "5.5", -1f → "?". */

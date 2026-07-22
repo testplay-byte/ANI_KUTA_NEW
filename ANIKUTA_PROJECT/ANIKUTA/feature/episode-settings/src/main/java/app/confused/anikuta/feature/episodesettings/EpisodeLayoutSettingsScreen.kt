@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.episodesettings
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -38,18 +39,22 @@ fun EpisodeLayoutSettingsScreen(onBack: () -> Unit) {
     val thumbSize by prefs.thumbnailSize().changes().collectAsState(initial = prefs.thumbnailSize().get())
 
     SettingsSubpageScaffold(title = "Episode layout", onBack = onBack) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-        ) {
-            // ── Sticky live preview ──
-            item {
-                EpisodeRowPreview(prefs = displayPrefs)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            // ── Positions ──
-            item {
-                SettingsGroupCard(title = "Positions") {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── Sticky live preview (non-scrolling, stays at top) ──
+            EpisodeRowPreview(prefs = displayPrefs)
+            Spacer(modifier = Modifier.height(16.dp))
+            // ── Scrollable options below ──
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            ) {
+                // ── Positions ──
+                // NOTE: Position prefs are currently DORMANT — the episode row uses a
+                // single fixed two-section view (top: thumbnail + title + meta;
+                // bottom: synopsis). These options are kept for future use when
+                // multiple layouts are re-enabled. Only thumbnail SIZE is active.
+                item {
+                    SettingsGroupCard(title = "Positions") {
                     LabeledSegmentedRow(
                         label = "Thumbnail",
                         description = "Which side the episode thumbnail sits on",
@@ -110,27 +115,27 @@ fun EpisodeLayoutSettingsScreen(onBack: () -> Unit) {
                     )
                 }
             }
-            // ── Sizes ──
-            item {
-                SettingsGroupCard(title = "Sizes") {
-                    LabeledSegmentedRow(
-                        label = "Thumbnail size",
-                        description = "Small (100×56) · Medium (120×68) · Large (160×90)",
-                        options = listOf(
-                            "Small" to (thumbSize == "small"),
-                            "Medium" to (thumbSize == "medium"),
-                            "Large" to (thumbSize == "large"),
-                        ),
-                        onSelect = { idx ->
-                            prefs.thumbnailSize().set(
-                                when (idx) {
-                                    0 -> "small"
-                                    1 -> "medium"
-                                    else -> "large"
-                                },
-                            )
-                        },
-                    )
+                item {
+                    SettingsGroupCard(title = "Sizes") {
+                        LabeledSegmentedRow(
+                            label = "Thumbnail size",
+                            description = "Small (100×56) · Medium (120×68) · Large (160×90)",
+                            options = listOf(
+                                "Small" to (thumbSize == "small"),
+                                "Medium" to (thumbSize == "medium"),
+                                "Large" to (thumbSize == "large"),
+                            ),
+                            onSelect = { idx ->
+                                prefs.thumbnailSize().set(
+                                    when (idx) {
+                                        0 -> "small"
+                                        1 -> "medium"
+                                        else -> "large"
+                                    },
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

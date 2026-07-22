@@ -75,4 +75,21 @@ class EpisodeDisplayPreferences(
     /** Max lines for episode synopsis: 1, 2, 3, or 0 (expandable). */
     fun synopsisMaxLines(): Preference<Int> =
         store.getInt("pref_ep_synopsis_lines", 3)
+
+    // ── Background toggles ──
+    // Per user request: "give the user the option to show or hide these fun options,
+    // like the background color for the text". When ON, the element gets a dedicated
+    // surface background; when OFF, it renders as plain text on the card.
+
+    /** Whether the title gets a dedicated background container. */
+    fun showTitleBackground(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_title_bg", true)
+
+    /** Whether the date + audio row gets a dedicated background container. */
+    fun showMetaBackground(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_meta_bg", true)
+
+    /** Whether the synopsis gets a dedicated background container. */
+    fun showSynopsisBackground(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_synopsis_bg", true)
 }

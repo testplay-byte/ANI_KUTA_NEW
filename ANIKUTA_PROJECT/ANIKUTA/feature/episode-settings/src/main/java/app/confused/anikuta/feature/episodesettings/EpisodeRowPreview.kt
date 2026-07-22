@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +34,6 @@ private const val DEMO_TITLE = "The Dragon's Labyrinth"
 private const val DEMO_SYNOPSIS = "A young adventurer discovers a hidden labyrinth beneath the ancient city and must navigate its traps before dawn."
 private const val DEMO_DATE = "Mar 15, 2024"
 private const val DEMO_EP_NUM = 5f
-private const val DEMO_THUMB_URL = "https://placehold.co/240x135/1a1a2e/e94560.png?text=EP+5"
 
 /**
  * The live preview shown at the top of every episode-settings screen.
@@ -42,10 +43,9 @@ private const val DEMO_THUMB_URL = "https://placehold.co/240x135/1a1a2e/e94560.p
  * above the scrollable options list — so the user sees the effect of every
  * toggle immediately.
  *
- * Mirrors the OLD ANIKUTA project's `EpisodeRowPreview` (488-line file). This
- * implementation is intentionally a single focused composable that mirrors the
- * real `EpisodeRow` in `feature:anime-details` (same badge style, same layout
- * knobs, same audio-pill design). If the real row changes, update this preview
+ * Mirrors the real `EpisodeRow` in `feature:anime-details` — the SAME two-section
+ * layout (top: thumbnail + title + meta; bottom: synopsis), the SAME background
+ * containers, the SAME pill design. If the real row changes, update this preview
  * to match.
  *
  * @param prefs The current display-prefs snapshot.
@@ -83,208 +83,205 @@ private fun PreviewEpisodeRow(
     hasHsub: Boolean,
 ) {
     val epNumText = "EP ${formatPreviewEpNumber(DEMO_EP_NUM)}"
+    val bareEpNum = formatPreviewEpNumber(DEMO_EP_NUM)
     val (thumbW, thumbH) = when (prefs.thumbnailSize) {
         "small" -> 100.dp to 56.dp
         "large" -> 160.dp to 90.dp
         else -> 120.dp to 68.dp
     }
+    val hasAudio = prefs.showAudioPills && (hasSub || hasDub || hasHsub)
+    val hasMetaRow = prefs.showDates || hasAudio
+    val cardColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
 
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        color = cardColor,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
-            // ── Top row: thumbnail + title ──
+            // ══ TOP SECTION: thumbnail (left) + title/meta (right, 2 sub-sections) ══
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                // Thumbnail (left)
-                if (prefs.showThumbnails && prefs.thumbnailPosition == "left") {
-                    PreviewThumbnail(thumbW, thumbH, prefs, epNumText)
-                    Spacer(modifier = Modifier.size(10.dp))
-                } else if (prefs.showEpisodeNumber && prefs.episodeNumberPosition == "badge") {
-                    // Inline badge (no thumbnail or badge-mode)
-                    InlineEpBadge(epNumText)
-                    Spacer(modifier = Modifier.size(10.dp))
-                } else if (!prefs.showThumbnails && prefs.showEpisodeNumber && prefs.episodeNumberPosition != "badge") {
-                    // Circle fallback (no thumbnail)
-                    CircleEpNumber(formatPreviewEpNumber(DEMO_EP_NUM))
-                    Spacer(modifier = Modifier.size(10.dp))
-                }
-
-                // Title column (when title is "right" of thumbnail)
-                if (prefs.showTitles && prefs.titlePosition == "right") {
-                    Column(modifier = Modifier.weight(1f)) {
-                        PreviewTitle(prefs)
-                        // Date + audio pills inline beside title (when date position is "right_*")
-                        if (prefs.showDates && (prefs.datePosition == "right_above_synopsis" || prefs.datePosition == "right_below_synopsis")) {
-                            if (prefs.datePosition == "right_above_synopsis") {
-                                Spacer(Modifier.size(4.dp))
-                                PreviewDateAndAudioRow(prefs, hasSub, hasDub, hasHsub)
+                // Thumbnail (left) — gradient box as dummy thumbnail + overlay badge
+                if (prefs.showThumbnails) {
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(width = thumbW, height = thumbH)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(Color(0xFF1A1A2E), Color(0xFFE94560), Color(0xFFFFA500)),
+                                    ),
+                                ),
+                        )
+                        if (prefs.showEpisodeNumber) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.Black.copy(alpha = 0.7f),
+                                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                            ) {
+                                Text(
+                                    text = epNumText,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
                             }
                         }
-                        if (prefs.showSummaries && prefs.synopsisPosition == "right") {
-                            Spacer(Modifier.size(4.dp))
-                            PreviewSynopsis(prefs)
-                        }
-                        if (prefs.showDates && prefs.datePosition == "right_below_synopsis") {
-                            Spacer(Modifier.size(4.dp))
-                            PreviewDateAndAudioRow(prefs, hasSub, hasDub, hasHsub)
+                    }
+                    Spacer(modifier = Modifier.size(10.dp))
+                } else if (prefs.showEpisodeNumber) {
+                    // Circle fallback (no thumbnail)
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = bareEpNum,
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                } else if (prefs.showTitles && prefs.titlePosition == "below" &&
-                    (prefs.showThumbnails || prefs.episodeNumberPosition == "badge" ||
-                        (!prefs.showThumbnails && prefs.showEpisodeNumber && prefs.episodeNumberPosition != "badge"))) {
-                    // Title is below — fill the remaining horizontal space so the
-                    // thumbnail/badge/circle keeps its natural size.
-                    Spacer(modifier = Modifier.weight(1f))
-                } else if (!prefs.showTitles && (prefs.showThumbnails || prefs.episodeNumberPosition == "badge")) {
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-
-                // Thumbnail (right)
-                if (prefs.showThumbnails && prefs.thumbnailPosition == "right") {
                     Spacer(modifier = Modifier.size(10.dp))
-                    PreviewThumbnail(thumbW, thumbH, prefs, epNumText, alignEnd = true)
+                }
+
+                // Right column: title (top) + meta (bottom)
+                if (prefs.showTitles || hasMetaRow) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(IntrinsicSize.Min),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        // Title (with optional background)
+                        if (prefs.showTitles) {
+                            if (prefs.showTitleBackground) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = DEMO_TITLE,
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = prefs.titleMaxLines,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = DEMO_TITLE,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = prefs.titleMaxLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+
+                        // Date + Audio (with optional shared background)
+                        if (hasMetaRow) {
+                            if (prefs.showMetaBackground) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    PreviewDateAndAudioRow(
+                                        prefs = prefs,
+                                        hasSub = hasSub,
+                                        hasDub = hasDub,
+                                        hasHsub = hasHsub,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            } else {
+                                PreviewDateAndAudioRow(
+                                    prefs = prefs,
+                                    hasSub = hasSub,
+                                    hasDub = hasDub,
+                                    hasHsub = hasHsub,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                } else if (prefs.showThumbnails || prefs.showEpisodeNumber) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
 
-            // Title "below" thumbnail (full width)
-            if (prefs.showTitles && prefs.titlePosition == "below") {
+            // ══ BOTTOM SECTION: Synopsis (with optional background) ══
+            if (prefs.showSummaries) {
                 Spacer(Modifier.size(8.dp))
-                PreviewTitle(prefs)
-            }
-
-            // Synopsis "below" (full width)
-            if (prefs.showSummaries && prefs.synopsisPosition == "below") {
-                Spacer(Modifier.size(6.dp))
-                PreviewSynopsis(prefs)
-            }
-
-            // Date + audio pills "below" (full-width row)
-            if (prefs.showDates && prefs.datePosition == "below") {
-                Spacer(Modifier.size(6.dp))
-                PreviewDateAndAudioRow(prefs, hasSub, hasDub, hasHsub)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PreviewThumbnail(
-    w: androidx.compose.ui.unit.Dp,
-    h: androidx.compose.ui.unit.Dp,
-    prefs: EpisodeDisplayPrefs,
-    epNumText: String,
-    alignEnd: Boolean = false,
-) {
-    Box {
-        // Use a gradient Box as the thumbnail (no network in preview; falls back gracefully)
-        Box(
-            modifier = Modifier
-                .size(width = w, height = h)
-                .clip(RoundedCornerShape(10.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF1A1A2E), Color(0xFFE94560), Color(0xFFFFA500)),
-                    ),
-                ),
-        )
-        // Episode number overlay — old-project style: black 70% pill, 6dp corners, "EP N" white
-        if (prefs.showEpisodeNumber && prefs.episodeNumberPosition == "overlay") {
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color.Black.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .align(if (alignEnd) Alignment.TopEnd else Alignment.TopStart)
-                    .padding(4.dp),
-            ) {
-                Text(
-                    text = epNumText,
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                )
+                if (prefs.showSynopsisBackground) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = DEMO_SYNOPSIS,
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = prefs.synopsisMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        )
+                    }
+                } else {
+                    Text(
+                        text = DEMO_SYNOPSIS,
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = prefs.synopsisMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
 }
 
-@Composable
-private fun InlineEpBadge(epNumText: String) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-    ) {
-        Text(
-            text = epNumText,
-            fontFamily = RobotoFamily,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-    }
-}
-
-@Composable
-private fun CircleEpNumber(numText: String) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.size(40.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = numText,
-                fontFamily = RobotoFamily,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PreviewTitle(prefs: EpisodeDisplayPrefs) {
-    Text(
-        text = DEMO_TITLE,
-        fontFamily = RobotoFamily,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        maxLines = prefs.titleMaxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
-@Composable
-private fun PreviewSynopsis(prefs: EpisodeDisplayPrefs) {
-    Text(
-        text = DEMO_SYNOPSIS,
-        fontFamily = RobotoFamily,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Normal,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = prefs.synopsisMaxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
-}
-
+/**
+ * The date pill + audio pills row for the preview. Mirrors the real
+ * `DateAndAudioRow` — minimal pill height, full audio names "SUB•DUB".
+ */
 @Composable
 private fun PreviewDateAndAudioRow(
     prefs: EpisodeDisplayPrefs,
     hasSub: Boolean,
     hasDub: Boolean,
     hasHsub: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    if (!prefs.showDates && !prefs.showAudioPills) return
-    val showAnyAudio = prefs.showAudioPills && (hasSub || hasDub || hasHsub)
-    if (!prefs.showDates && !showAnyAudio) return
+    val hasAudio = prefs.showAudioPills && (hasSub || hasDub || hasHsub)
+    if (!prefs.showDates && !hasAudio) return
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (prefs.showDates) {
@@ -296,44 +293,43 @@ private fun PreviewDateAndAudioRow(
                     text = DEMO_DATE,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                     maxLines = 1,
                     softWrap = false,
                 )
             }
         }
-        if (showAnyAudio) {
-            PreviewAudioPills(hasSub, hasDub, hasHsub)
+        if (hasAudio) {
+            PreviewAudioPills(hasSub = hasSub, hasDub = hasDub, hasHsub = hasHsub)
         }
     }
 }
 
 /**
- * The audio-pills design from the OLD project: a single `outlineVariant` surface
- * holding all detected versions. When 2+ versions are present, uses short letters
- * ("S", "D") separated by 3dp dots; when only one, uses the full label ("SUB").
+ * The audio-pills composable for the preview. ALWAYS uses full names
+ * ("SUB", "DUB", "HSUB") separated by 3dp dots → "SUB•DUB".
  */
 @Composable
 private fun PreviewAudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
-    data class Audio(val full: String, val short: String)
     val parts = buildList {
-        if (hasSub) add(Audio("SUB", "S"))
-        if (hasDub) add(Audio("DUB", "D"))
-        if (hasHsub) add(Audio("HSUB", "H"))
+        if (hasSub) add("SUB")
+        if (hasDub) add("DUB")
+        if (hasHsub) add("HSUB")
     }
-    val useShort = parts.size >= 2
+    if (parts.isEmpty()) return
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            parts.forEachIndexed { idx, audio ->
+            parts.forEachIndexed { idx, label ->
                 if (idx > 0) {
                     Box(
                         modifier = Modifier
@@ -343,9 +339,10 @@ private fun PreviewAudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean
                     )
                 }
                 Text(
-                    text = if (useShort) audio.short else audio.full,
+                    text = label,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

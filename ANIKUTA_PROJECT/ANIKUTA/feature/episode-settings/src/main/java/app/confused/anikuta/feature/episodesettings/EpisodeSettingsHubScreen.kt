@@ -1,11 +1,10 @@
 package app.confused.anikuta.feature.episodesettings
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Tune
@@ -37,45 +36,43 @@ fun EpisodeSettingsHubScreen(
     onOpenMetadata: () -> Unit,
 ) {
     val displayPrefs = rememberEpisodeDisplayPrefs()
-    val scrollState = rememberLazyListState()
 
     SettingsSubpageScaffold(
         title = "Episode settings",
         onBack = onBack,
     ) {
-        LazyColumn(
-            state = scrollState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
-        ) {
-            // ── Sticky live preview ──
-            item {
-                EpisodeRowPreview(prefs = displayPrefs)
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            // ── Customize section ──
-            item {
-                SettingsGroupCard(title = "Customize") {
-                    ClickableSettingsRow(
-                        icon = Icons.Filled.ViewAgenda,
-                        title = "Episode display",
-                        subtitle = "Show or hide episode numbers, titles, summaries, thumbnails, dates, and audio pills",
-                        onClick = onOpenDisplay,
-                    )
-                    InGroupDivider()
-                    ClickableSettingsRow(
-                        icon = Icons.Filled.Tune,
-                        title = "Episode layout",
-                        subtitle = "Positions for title, synopsis, date, episode number, and thumbnail",
-                        onClick = onOpenLayout,
-                    )
-                    InGroupDivider()
-                    ClickableSettingsRow(
-                        icon = Icons.Filled.AutoAwesome,
-                        title = "Metadata fetching",
-                        subtitle = "Fetch episode thumbnails, titles, descriptions, and air dates from external sources",
-                        onClick = onOpenMetadata,
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            // ── Sticky live preview (non-scrolling, stays at top) ──
+            EpisodeRowPreview(prefs = displayPrefs)
+            Spacer(modifier = Modifier.height(16.dp))
+            // ── Scrollable options below ──
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            ) {
+                item {
+                    SettingsGroupCard(title = "Customize") {
+                        ClickableSettingsRow(
+                            icon = Icons.Filled.ViewAgenda,
+                            title = "Episode display",
+                            subtitle = "Show or hide episode numbers, titles, summaries, thumbnails, dates, and audio pills",
+                            onClick = onOpenDisplay,
+                        )
+                        InGroupDivider()
+                        ClickableSettingsRow(
+                            icon = Icons.Filled.Tune,
+                            title = "Episode layout",
+                            subtitle = "Positions for title, synopsis, date, episode number, and thumbnail",
+                            onClick = onOpenLayout,
+                        )
+                        InGroupDivider()
+                        ClickableSettingsRow(
+                            icon = Icons.Filled.AutoAwesome,
+                            title = "Metadata fetching",
+                            subtitle = "Fetch episode thumbnails, titles, descriptions, and air dates from external sources",
+                            onClick = onOpenMetadata,
+                        )
+                    }
                 }
             }
         }

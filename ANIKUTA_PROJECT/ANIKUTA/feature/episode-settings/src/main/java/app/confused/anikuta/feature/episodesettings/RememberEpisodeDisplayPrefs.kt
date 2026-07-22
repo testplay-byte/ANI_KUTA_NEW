@@ -32,10 +32,14 @@ fun rememberEpisodeDisplayPrefs(): EpisodeDisplayPrefs {
     val thumbSize by prefs.thumbnailSize().changes().collectAsState(initial = prefs.thumbnailSize().get())
     val titleLines by prefs.titleMaxLines().changes().collectAsState(initial = prefs.titleMaxLines().get())
     val synopsisLines by prefs.synopsisMaxLines().changes().collectAsState(initial = prefs.synopsisMaxLines().get())
+    val showTitleBg by prefs.showTitleBackground().changes().collectAsState(initial = prefs.showTitleBackground().get())
+    val showMetaBg by prefs.showMetaBackground().changes().collectAsState(initial = prefs.showMetaBackground().get())
+    val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
 
     return remember(
         showNumber, showTitles, showSummaries, showThumbnails, showDates, showAudioPills,
         thumbPos, titlePos, synopsisPos, datePos, epNumPos, thumbSize, titleLines, synopsisLines,
+        showTitleBg, showMetaBg, showSynopsisBg,
     ) {
         EpisodeDisplayPrefs(
             showThumbnails = showThumbnails,
@@ -52,6 +56,9 @@ fun rememberEpisodeDisplayPrefs(): EpisodeDisplayPrefs {
             thumbnailSize = thumbSize,
             titleMaxLines = titleLines,
             synopsisMaxLines = synopsisLines,
+            showTitleBackground = showTitleBg,
+            showMetaBackground = showMetaBg,
+            showSynopsisBackground = showSynopsisBg,
         )
     }
 }
