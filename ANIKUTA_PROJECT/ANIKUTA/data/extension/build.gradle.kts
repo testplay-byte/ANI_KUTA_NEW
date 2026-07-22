@@ -11,6 +11,8 @@ dependencies {
     // Core modules — interfaces + the Aniyomi-compatible source-api contract (ADR-029)
     implementation(projects.core.common)
     implementation(projects.core.sourceApi)
+    // Preferences — for ExtensionLinkStore (caches extension→AniList links)
+    implementation(projects.core.preferences)
 
     // AndroidX core — NotificationCompat + ContextCompat (foreground service, broadcast receivers)
     implementation("androidx.core:core-ktx:1.15.0")

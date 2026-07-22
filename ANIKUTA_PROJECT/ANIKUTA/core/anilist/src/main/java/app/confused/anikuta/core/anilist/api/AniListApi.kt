@@ -56,6 +56,126 @@ class AniListApi(
         queryList(SEARCH_QUERY, page, perPage, search = query)
 
     /**
+     * Search anime with filters — used by the Search page's FilterSheet.
+     *
+     * Builds a dynamic GraphQL query that includes only the filter arguments the
+     * caller actually set (genres, year, season, format, status, sort, minScore).
+     * The [query] may be null for a filter-only browse (e.g. "all Winter 2024 TV
+     * anime sorted by popularity"). When [query] is non-null, it's passed as the
+     * AniList `search` argument.
+     *
+     * **Threading:** runs on `Dispatchers.IO` (via [queryList]).
+     *
+     * @param query free-text search, or null to browse by filters only.
+     * @param genres multi-select genre set (AniList genre names, e.g. "Action").
+     *   Empty = no genre filter.
+     * @param year the `seasonYear` to filter by, or null for any year.
+     * @param season the AniList season enum ("WINTER"|"SPRING"|"SUMMER"|"FALL"),
+     *   or null. Note: AniList requires `seasonYear` to be set when `season` is
+     *   set — if season is non-null but year is null, we still send season alone
+     *   (AniList tolerates this and returns cross-year season results).
+     * @param format the AniList format enum ("TV"|"MOVIE"|"OVA"|"ONA"|"SPECIAL"|
+     *   "TV_SHORT"), or null.
+     * @param status the AniList status enum ("RELEASING"|"FINISHED"|
+     *   "NOT_YET_RELEASED"|"CANCELLED"), or null.
+     * @param sort the AniList sort enum (e.g. "POPULARITY_DESC", "SCORE_DESC",
+     *   "START_DATE_DESC", "TITLE_ROMAJI", "TRENDING_DESC", "FAVOURITES_DESC").
+     *   Defaults to "POPULARITY_DESC".
+     * @param minScore the minimum `averageScore` (0-100, step 5), or 0 for no
+     *   minimum.
+     */
+    suspend fun searchAnimeWithFilters(
+        query: String?,
+        page: Int = 1,
+        perPage: Int = 20,
+        genres: Set<String> = emptySet(),
+        year: Int? = null,
+        season: String? = null,
+        format: String? = null,
+        status: String? = null,
+        sort: String = "POPULARITY_DESC",
+        minScore: Int = 0,
+    ): List<AniListAnime> = withContext(Dispatchers.IO) {
+        // Build the media(...) argument list dynamically — only include the
+        // filters the caller actually set. This keeps the GraphQL valid (AniList
+        // rejects unknown/null args on some fields) and the query small.
+        val mediaArgs = buildList {
+            add("type: ANIME")
+            add("sort: $sort")
+            if (query != null && query.isNotBlank()) add("search: ${'$'}search")
+            if (genres.isNotEmpty()) {
+                val genreList = genres.joinToString(", ") { "\"$it\"" }
+                add("genre_in: [$genreList]")
+            }
+            if (year != null) add("seasonYear: ${'$'}year")
+            if (season != null) add("season: ${'$'}season")
+            if (format != null) add("format: ${'$'}format")
+            if (status != null) add("status: ${'$'}status")
+            if (minScore > 0) add("averageScore_greater: ${'$'}minScore")
+            // Keep adult content out of search results (matches fetchPopular/fetchTrending).
+            add("isAdult: false")
+        }.joinToString(", ")
+
+        // Build the variable declarations ($var: Type) only for the variables
+        // we're actually using. AniList rejects declared-but-unused variables
+        // with a 400 Bad Request, so each $var below is conditional.
+        val varDecls = buildList {
+            add("${'$'}page: Int")
+            add("${'$'}perPage: Int")
+            if (query != null && query.isNotBlank()) add("${'$'}search: String")
+            if (year != null) add("${'$'}year: Int")
+            if (season != null) add("${'$'}season: MediaSeason")
+            if (format != null) add("${'$'}format: MediaFormat")
+            if (status != null) add("${'$'}status: MediaStatus")
+            if (minScore > 0) add("${'$'}minScore: Int")
+        }.joinToString(", ")
+
+        val gql = """
+            query ($varDecls) {
+              Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                media($mediaArgs) {
+                  $ANIME_FIELDS
+                }
+              }
+            }
+        """.trimIndent()
+
+        // Build the variables JSON object — only the ones we declared.
+        val variables = buildJsonObject {
+            put("page", page)
+            put("perPage", perPage)
+            if (query != null && query.isNotBlank()) put("search", query)
+            if (year != null) put("year", year)
+            if (season != null) put("season", season)
+            if (format != null) put("format", format)
+            if (status != null) put("status", status)
+            if (minScore > 0) put("minScore", minScore)
+        }
+
+        val body = buildJsonObject {
+            put("query", gql)
+            put("variables", variables)
+        }
+
+        val request = Request.Builder()
+            .url(API_URL)
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string()
+            ?: return@withContext emptyList()
+
+        if (!response.isSuccessful) {
+            return@withContext emptyList()
+        }
+
+        parseAnimeList(responseBody)
+    }
+
+    /**
      * Get cached trending data if available (for instant display on app open).
      * Returns null if no cache exists.
      */
