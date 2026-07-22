@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.library.components
+package app.confused.anikuta.core.designsystem.component
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

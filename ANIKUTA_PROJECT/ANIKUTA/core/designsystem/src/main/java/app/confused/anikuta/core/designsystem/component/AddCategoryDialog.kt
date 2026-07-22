@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.library.components
+package app.confused.anikuta.core.designsystem.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,7 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import app.confused.anikuta.feature.library.CategorySuggester
+import app.confused.anikuta.core.common.util.CategorySuggester
 
 /**
  * Dialog for creating a new category.

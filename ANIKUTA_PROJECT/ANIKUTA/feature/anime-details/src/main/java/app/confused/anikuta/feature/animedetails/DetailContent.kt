@@ -53,6 +53,9 @@ fun DetailContent(
     autoMatchErrors: List<Pair<String, String>>?,
     hasSearched: Boolean,
     availableSources: List<SourceMatcher.SourceInfo>,
+    saved: Boolean,
+    onToggleSave: () -> Unit,
+    onLongPressSave: () -> Unit,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     onToggleWatched: (String) -> Unit,
@@ -62,8 +65,6 @@ fun DetailContent(
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
 ) {
-    var saved by remember { mutableStateOf(false) }
-
     // Parse cover color for dynamic theming (hex → Compose Color)
     val coverColor = remember(anime) {
         anime.coverColorHex?.let { hex ->
@@ -94,7 +95,8 @@ fun DetailContent(
                     coverColor = coverColor,
                     saved = saved,
                     onBack = onBack,
-                    onToggleSave = { saved = !saved },
+                    onToggleSave = onToggleSave,
+                    onLongPressSave = onLongPressSave,
                 )
             }
 

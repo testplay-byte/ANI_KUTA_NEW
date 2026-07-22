@@ -54,11 +54,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySortType
+import app.confused.anikuta.core.designsystem.component.AddCategoryDialog
+import app.confused.anikuta.core.designsystem.component.CategoryPickerDialog
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.SearchField
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import app.confused.anikuta.feature.library.components.AddCategoryDialog
-import app.confused.anikuta.feature.library.components.CategoryPickerDialog
 import app.confused.anikuta.feature.library.components.CategoryTabs
 import app.confused.anikuta.feature.library.components.ContinueWatchingSection
 import app.confused.anikuta.feature.library.components.CustomizeSheet

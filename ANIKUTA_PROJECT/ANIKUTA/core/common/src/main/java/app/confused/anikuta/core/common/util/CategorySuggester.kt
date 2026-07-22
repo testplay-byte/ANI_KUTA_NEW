@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.library
+package app.confused.anikuta.core.common.util
 
 /**
  * Suggests category names based on 5 status keywords.

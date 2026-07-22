@@ -15,6 +15,12 @@ dependencies {
     // Extension manager — for AnimeExtensionManager + SourceMatcher (Step 5)
     implementation(projects.data.extension)
 
+    // Koin (for koinInject of AnimeRepository + CategoryRepository)
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.core)
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
+
     // Activity Compose (for BackHandler)
     implementation("androidx.activity:activity-compose:1.10.1")
 

@@ -8,6 +8,11 @@ import androidx.lifecycle.viewModelScope
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.model.AniListAnime
 import app.confused.anikuta.core.anilist.model.displayTitle
+import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.AnimeStatus
+import app.confused.anikuta.core.common.model.Category
+import app.confused.anikuta.core.common.repository.AnimeRepository
+import app.confused.anikuta.core.common.repository.CategoryRepository
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.matcher.SourceMatcher.ManualSearchResult
@@ -49,6 +54,8 @@ class AnimeDetailViewModel(
     private val api: AniListApi,
     private val extensionManager: AnimeExtensionManager,
     private val sourceMatcher: SourceMatcher,
+    private val animeRepository: AnimeRepository,
+    private val categoryRepository: CategoryRepository,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -71,6 +78,18 @@ class AnimeDetailViewModel(
     /** In-memory watched set (keyed by episode URL). Phase 5 = no persistence. */
     private val _watchedEpisodes = MutableStateFlow<Set<String>>(emptySet())
     val watchedEpisodes: StateFlow<Set<String>> = _watchedEpisodes.asStateFlow()
+
+    /** Whether this anime is saved in the library (favorite=true in DB). */
+    private val _isSaved = MutableStateFlow(false)
+    val isSaved: StateFlow<Boolean> = _isSaved.asStateFlow()
+
+    /** Visible categories (for the set-categories dialog). */
+    private val _categories = MutableStateFlow<List<Category>>(emptyList())
+    val categories: StateFlow<List<Category>> = _categories.asStateFlow()
+
+    /** Whether the set-categories dialog is open. */
+    private val _showCategoryPicker = MutableStateFlow(false)
+    val showCategoryPicker: StateFlow<Boolean> = _showCategoryPicker.asStateFlow()
 
     /**
      * `true` while a pull-to-refresh is in progress. Drives the
@@ -117,6 +136,152 @@ class AnimeDetailViewModel(
 
     init {
         loadAnimeDetails()
+        // Observe library save state + categories.
+        viewModelScope.launch {
+            animeRepository.observeByAnilistId(anilistId).collect { anime ->
+                _isSaved.value = anime?.favorite == true
+            }
+        }
+        viewModelScope.launch {
+            categoryRepository.observeVisible().collect { cats ->
+                _categories.value = cats
+            }
+        }
+    }
+
+    // ── Library save ──
+
+    /**
+     * Toggle save state. Short-press on the bookmark button.
+     * Saves to the Default category (id=1) on first save.
+     */
+    fun toggleSave() {
+        viewModelScope.launch {
+            try {
+                val existing = animeRepository.getByAnilistId(anilistId)
+                if (existing != null) {
+                    val newFav = !existing.favorite
+                    animeRepository.updateFavorite(
+                        id = existing.id,
+                        favorite = newFav,
+                        dateAdded = if (newFav) System.currentTimeMillis() else existing.dateAdded,
+                    )
+                    if (newFav) {
+                        // Assign to Default category.
+                        categoryRepository.setAnimeCategories(existing.id, listOf(Category.DEFAULT_ID))
+                    }
+                } else {
+                    // Need AniList data to create the row. Fetch if needed.
+                    val anime = _animeState.value
+                    if (anime is DetailState.Success) {
+                        saveAnimeToLibrary(anime.anime)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "toggleSave failed", e)
+            }
+        }
+    }
+
+    /** Open the set-categories dialog (long-press on bookmark). */
+    fun openCategoryPicker() {
+        _showCategoryPicker.value = true
+    }
+
+    fun dismissCategoryPicker() {
+        _showCategoryPicker.value = false
+    }
+
+    /**
+     * Save the anime to the selected categories. Used by the CategoryPickerDialog.
+     * Creates the anime row if it doesn't exist, then sets the category assignments.
+     */
+    fun saveToCategories(categoryIds: Set<Long>) {
+        viewModelScope.launch {
+            try {
+                val existing = animeRepository.getByAnilistId(anilistId)
+                val animeId = if (existing != null) {
+                    // Ensure favorite=true.
+                    if (!existing.favorite) {
+                        animeRepository.updateFavorite(
+                            id = existing.id,
+                            favorite = true,
+                            dateAdded = System.currentTimeMillis(),
+                        )
+                    }
+                    existing.id
+                } else {
+                    val anime = _animeState.value
+                    if (anime is DetailState.Success) {
+                        saveAnimeToLibrary(anime.anime)
+                    } else {
+                        Log.w(TAG, "saveToCategories: no AniList data yet, cannot save")
+                        return@launch
+                    }
+                }
+                categoryRepository.setAnimeCategories(animeId, categoryIds.toList())
+                _showCategoryPicker.value = false
+            } catch (e: Exception) {
+                Log.e(TAG, "saveToCategories failed", e)
+            }
+        }
+    }
+
+    /** Get the categories currently assigned to this anime. */
+    suspend fun getAnimeCategories(): List<Category> {
+        val existing = animeRepository.getByAnilistId(anilistId) ?: return emptyList()
+        return categoryRepository.getAnimeCategories(existing.id)
+    }
+
+    /** Create a new category (from the AddCategoryDialog). */
+    fun createCategory(name: String) {
+        viewModelScope.launch {
+            try {
+                categoryRepository.create(name)
+            } catch (e: Exception) {
+                Log.e(TAG, "createCategory failed", e)
+            }
+        }
+    }
+
+    /**
+     * Upsert the anime into the library with favorite=true + cached AniList metadata.
+     * Returns the DB row id.
+     */
+    private suspend fun saveAnimeToLibrary(anilistAnime: AniListAnime): Long {
+        val now = System.currentTimeMillis()
+        val anime = Anime(
+            id = 0,  // new insert
+            url = "anilist:$anilistId",
+            title = anilistAnime.displayTitle,
+            artist = null,
+            author = null,
+            description = anilistAnime.description,
+            genre = anilistAnime.genres ?: emptyList(),
+            coverUrl = anilistAnime.coverImage?.let { it.extraLarge ?: it.large ?: it.medium },
+            status = AnimeStatus.UNKNOWN,
+            thumbnailUrl = null,
+            favorite = true,
+            sourceId = 0L,
+            dateAdded = now,
+            viewerFlags = 0,
+            nextUpdate = 0L,
+            updateStrategy = 0,
+            coverLastModified = 0L,
+            releaseDate = null,
+            lastRefresh = now,
+            lastMetadataFetch = now,
+            nextEpisodeCheck = null,
+            anilistId = anilistId,
+            coverColor = anilistAnime.coverImage?.color,
+            score = anilistAnime.averageScore?.toDouble(),
+            totalEpisodes = anilistAnime.episodes,
+            lastWatched = 0L,
+        )
+        val id = animeRepository.upsert(anime)
+        // Assign to Default category.
+        categoryRepository.setAnimeCategories(id, listOf(Category.DEFAULT_ID))
+        return id
     }
 
     // ── Public API ──

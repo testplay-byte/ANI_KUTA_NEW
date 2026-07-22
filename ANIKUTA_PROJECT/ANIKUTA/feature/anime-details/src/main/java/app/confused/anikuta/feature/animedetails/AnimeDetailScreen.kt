@@ -7,7 +7,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -57,6 +59,10 @@ fun AnimeDetailScreen(
 ) {
     val context = LocalContext.current
 
+    // Inject repositories via Koin (for library save functionality).
+    val animeRepository: app.confused.anikuta.core.common.repository.AnimeRepository = org.koin.core.context.GlobalContext.get().get()
+    val categoryRepository: app.confused.anikuta.core.common.repository.CategoryRepository = org.koin.core.context.GlobalContext.get().get()
+
     @Suppress("UNCHECKED_CAST")
     val vm: AnimeDetailViewModel = viewModel(
         key = "detail_$animeId",
@@ -67,6 +73,8 @@ fun AnimeDetailScreen(
                     api = api,
                     extensionManager = extensionManager,
                     sourceMatcher = sourceMatcher,
+                    animeRepository = animeRepository,
+                    categoryRepository = categoryRepository,
                     appContext = context.applicationContext,
                 ) as T
         },
@@ -83,6 +91,9 @@ fun AnimeDetailScreen(
     val manualSearchErrors by vm.manualSearchErrors.collectAsState()
     val autoMatchErrors by vm.autoMatchErrors.collectAsState()
     val hasSearched by vm.hasSearched.collectAsState()
+    val isSaved by vm.isSaved.collectAsState()
+    val categories by vm.categories.collectAsState()
+    val showCategoryPicker by vm.showCategoryPicker.collectAsState()
     // Available sources for the manual-search source selector. Computed once
     // (not a StateFlow — the list doesn't change while the screen is open).
     val availableSources = remember { vm.getAvailableSources() }
@@ -108,6 +119,9 @@ fun AnimeDetailScreen(
                 autoMatchErrors = autoMatchErrors,
                 hasSearched = hasSearched,
                 availableSources = availableSources,
+                saved = isSaved,
+                onToggleSave = vm::toggleSave,
+                onLongPressSave = vm::openCategoryPicker,
                 onBack = onBack,
                 onOpenEpisode = onOpenEpisode,
                 onToggleWatched = vm::toggleWatched,
@@ -116,6 +130,28 @@ fun AnimeDetailScreen(
                 onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
                 onLinkManual = vm::linkManual,
                 onClearManualSearch = vm::clearManualSearch,
+            )
+        }
+    }
+
+    // Category picker dialog (long-press on bookmark button).
+    if (showCategoryPicker) {
+        var showAddCategory by remember { mutableStateOf(false) }
+        if (!showAddCategory) {
+            app.confused.anikuta.core.designsystem.component.CategoryPickerDialog(
+                categories = categories,
+                selectedCategoryIds = emptySet(),
+                onConfirm = { ids -> vm.saveToCategories(ids) },
+                onDismiss = { vm.dismissCategoryPicker() },
+                onAddNewCategory = { showAddCategory = true },
+            )
+        } else {
+            app.confused.anikuta.core.designsystem.component.AddCategoryDialog(
+                onConfirm = { name ->
+                    vm.createCategory(name)
+                    showAddCategory = false
+                },
+                onDismiss = { showAddCategory = false },
             )
         }
     }

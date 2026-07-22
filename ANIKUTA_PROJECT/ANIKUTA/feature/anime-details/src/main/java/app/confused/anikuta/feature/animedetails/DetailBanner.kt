@@ -1,7 +1,9 @@
 package app.confused.anikuta.feature.animedetails
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,7 @@ import coil3.compose.AsyncImage
  * Per design language §4: edge-to-edge (status bar overlays), 8dp blur,
  * gradient black 20% → transparent → background.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DetailBanner(
     anime: AniListAnime,
@@ -58,6 +61,7 @@ fun DetailBanner(
     saved: Boolean,
     onBack: () -> Unit,
     onToggleSave: () -> Unit,
+    onLongPressSave: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -107,6 +111,7 @@ fun DetailBanner(
                     icon = if (saved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                     contentDescription = if (saved) "Remove from library" else "Add to library",
                     onClick = onToggleSave,
+                    onLongClick = onLongPressSave,
                 )
                 ActionButton(icon = Icons.Filled.MoreHoriz, contentDescription = "More", onClick = {})
             }
@@ -175,11 +180,13 @@ fun DetailBanner(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ActionButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
         color = Color.Black.copy(alpha = 0.4f),
@@ -187,7 +194,13 @@ fun ActionButton(
         modifier = Modifier
             .padding(4.dp)
             .size(40.dp)
-            .clickable(onClick = onClick),
+            .then(
+                if (onLongClick != null) Modifier.combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+                else Modifier.clickable(onClick = onClick)
+            ),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
