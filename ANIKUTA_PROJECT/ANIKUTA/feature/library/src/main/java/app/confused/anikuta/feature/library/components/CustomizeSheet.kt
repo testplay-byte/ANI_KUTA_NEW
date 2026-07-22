@@ -231,8 +231,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sortTab(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             listOf(
-                "Ascending" to true to Icons.Filled.ArrowUpward,
-                "Descending" to false to Icons.Filled.ArrowDownward,
+                Triple("Ascending", true, Icons.Filled.ArrowUpward),
+                Triple("Descending", false, Icons.Filled.ArrowDownward),
             ).forEach { (label, asc, icon) ->
                 val isSelected = sortAscending == asc
                 Surface(
