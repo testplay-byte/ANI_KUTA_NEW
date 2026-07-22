@@ -190,7 +190,7 @@ fun SearchTopBar(
                     shrinkVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)),
             ) {
                 Column {
-                    Spacer(Modifier.padding(top = 4.dp))
+                    Spacer(Modifier.padding(top = 8.dp))
                     SearchBar(
                         value = query,
                         onChange = onQueryChange,
@@ -202,16 +202,21 @@ fun SearchTopBar(
                 }
             }
 
-            // ── Row 3: quick row — Filters (left) + Sort (right) — slides out when collapsed ──
+            // ── Row 3: quick row — Filters (left) + Sort (right) ──
+            // Smooth slide animation: the row slides down + fades when collapsing,
+            // and slides up + fades in when expanding. This gives a smoother feel
+            // than just fadeOut + shrinkVertically.
             AnimatedVisibility(
                 visible = !collapsed,
-                enter = fadeIn(),
-                exit = fadeOut() + shrinkVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)),
+                enter = fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing)) +
+                    expandVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)),
+                exit = fadeOut(animationSpec = tween(200, easing = FastOutSlowInEasing)) +
+                    shrinkVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)),
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(top = 12.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -320,7 +325,9 @@ fun SearchTopBar(
                 }
             }
 
-            Spacer(Modifier.padding(top = 2.dp))
+            // Bottom padding for the top section — ensures proper spacing
+            // between the top bar content and the scrollable content below.
+            Spacer(Modifier.padding(top = 4.dp))
         }
     }
 }

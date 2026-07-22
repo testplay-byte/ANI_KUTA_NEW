@@ -58,6 +58,7 @@ fun LibraryListRow(
     selectionMode: Boolean,
     episodeBadgeMode: EpisodeBadgeMode,
     showScoreBadge: Boolean,
+    titleLines: Int = 2,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -125,7 +126,7 @@ fun LibraryListRow(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = RobotoFamily,
-                maxLines = 1,
+                maxLines = titleLines,
                 overflow = TextOverflow.Ellipsis,
             )
 

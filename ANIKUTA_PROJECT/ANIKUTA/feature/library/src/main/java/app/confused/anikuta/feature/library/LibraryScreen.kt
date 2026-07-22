@@ -112,25 +112,16 @@ fun LibraryScreen(
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Pinned header with pill search + options button ──
+            // ── Pinned header ──
+            // Search bar is SEPARATE from the header (not inside CollapsingHeader
+            // actions). It sits in its own row below the title, aligned to the
+            // right side, with the settings button to its right.
             CollapsingHeader(
                 title = headerTitle,
                 collapsed = collapsed,
                 actions = {
                     if (!state.selectionMode) {
-                        // Pill-shaped search button (transitions to search bar on tap)
-                        SearchPillButton(
-                            isActive = state.hasActiveSearch,
-                            onClick = {
-                                viewModel.setSearchQuery(if (state.hasActiveSearch) "" else "")
-                                // Toggle search mode: empty string = inactive, non-empty = active
-                                if (!state.hasActiveSearch) {
-                                    viewModel.setSearchQuery(" ") // activate search mode
-                                }
-                            },
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        // Options button (opens bottom-up sheet)
+                        // Options button (settings) — on the far right
                         HeaderActionButton(
                             icon = Icons.Filled.Tune,
                             contentDescription = "Library options",
@@ -140,18 +131,40 @@ fun LibraryScreen(
                 },
             )
 
-            // ── Animated search bar (appears when search pill is tapped) ──
-            AnimatedVisibility(
-                visible = state.hasActiveSearch,
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                SearchField(
-                    query = state.searchQuery,
-                    onQueryChange = { viewModel.setSearchQuery(it) },
-                    placeholder = "Search library",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
+            // ── Search bar row — separate from header, right-aligned ──
+            // The search icon button toggles an expandable text field.
+            // When active, the text field fills the width (left of the settings button).
+            if (!state.selectionMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (state.hasActiveSearch) {
+                        // Active search: text field fills width + close button
+                        SearchField(
+                            query = state.searchQuery.trim(),
+                            onQueryChange = { viewModel.setSearchQuery(it) },
+                            placeholder = "Search library",
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        HeaderActionButton(
+                            icon = Icons.Filled.Close,
+                            contentDescription = "Close search",
+                            onClick = { viewModel.setSearchQuery("") },
+                        )
+                    } else {
+                        // Inactive: search icon button on the right
+                        Spacer(Modifier.weight(1f))
+                        HeaderActionButton(
+                            icon = Icons.Filled.Search,
+                            contentDescription = "Search library",
+                            onClick = { viewModel.setSearchQuery(" ") }, // activate search mode
+                        )
+                    }
+                }
             }
 
             // ── Category tabs or Select All/Clear bar ──
@@ -268,12 +281,14 @@ fun LibraryScreen(
                 showScoreBadge = state.showScoreBadge,
                 showContinueWatching = state.showContinueWatching,
                 showTotalEntries = state.showTotalEntries,
+                titleLines = state.titleLines,
                 onDisplayModeChange = { viewModel.setDisplayMode(it) },
                 onColumnsChange = { viewModel.setColumns(it) },
                 onEpisodeBadgeModeChange = { viewModel.setEpisodeBadgeMode(it) },
                 onShowScoreBadgeChange = { viewModel.setShowScoreBadge(it) },
                 onShowContinueWatchingChange = { viewModel.setShowContinueWatching(it) },
                 onShowTotalEntriesChange = { viewModel.setShowTotalEntries(it) },
+                onTitleLinesChange = { viewModel.setTitleLines(it) },
                 onDismiss = { viewModel.dismissDialog() },
             )
             is LibraryDialog.SortSheet -> SortSheet(
@@ -365,6 +380,7 @@ private fun GridContent(
                 displayMode = state.displayMode,
                 episodeBadgeMode = state.episodeBadgeMode,
                 showScoreBadge = state.showScoreBadge,
+                titleLines = state.titleLines,
                 onClick = { onItemClick(anime) },
                 onLongClick = { onItemLongClick(anime) },
             )
@@ -406,6 +422,7 @@ private fun ListContent(
                 selectionMode = state.selectionMode,
                 episodeBadgeMode = state.episodeBadgeMode,
                 showScoreBadge = state.showScoreBadge,
+                titleLines = state.titleLines,
                 onClick = { onItemClick(anime) },
                 onLongClick = { onItemLongClick(anime) },
             )

@@ -48,4 +48,8 @@ class LibraryPreferences(
     /** When true, the library header shows "N in Library" instead of just "Library". */
     fun showTotalEntries(): Preference<Boolean> =
         store.getBoolean("pref_library_show_total_entries", false)
+
+    /** Number of lines for anime titles in grid/list (1, 2, or 3). */
+    fun titleLines(): Preference<Int> =
+        store.getInt("pref_library_title_lines", 2)
 }

@@ -187,12 +187,14 @@ private fun SearchContent(
             onSortChange = onSortChange,
         )
 
-        // Scrollable content — tight top padding (reduced from the earlier gap).
+        // Scrollable content — reduced top padding to bring content closer
+        // to the filter/sort row (was 4dp, now 0dp — the SearchTopBar already
+        // has bottom padding). Bottom padding for floating nav clearance.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(top = 4.dp, bottom = 110.dp), // floating nav clearance
+                .padding(top = 0.dp, bottom = 110.dp),
         ) {
             val sectionLabel = when {
                 state.query.isNotBlank() && state.source == SearchSource.ANILIST ->

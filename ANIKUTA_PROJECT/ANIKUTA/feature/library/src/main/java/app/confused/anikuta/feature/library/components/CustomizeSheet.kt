@@ -76,12 +76,14 @@ fun CustomizeSheet(
     showScoreBadge: Boolean,
     showContinueWatching: Boolean,
     showTotalEntries: Boolean,
+    titleLines: Int,
     onDisplayModeChange: (LibraryDisplayMode) -> Unit,
     onColumnsChange: (Int) -> Unit,
     onEpisodeBadgeModeChange: (EpisodeBadgeMode) -> Unit,
     onShowScoreBadgeChange: (Boolean) -> Unit,
     onShowContinueWatchingChange: (Boolean) -> Unit,
     onShowTotalEntriesChange: (Boolean) -> Unit,
+    onTitleLinesChange: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // Cap the sheet at 70% of screen height.
@@ -146,8 +148,10 @@ fun CustomizeSheet(
                     CustomizeCategory.DISPLAY -> DisplayOptions(
                         displayMode = displayMode,
                         columns = columns,
+                        titleLines = titleLines,
                         onDisplayModeChange = onDisplayModeChange,
                         onColumnsChange = onColumnsChange,
+                        onTitleLinesChange = onTitleLinesChange,
                     )
                     CustomizeCategory.BADGES -> BadgeOptions(
                         episodeBadgeMode = episodeBadgeMode,
@@ -173,8 +177,10 @@ fun CustomizeSheet(
 private fun DisplayOptions(
     displayMode: LibraryDisplayMode,
     columns: Int,
+    titleLines: Int,
     onDisplayModeChange: (LibraryDisplayMode) -> Unit,
     onColumnsChange: (Int) -> Unit,
+    onTitleLinesChange: (Int) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -215,7 +221,7 @@ private fun DisplayOptions(
         if (displayMode != LibraryDisplayMode.LIST) {
             item {
                 Spacer(Modifier.height(12.dp))
-                OptionLabel("Columns")
+                OptionLabel("Columns per row")
             }
             item {
                 val colOptions = listOf("2", "3", "4", "5")
@@ -245,6 +251,42 @@ private fun DisplayOptions(
                                 modifier = Modifier.padding(vertical = 8.dp),
                             )
                         }
+                    }
+                }
+            }
+        }
+        // Title lines (1, 2, or 3)
+        item {
+            Spacer(Modifier.height(12.dp))
+            OptionLabel("Title lines")
+        }
+        item {
+            val lineOptions = listOf("1", "2", "3")
+            val lineSelected = (titleLines - 1).coerceIn(0, 2)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                lineOptions.forEachIndexed { idx, label ->
+                    val isSelected = idx == lineSelected
+                    Surface(
+                        color = if (isSelected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onTitleLinesChange(idx + 1) },
+                    ) {
+                        Text(
+                            text = label,
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
                     }
                 }
             }

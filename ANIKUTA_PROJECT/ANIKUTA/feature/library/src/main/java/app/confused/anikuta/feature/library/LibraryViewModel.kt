@@ -79,6 +79,7 @@ class LibraryViewModel(
                         episodeBadgeMode = prefs.episodeBadgeMode,
                         showScoreBadge = prefs.showScoreBadge,
                         showTotalEntries = prefs.showTotalEntries,
+                        titleLines = prefs.titleLines,
                     ) }
                 }
             } catch (e: Exception) {
@@ -99,6 +100,7 @@ class LibraryViewModel(
         val episodeBadgeMode: EpisodeBadgeMode,
         val showScoreBadge: Boolean,
         val showTotalEntries: Boolean,
+        val titleLines: Int,
     )
 
     private data class LibraryData(
@@ -126,7 +128,7 @@ class LibraryViewModel(
             preferences.sortType().changes(),
             preferences.sortAscending().changes(),
         ) { mode, columns, sortType, sortAsc ->
-            PrefSnapshot(mode, columns, sortType, sortAsc, true, EpisodeBadgeMode.RELEASED, false, false)
+            PrefSnapshot(mode, columns, sortType, sortAsc, true, EpisodeBadgeMode.RELEASED, false, false, 2)
         }
         val badges = combine(
             preferences.showContinueWatching().changes(),
@@ -136,12 +138,13 @@ class LibraryViewModel(
         ) { cw, epMode, score, total ->
             Quad(cw, epMode, score, total)
         }
-        return combine(displaySort, badges) { snap, (cw, epMode, score, total) ->
+        return combine(displaySort, badges, preferences.titleLines().changes()) { snap, (cw, epMode, score, total), titleLines ->
             snap.copy(
                 showContinueWatching = cw,
                 episodeBadgeMode = epMode,
                 showScoreBadge = score,
                 showTotalEntries = total,
+                titleLines = titleLines,
             )
         }
     }
@@ -232,6 +235,10 @@ class LibraryViewModel(
 
     fun setShowTotalEntries(enabled: Boolean) {
         preferences.showTotalEntries().set(enabled)
+    }
+
+    fun setTitleLines(lines: Int) {
+        preferences.titleLines().set(lines.coerceIn(1, 3))
     }
 
     fun createCategory(name: String) {

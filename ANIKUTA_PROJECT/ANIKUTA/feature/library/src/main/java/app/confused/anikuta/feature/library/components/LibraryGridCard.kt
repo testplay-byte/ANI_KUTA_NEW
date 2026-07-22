@@ -58,6 +58,7 @@ fun LibraryGridCard(
     displayMode: LibraryDisplayMode,
     episodeBadgeMode: EpisodeBadgeMode,
     showScoreBadge: Boolean,
+    titleLines: Int = 2,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -103,7 +104,7 @@ fun LibraryGridCard(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = RobotoFamily,
-                        maxLines = 2,
+                        maxLines = titleLines,
                         lineHeight = 14.sp,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier

@@ -59,6 +59,7 @@ data class LibraryState(
     val episodeBadgeMode: EpisodeBadgeMode = EpisodeBadgeMode.RELEASED,
     val showScoreBadge: Boolean = false,
     val showTotalEntries: Boolean = false,
+    val titleLines: Int = 2,  // 1, 2, or 3 max lines for anime titles
     val dialog: LibraryDialog? = null,
 ) {
     val isLibraryEmpty: Boolean get() = libraryAnime.isEmpty()
