@@ -46,7 +46,22 @@ data class Anime(
     val score: Double?,
     val totalEpisodes: Int?,
     val lastWatched: Long,
-)
+    val nextAiringEpisode: Int?,
+) {
+    /**
+     * The number of episodes that have aired (released).
+     *
+     * If [nextAiringEpisode] is not null, the anime is still airing and
+     * released = nextAiringEpisode - 1. If null, the anime is finished and
+     * released = [totalEpisodes].
+     */
+    val releasedEpisodes: Int?
+        get() = when {
+            nextAiringEpisode != null && nextAiringEpisode > 0 -> nextAiringEpisode - 1
+            totalEpisodes != null -> totalEpisodes
+            else -> null
+        }
+}
 
 /** Anime publishing status. */
 object AnimeStatus {

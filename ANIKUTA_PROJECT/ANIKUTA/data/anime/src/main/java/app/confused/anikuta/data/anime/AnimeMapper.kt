@@ -40,6 +40,7 @@ object AnimeMapper {
         score: Double?,
         totalEpisodes: Long?,
         lastWatched: Long,
+        nextAiringEpisode: Long?,
     ): Anime = Anime(
         id = id,
         url = url,
@@ -67,5 +68,6 @@ object AnimeMapper {
         score = score,
         totalEpisodes = totalEpisodes?.toInt(),
         lastWatched = lastWatched,
+        nextAiringEpisode = nextAiringEpisode?.toInt(),
     )
 }

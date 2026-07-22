@@ -2,6 +2,7 @@ package app.confused.anikuta.feature.library
 
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.Category
+import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySort
 import androidx.compose.runtime.Immutable
@@ -45,6 +46,7 @@ data class LibraryState(
     val isLoading: Boolean = true,
     val libraryAnime: List<Anime> = emptyList(),
     val categories: List<Category> = emptyList(),
+    val animeCategoryLinks: Map<Long, Set<Long>> = emptyMap(),  // animeId → categoryIds
     val activeFilter: CategoryFilter = CategoryFilter.All,
     val displayMode: LibraryDisplayMode = LibraryDisplayMode.COMPACT_GRID,
     val columns: Int = 3,           // 0 = auto (adaptive)
@@ -54,12 +56,14 @@ data class LibraryState(
     val selectedIds: Set<Long> = emptySet(),     // animes._id
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
     val showContinueWatching: Boolean = true,
-    val showEpisodeBadge: Boolean = true,
+    val episodeBadgeMode: EpisodeBadgeMode = EpisodeBadgeMode.RELEASED,
     val showScoreBadge: Boolean = false,
+    val showTotalEntries: Boolean = false,
     val dialog: LibraryDialog? = null,
 ) {
     val isLibraryEmpty: Boolean get() = libraryAnime.isEmpty()
     val hasActiveSearch: Boolean get() = searchQuery.isNotBlank()
+    val totalEntryCount: Int get() = libraryAnime.size
 }
 
 /**

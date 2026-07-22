@@ -45,6 +45,7 @@ class AnimeMapperTest {
             score = 85.0,
             totalEpisodes = 24L,
             lastWatched = 1700070000L,
+            nextAiringEpisode = 13L,
         )
 
         assertEquals(1L, anime.id)
@@ -86,6 +87,7 @@ class AnimeMapperTest {
             score = null,
             totalEpisodes = null,
             lastWatched = 0L,
+            nextAiringEpisode = null,
         )
 
         assertEquals(2L, anime.id)
@@ -126,6 +128,7 @@ class AnimeMapperTest {
             score = null,
             totalEpisodes = null,
             lastWatched = 0L,
+            nextAiringEpisode = null,
         )
 
         assertTrue(anime.genre.isEmpty())
@@ -160,6 +163,7 @@ class AnimeMapperTest {
             score = null,
             totalEpisodes = null,
             lastWatched = 0L,
+            nextAiringEpisode = null,
         )
 
         assertEquals(listOf("Action", "Comedy"), anime.genre)

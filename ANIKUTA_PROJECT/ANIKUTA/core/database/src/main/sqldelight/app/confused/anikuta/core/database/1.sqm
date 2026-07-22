@@ -14,6 +14,7 @@ ALTER TABLE animes ADD COLUMN cover_color TEXT;
 ALTER TABLE animes ADD COLUMN score REAL;
 ALTER TABLE animes ADD COLUMN total_episodes INTEGER;
 ALTER TABLE animes ADD COLUMN last_watched INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE animes ADD COLUMN next_airing_episode INTEGER;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_anilist_id
 ON animes(anilist_id) WHERE anilist_id IS NOT NULL;

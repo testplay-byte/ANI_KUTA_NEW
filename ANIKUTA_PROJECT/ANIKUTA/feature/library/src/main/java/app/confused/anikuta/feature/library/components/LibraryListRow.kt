@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 import java.text.SimpleDateFormat
@@ -55,7 +56,7 @@ fun LibraryListRow(
     item: Anime,
     selected: Boolean,
     selectionMode: Boolean,
-    showEpisodeBadge: Boolean,
+    episodeBadgeMode: EpisodeBadgeMode,
     showScoreBadge: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -131,9 +132,13 @@ fun LibraryListRow(
             Spacer(modifier = Modifier.height(3.dp))
 
             val metaParts = buildList {
-                val epCount = item.totalEpisodes
-                if (showEpisodeBadge && epCount != null && epCount > 0) {
-                    add(MetaPart.Episodes(epCount))
+                val epText = when (episodeBadgeMode) {
+                    EpisodeBadgeMode.OFF -> null
+                    EpisodeBadgeMode.TOTAL -> item.totalEpisodes?.takeIf { it > 0 }?.let { MetaPart.Episodes(it) }
+                    EpisodeBadgeMode.RELEASED -> item.releasedEpisodes?.takeIf { it > 0 }?.let { MetaPart.Episodes(it) }
+                }
+                if (epText != null) {
+                    add(epText)
                 }
                 val scoreVal = item.score
                 if (showScoreBadge && scoreVal != null) {

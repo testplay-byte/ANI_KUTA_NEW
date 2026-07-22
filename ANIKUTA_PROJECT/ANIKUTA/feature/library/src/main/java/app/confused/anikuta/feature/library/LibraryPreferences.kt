@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.library
 
+import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySortType
 import app.confused.anikuta.core.preferences.Preference
@@ -37,9 +38,14 @@ class LibraryPreferences(
     fun showContinueWatching(): Preference<Boolean> =
         store.getBoolean("pref_library_show_continue_watching", true)
 
-    fun showEpisodeBadge(): Preference<Boolean> =
-        store.getBoolean("pref_library_show_episode_badge", true)
+    /** Controls what the episode badge shows: total, released, or off. */
+    fun episodeBadgeMode(): Preference<EpisodeBadgeMode> =
+        store.getEnum("pref_library_episode_badge_mode", EpisodeBadgeMode.RELEASED)
 
     fun showScoreBadge(): Preference<Boolean> =
         store.getBoolean("pref_library_show_score_badge", false)
+
+    /** When true, the library header shows "N in Library" instead of just "Library". */
+    fun showTotalEntries(): Preference<Boolean> =
+        store.getBoolean("pref_library_show_total_entries", false)
 }

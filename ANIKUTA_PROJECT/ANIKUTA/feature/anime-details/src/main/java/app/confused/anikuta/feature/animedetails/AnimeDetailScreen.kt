@@ -94,6 +94,7 @@ fun AnimeDetailScreen(
     val isSaved by vm.isSaved.collectAsState()
     val categories by vm.categories.collectAsState()
     val showCategoryPicker by vm.showCategoryPicker.collectAsState()
+    val currentAnimeCategoryIds by vm.currentAnimeCategoryIds.collectAsState()
     // Available sources for the manual-search source selector. Computed once
     // (not a StateFlow — the list doesn't change while the screen is open).
     val availableSources = remember { vm.getAvailableSources() }
@@ -140,7 +141,7 @@ fun AnimeDetailScreen(
         if (!showAddCategory) {
             app.confused.anikuta.core.designsystem.component.CategoryPickerDialog(
                 categories = categories,
-                selectedCategoryIds = emptySet(),
+                selectedCategoryIds = currentAnimeCategoryIds,
                 onConfirm = { ids -> vm.saveToCategories(ids) },
                 onDismiss = { vm.dismissCategoryPicker() },
                 onAddNewCategory = { showAddCategory = true },

@@ -91,6 +91,10 @@ class AnimeDetailViewModel(
     private val _showCategoryPicker = MutableStateFlow(false)
     val showCategoryPicker: StateFlow<Boolean> = _showCategoryPicker.asStateFlow()
 
+    /** The category IDs currently assigned to this anime (for pre-selection tick marks). */
+    private val _currentAnimeCategoryIds = MutableStateFlow<Set<Long>>(emptySet())
+    val currentAnimeCategoryIds: StateFlow<Set<Long>> = _currentAnimeCategoryIds.asStateFlow()
+
     /**
      * `true` while a pull-to-refresh is in progress. Drives the
      * `PullToRefreshBox` indicator. Set to `true` at the start of [refresh]
@@ -183,9 +187,20 @@ class AnimeDetailViewModel(
         }
     }
 
-    /** Open the set-categories dialog (long-press on bookmark). */
+    /** Open the set-categories dialog (long-press on bookmark).
+     *  Loads the anime's current categories first so they show tick marks. */
     fun openCategoryPicker() {
-        _showCategoryPicker.value = true
+        viewModelScope.launch {
+            try {
+                val cats = getAnimeCategories()
+                _currentAnimeCategoryIds.value = cats.map { it.id }.toSet()
+                Log.d(TAG, "openCategoryPicker: loaded ${cats.size} current categories")
+            } catch (e: Exception) {
+                Log.e(TAG, "openCategoryPicker: failed to load current categories", e)
+                _currentAnimeCategoryIds.value = emptySet()
+            }
+            _showCategoryPicker.value = true
+        }
     }
 
     fun dismissCategoryPicker() {
@@ -277,6 +292,7 @@ class AnimeDetailViewModel(
             score = anilistAnime.averageScore?.toDouble(),
             totalEpisodes = anilistAnime.episodes,
             lastWatched = 0L,
+            nextAiringEpisode = anilistAnime.nextAiringEpisode?.episode,
         )
         val id = animeRepository.upsert(anime)
         // Assign to Default category.

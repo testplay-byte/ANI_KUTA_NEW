@@ -1,5 +1,6 @@
 package app.confused.anikuta.data.anime
 
+import app.confused.anikuta.core.common.model.AnimeCategoryLink
 import app.confused.anikuta.core.common.model.Category
 import app.confused.anikuta.core.common.repository.CategoryRepository
 import app.confused.anikuta.core.common.di.DispatcherProvider
@@ -154,6 +155,13 @@ class CategoryRepositoryImpl(
     }
 
     // ── Anime ↔ Category junction ──
+
+    override fun observeAllLinks(): Flow<List<AnimeCategoryLink>> =
+        database.anime_categoryQueries.selectAll { id, animeId, categoryId, _ ->
+            AnimeCategoryLink(animeId = animeId, categoryId = categoryId)
+        }
+            .asFlow()
+            .mapToList(dispatchers.io)
 
     override fun observeCategoriesForAnime(animeId: Long): Flow<List<Category>> =
         database.anime_categoryQueries.selectCategoriesByAnimeId(animeId, CategoryMapper::map)

@@ -90,6 +90,7 @@ class AnimeRepositoryImpl(
                 score = anime.score,
                 totalEpisodes = anime.totalEpisodes?.toLong(),
                 lastWatched = anime.lastWatched,
+                nextAiringEpisode = anime.nextAiringEpisode?.toLong(),
             )
             anime.id
         } else {
@@ -120,6 +121,7 @@ class AnimeRepositoryImpl(
                     score = anime.score,
                     totalEpisodes = anime.totalEpisodes?.toLong(),
                     lastWatched = anime.lastWatched,
+                    nextAiringEpisode = anime.nextAiringEpisode?.toLong(),
                 )
                 database.animesQueries.lastInsertedRowId().executeAsOne()
             }
@@ -174,6 +176,7 @@ class AnimeRepositoryImpl(
         coverColor: String?,
         score: Double?,
         totalEpisodes: Int?,
+        nextAiringEpisode: Int?,
     ) {
         database.animesQueries.updateAnilistMetadataByAnilistId(
             anilistId = anilistId.toLong(),
@@ -182,6 +185,7 @@ class AnimeRepositoryImpl(
             coverColor = coverColor,
             score = score,
             totalEpisodes = totalEpisodes?.toLong(),
+            nextAiringEpisode = nextAiringEpisode?.toLong(),
         )
     }
 

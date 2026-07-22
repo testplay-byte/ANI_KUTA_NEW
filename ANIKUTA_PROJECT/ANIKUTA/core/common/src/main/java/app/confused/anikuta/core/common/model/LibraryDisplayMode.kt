@@ -13,5 +13,6 @@ package app.confused.anikuta.core.common.model
 enum class LibraryDisplayMode {
     COMPACT_GRID,
     COMFORTABLE_GRID,
+    COVER_ONLY,
     LIST,
 }

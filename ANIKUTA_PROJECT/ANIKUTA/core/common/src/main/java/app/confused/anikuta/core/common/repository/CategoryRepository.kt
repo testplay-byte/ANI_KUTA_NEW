@@ -1,5 +1,6 @@
 package app.confused.anikuta.core.common.repository
 
+import app.confused.anikuta.core.common.model.AnimeCategoryLink
 import app.confused.anikuta.core.common.model.Category
 import kotlinx.coroutines.flow.Flow
 
@@ -67,6 +68,9 @@ interface CategoryRepository {
     suspend fun ensureDefaultExists()
 
     // ── Anime ↔ Category junction ──
+
+    /** Observe ALL anime↔category links (for library tab filtering). */
+    fun observeAllLinks(): Flow<List<AnimeCategoryLink>>
 
     /** Observe the categories assigned to an anime (by animes._id). */
     fun observeCategoriesForAnime(animeId: Long): Flow<List<Category>>

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -27,13 +26,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -73,21 +77,27 @@ import org.koin.androidx.compose.koinViewModel
  * The Library screen — the user's personal anime collection.
  *
  * Layout (top to bottom):
- *  1. CollapsingHeader (pinned) — title "Library" + gear (customize) button.
+ *  1. CollapsingHeader (pinned) — title "Library" (or "N in Library" when
+ *     showTotalEntries is on) + search button + overflow menu button.
  *  2. Category tabs (pinned) — All + each category. Replaced by Select All/Clear
  *     bar in selection mode.
  *  3. Search field (collapsible — tap search icon to show).
- *  4. Toolbar row — display mode toggle, sort button.
- *  5. LazyVerticalGrid or LazyColumn — the library items. Continue-watching
+ *  4. LazyVerticalGrid or LazyColumn — the library items. Continue-watching
  *     section is a full-span item at the top (when enabled + non-empty).
- *  6. SelectionActionBar (overlay, bottom) — when in selection mode.
+ *  5. SelectionActionBar (overlay, bottom) — when in selection mode.
  *
  * Per user decisions:
  *  - Q2: sort is GLOBAL.
  *  - Q3: display mode is GLOBAL.
- *  - Q5: continue-watching is a section at the top (may be removed later).
+ *  - Q5: continue-watching is a section at the top.
  *  - Q6: NO status filter.
- *  - Q9: state-based navigation (not Voyager) — the screen takes callbacks.
+ *  - Q9: state-based navigation (not Voyager).
+ *
+ * UI improvements (round 2):
+ *  - Combined overflow menu (sort + view mode + customize) in header.
+ *  - Search button in header, left of the menu button.
+ *  - "N in Library" heading when showTotalEntries is on.
+ *  - Category tab filtering now works (uses animeCategoryLinks).
  */
 @Composable
 fun LibraryScreen(
@@ -106,19 +116,36 @@ fun LibraryScreen(
         gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 20
     }
 
+    // Header title: "N in Library" when showTotalEntries is on, else "Library".
+    val headerTitle = when {
+        state.selectionMode -> "${state.selectedIds.size} selected"
+        state.showTotalEntries -> "${state.totalEntryCount} in Library"
+        else -> "Library"
+    }
+
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Pinned header ──
+            // ── Pinned header with combined search + overflow menu ──
             CollapsingHeader(
-                title = if (state.selectionMode) "${state.selectedIds.size} selected"
-                        else "Library",
+                title = headerTitle,
                 collapsed = collapsed,
                 actions = {
                     if (!state.selectionMode) {
+                        // Search button (left of the menu button)
                         HeaderActionButton(
-                            icon = Icons.Filled.Settings,
-                            contentDescription = "Customize",
-                            onClick = { viewModel.showCustomizeSheet() },
+                            icon = if (state.hasActiveSearch) Icons.Filled.Close else Icons.Filled.Search,
+                            contentDescription = "Search",
+                            onClick = {
+                                viewModel.setSearchQuery(if (state.hasActiveSearch) "" else " ")
+                            },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        // Combined overflow menu button
+                        OverflowMenuButton(
+                            displayMode = state.displayMode,
+                            onSort = { viewModel.showSortSheet() },
+                            onDisplayMode = { viewModel.setDisplayMode(it) },
+                            onCustomize = { viewModel.showCustomizeSheet() },
                         )
                     }
                 },
@@ -148,22 +175,6 @@ fun LibraryScreen(
                     onQueryChange = { viewModel.setSearchQuery(it) },
                     placeholder = "Search library",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
-
-            // ── Toolbar row (display mode + sort + search toggle) ──
-            if (!state.selectionMode) {
-                ToolbarRow(
-                    displayMode = state.displayMode,
-                    onToggleDisplayMode = {
-                        val newMode = if (state.displayMode == LibraryDisplayMode.LIST)
-                            LibraryDisplayMode.COMPACT_GRID
-                        else LibraryDisplayMode.LIST
-                        viewModel.setDisplayMode(newMode)
-                    },
-                    onSort = { viewModel.showSortSheet() },
-                    onSearch = { viewModel.setSearchQuery(if (state.hasActiveSearch) "" else " ") },
-                    isSearchActive = state.hasActiveSearch,
                 )
             }
 
@@ -206,7 +217,8 @@ fun LibraryScreen(
                         },
                     )
                     LibraryDisplayMode.COMPACT_GRID,
-                    LibraryDisplayMode.COMFORTABLE_GRID -> GridContent(
+                    LibraryDisplayMode.COMFORTABLE_GRID,
+                    LibraryDisplayMode.COVER_ONLY -> GridContent(
                         items = items,
                         state = state,
                         gridState = gridState,
@@ -250,14 +262,16 @@ fun LibraryScreen(
             is LibraryDialog.CustomizeSheet -> CustomizeSheet(
                 displayMode = state.displayMode,
                 columns = state.columns,
-                showEpisodeBadge = state.showEpisodeBadge,
+                episodeBadgeMode = state.episodeBadgeMode,
                 showScoreBadge = state.showScoreBadge,
                 showContinueWatching = state.showContinueWatching,
+                showTotalEntries = state.showTotalEntries,
                 onDisplayModeChange = { viewModel.setDisplayMode(it) },
                 onColumnsChange = { viewModel.setColumns(it) },
-                onShowEpisodeBadgeChange = { viewModel.setShowEpisodeBadge(it) },
+                onEpisodeBadgeModeChange = { viewModel.setEpisodeBadgeMode(it) },
                 onShowScoreBadgeChange = { viewModel.setShowScoreBadge(it) },
                 onShowContinueWatchingChange = { viewModel.setShowContinueWatching(it) },
+                onShowTotalEntriesChange = { viewModel.setShowTotalEntries(it) },
                 onDismiss = { viewModel.dismissDialog() },
             )
             is LibraryDialog.SortSheet -> SortSheet(
@@ -346,7 +360,8 @@ private fun GridContent(
                 item = anime,
                 selected = anime.id in state.selectedIds,
                 selectionMode = state.selectionMode,
-                showEpisodeBadge = state.showEpisodeBadge,
+                displayMode = state.displayMode,
+                episodeBadgeMode = state.episodeBadgeMode,
                 showScoreBadge = state.showScoreBadge,
                 onClick = { onItemClick(anime) },
                 onLongClick = { onItemLongClick(anime) },
@@ -387,7 +402,7 @@ private fun ListContent(
                 item = anime,
                 selected = anime.id in state.selectedIds,
                 selectionMode = state.selectionMode,
-                showEpisodeBadge = state.showEpisodeBadge,
+                episodeBadgeMode = state.episodeBadgeMode,
                 showScoreBadge = state.showScoreBadge,
                 onClick = { onItemClick(anime) },
                 onLongClick = { onItemLongClick(anime) },
@@ -396,65 +411,79 @@ private fun ListContent(
     }
 }
 
-// ── Toolbar row ──
+// ── Overflow menu (combined sort + view mode + customize) ──
 
 @Composable
-private fun ToolbarRow(
+private fun OverflowMenuButton(
     displayMode: LibraryDisplayMode,
-    onToggleDisplayMode: () -> Unit,
     onSort: () -> Unit,
-    onSearch: () -> Unit,
-    isSearchActive: Boolean,
+    onDisplayMode: (LibraryDisplayMode) -> Unit,
+    onCustomize: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            ToolbarIconButton(
-                icon = if (displayMode == LibraryDisplayMode.LIST) Icons.Filled.Apps
-                       else Icons.AutoMirrored.Filled.ViewList,
-                contentDescription = "Toggle layout",
-                onClick = onToggleDisplayMode,
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        HeaderActionButton(
+            icon = Icons.Filled.Tune,
+            contentDescription = "Library options",
+            onClick = { expanded = true },
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            // Sort
+            DropdownMenuItem(
+                text = { Text("Sort", fontFamily = RobotoFamily, fontWeight = FontWeight.SemiBold) },
+                leadingIcon = { Icon(Icons.Outlined.Sort, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onSort()
+                },
             )
-            Spacer(Modifier.width(8.dp))
-            ToolbarIconButton(
-                icon = Icons.AutoMirrored.Filled.Sort,
-                contentDescription = "Sort",
-                onClick = onSort,
+            // Display mode section
+            DropdownMenuItem(
+                text = { Text("Compact Grid", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COMPACT_GRID) FontWeight.ExtraBold else FontWeight.SemiBold) },
+                leadingIcon = { if (displayMode == LibraryDisplayMode.COMPACT_GRID) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onDisplayMode(LibraryDisplayMode.COMPACT_GRID)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Comfortable Grid", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COMFORTABLE_GRID) FontWeight.ExtraBold else FontWeight.SemiBold) },
+                leadingIcon = { if (displayMode == LibraryDisplayMode.COMFORTABLE_GRID) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onDisplayMode(LibraryDisplayMode.COMFORTABLE_GRID)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Cover Only", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COVER_ONLY) FontWeight.ExtraBold else FontWeight.SemiBold) },
+                leadingIcon = { if (displayMode == LibraryDisplayMode.COVER_ONLY) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onDisplayMode(LibraryDisplayMode.COVER_ONLY)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("List", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.LIST) FontWeight.ExtraBold else FontWeight.SemiBold) },
+                leadingIcon = { if (displayMode == LibraryDisplayMode.LIST) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onDisplayMode(LibraryDisplayMode.LIST)
+                },
+            )
+            // Customize
+            DropdownMenuItem(
+                text = { Text("Customize", fontFamily = RobotoFamily, fontWeight = FontWeight.SemiBold) },
+                leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onCustomize()
+                },
             )
         }
-        ToolbarIconButton(
-            icon = if (isSearchActive) Icons.Filled.Close else Icons.Filled.Search,
-            contentDescription = "Search",
-            onClick = onSearch,
-        )
-    }
-}
-
-@Composable
-private fun ToolbarIconButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 
@@ -517,22 +546,29 @@ private fun SelectionPill(text: String, icon: androidx.compose.ui.graphics.vecto
     }
 }
 
-// ── Filtering + sorting (pure functions) ──
+// ── Filtering + sorting (uses animeCategoryLinks for category filtering) ──
 
 /**
  * Apply the current category filter + search query + sort to the library anime.
- * This is computed on every recomposition — for large libraries, consider
- * memoizing or moving to the ViewModel.
+ *
+ * Category filtering uses [LibraryState.animeCategoryLinks] — a map from
+ * animeId to the set of categoryIds it belongs to. When the active filter is
+ * [CategoryFilter.One], only anime whose id maps to a set containing the
+ * selected category's id are shown.
  */
 private fun filteredSortedItems(state: LibraryState): List<Anime> {
     var result = state.libraryAnime
 
-    // Category filter — NOTE: proper category filtering requires the
-    // anime_category junction, which is not yet loaded into LibraryState.
-    // For now, all category tabs show the same items. Phase C will wire
-    // the junction query (observeAnimeIdsForCategory) into the ViewModel
-    // so each tab filters correctly. This is a known gap.
-    // (CategoryFilter.All and CategoryFilter.One currently behave the same.)
+    // Category filter — uses the anime_category junction data.
+    result = when (state.activeFilter) {
+        is CategoryFilter.All -> result
+        is CategoryFilter.One -> {
+            val categoryId = (state.activeFilter as CategoryFilter.One).category.id
+            result.filter { anime ->
+                state.animeCategoryLinks[anime.id]?.contains(categoryId) == true
+            }
+        }
+    }
 
     // Search filter
     if (state.searchQuery.isNotBlank()) {
@@ -545,7 +581,7 @@ private fun filteredSortedItems(state: LibraryState): List<Anime> {
         LibrarySortType.TITLE -> compareBy<Anime> { it.title.lowercase() }
         LibrarySortType.DATE_ADDED -> compareByDescending<Anime> { it.dateAdded }
         LibrarySortType.LAST_WATCHED -> compareByDescending<Anime> { it.lastWatched }
-        LibrarySortType.PROGRESS -> compareByDescending<Anime> { it.lastWatched } // proxy; real progress is in WatchProgressStore
+        LibrarySortType.PROGRESS -> compareByDescending<Anime> { it.lastWatched }
         LibrarySortType.TOTAL_EPISODES -> compareByDescending<Anime> { it.totalEpisodes ?: 0 }
     }
     result = if (state.sort.ascending) result.sortedWith(comparator)

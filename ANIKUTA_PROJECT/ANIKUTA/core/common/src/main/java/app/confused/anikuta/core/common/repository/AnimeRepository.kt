@@ -55,6 +55,7 @@ interface AnimeRepository {
         coverColor: String?,
         score: Double?,
         totalEpisodes: Int?,
+        nextAiringEpisode: Int?,
     )
 
     suspend fun delete(id: Long)

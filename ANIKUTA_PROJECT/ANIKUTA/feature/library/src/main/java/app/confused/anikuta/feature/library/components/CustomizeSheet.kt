@@ -20,37 +20,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CustomToggle
 import app.confused.anikuta.core.designsystem.component.SectionHeader
-import app.confused.anikuta.core.designsystem.component.TwoWayToggle
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
  * Customize sheet — bottom-up, no drag handle (design principle #2).
  *
- * Per user decision Q3: display mode is GLOBAL.
- *
  * Sections:
- *  - Layout: Grid / List (2-way toggle)
- *  - Columns: 2 / 3 / 4 / 5 (only for grid)
- *  - Badges: Episode count, Score (toggles)
- *  - Continue Watching: show/hide (toggle)
+ *  - Display: Compact Grid / Comfortable Grid / Cover Only / List (4 options)
+ *  - Columns: 2 / 3 / 4 / 5 (only for grid modes)
+ *  - Episode badge: Released / Total / Off (3 options)
+ *  - Badges: Score toggle
+ *  - Sections: Continue Watching toggle, Total entries in header toggle
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomizeSheet(
     displayMode: LibraryDisplayMode,
     columns: Int,
-    showEpisodeBadge: Boolean,
+    episodeBadgeMode: EpisodeBadgeMode,
     showScoreBadge: Boolean,
     showContinueWatching: Boolean,
+    showTotalEntries: Boolean,
     onDisplayModeChange: (LibraryDisplayMode) -> Unit,
     onColumnsChange: (Int) -> Unit,
-    onShowEpisodeBadgeChange: (Boolean) -> Unit,
+    onEpisodeBadgeModeChange: (EpisodeBadgeMode) -> Unit,
     onShowScoreBadgeChange: (Boolean) -> Unit,
     onShowContinueWatchingChange: (Boolean) -> Unit,
+    onShowTotalEntriesChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     AnikutaBottomSheet(onDismiss = onDismiss) {
@@ -64,23 +65,32 @@ fun CustomizeSheet(
             )
             Spacer(Modifier.height(16.dp))
 
-            // Layout
-            SectionHeader(text = "Layout")
-            val layoutSelected = if (displayMode == LibraryDisplayMode.LIST) 1 else 0
-            TwoWayToggle(
-                options = listOf("Grid", "List"),
-                selected = layoutSelected,
-                onSelect = { idx ->
-                    onDisplayModeChange(
-                        if (idx == 1) LibraryDisplayMode.LIST else LibraryDisplayMode.COMPACT_GRID
-                    )
-                },
+            // ── Display Mode (4 options) ──
+            SectionHeader(text = "Display")
+            DisplayModeRow(
+                label = "Compact Grid",
+                isSelected = displayMode == LibraryDisplayMode.COMPACT_GRID,
+                onClick = { onDisplayModeChange(LibraryDisplayMode.COMPACT_GRID) },
+            )
+            DisplayModeRow(
+                label = "Comfortable Grid",
+                isSelected = displayMode == LibraryDisplayMode.COMFORTABLE_GRID,
+                onClick = { onDisplayModeChange(LibraryDisplayMode.COMFORTABLE_GRID) },
+            )
+            DisplayModeRow(
+                label = "Cover Only",
+                isSelected = displayMode == LibraryDisplayMode.COVER_ONLY,
+                onClick = { onDisplayModeChange(LibraryDisplayMode.COVER_ONLY) },
+            )
+            DisplayModeRow(
+                label = "List",
+                isSelected = displayMode == LibraryDisplayMode.LIST,
+                onClick = { onDisplayModeChange(LibraryDisplayMode.LIST) },
             )
 
-            Spacer(Modifier.height(16.dp))
-
-            // Columns (only for grid)
+            // ── Columns (only for grid modes) ──
             if (displayMode != LibraryDisplayMode.LIST) {
+                Spacer(Modifier.height(16.dp))
                 SectionHeader(text = "Columns")
                 val colOptions = listOf("2", "3", "4", "5")
                 val colSelected = (columns - 2).coerceIn(0, 3)
@@ -111,30 +121,89 @@ fun CustomizeSheet(
                         }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
             }
 
-            // Badges
+            // ── Episode Badge Mode ──
+            Spacer(Modifier.height(16.dp))
+            SectionHeader(text = "Episode Count")
+            DisplayModeRow(
+                label = "Released episodes",
+                isSelected = episodeBadgeMode == EpisodeBadgeMode.RELEASED,
+                onClick = { onEpisodeBadgeModeChange(EpisodeBadgeMode.RELEASED) },
+            )
+            DisplayModeRow(
+                label = "Total episodes",
+                isSelected = episodeBadgeMode == EpisodeBadgeMode.TOTAL,
+                onClick = { onEpisodeBadgeModeChange(EpisodeBadgeMode.TOTAL) },
+            )
+            DisplayModeRow(
+                label = "Off",
+                isSelected = episodeBadgeMode == EpisodeBadgeMode.OFF,
+                onClick = { onEpisodeBadgeModeChange(EpisodeBadgeMode.OFF) },
+            )
+
+            // ── Badges ──
+            Spacer(Modifier.height(16.dp))
             SectionHeader(text = "Badges")
             ToggleRow(
-                label = "Episode count",
-                checked = showEpisodeBadge,
-                onChange = onShowEpisodeBadgeChange,
-            )
-            ToggleRow(
-                label = "Score",
+                label = "Show score",
                 checked = showScoreBadge,
                 onChange = onShowScoreBadgeChange,
             )
-            Spacer(Modifier.height(16.dp))
 
-            // Continue Watching
+            // ── Sections ──
+            Spacer(Modifier.height(16.dp))
             SectionHeader(text = "Sections")
             ToggleRow(
                 label = "Continue Watching",
                 checked = showContinueWatching,
                 onChange = onShowContinueWatchingChange,
             )
+            ToggleRow(
+                label = "Show total entries in header",
+                checked = showTotalEntries,
+                onChange = onShowTotalEntriesChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DisplayModeRow(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontFamily = RobotoFamily,
+            fontSize = 14.sp,
+            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+            color = if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+        )
+        if (isSelected) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(50),
+            ) {
+                Text(
+                    text = "✓",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = RobotoFamily,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
         }
     }
 }

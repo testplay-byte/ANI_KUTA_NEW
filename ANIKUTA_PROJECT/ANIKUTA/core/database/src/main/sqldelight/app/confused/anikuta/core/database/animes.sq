@@ -30,7 +30,8 @@ CREATE TABLE animes (
     cover_color TEXT,                -- hex color extracted from cover (e.g. "#B1F256")
     score REAL,                      -- AniList average score (0-100)
     total_episodes INTEGER,          -- AniList total episodes count
-    last_watched INTEGER NOT NULL DEFAULT 0  -- epoch ms of last watch activity
+    last_watched INTEGER NOT NULL DEFAULT 0,  -- epoch ms of last watch activity
+    next_airing_episode INTEGER               -- AniList next airing episode number (for released-episode count)
 );
 
 -- Partial unique index: anilist_id is unique when not null
@@ -64,13 +65,13 @@ INSERT INTO animes (
     thumbnail_url, favorite, source_id, date_added, viewer_flags,
     next_update, update_strategy, cover_last_modified,
     release_date, last_refresh, last_metadata_fetch, next_episode_check,
-    anilist_id, cover_color, score, total_episodes, last_watched
+    anilist_id, cover_color, score, total_episodes, last_watched, next_airing_episode
 ) VALUES (
     :url, :title, :artist, :author, :description, :genre, :coverUrl, :status,
     :thumbnailUrl, :favorite, :sourceId, :dateAdded, :viewerFlags,
     :nextUpdate, :updateStrategy, :coverLastModified,
     :releaseDate, :lastRefresh, :lastMetadataFetch, :nextEpisodeCheck,
-    :anilistId, :coverColor, :score, :totalEpisodes, :lastWatched
+    :anilistId, :coverColor, :score, :totalEpisodes, :lastWatched, :nextAiringEpisode
 );
 
 update:
@@ -84,7 +85,8 @@ UPDATE animes SET
     release_date = :releaseDate, last_refresh = :lastRefresh,
     last_metadata_fetch = :lastMetadataFetch, next_episode_check = :nextEpisodeCheck,
     anilist_id = :anilistId, cover_color = :coverColor,
-    score = :score, total_episodes = :totalEpisodes, last_watched = :lastWatched
+    score = :score, total_episodes = :totalEpisodes, last_watched = :lastWatched,
+    next_airing_episode = :nextAiringEpisode
 WHERE _id = :id;
 
 updateFavorite:
@@ -114,7 +116,8 @@ UPDATE animes SET
     cover_url = :coverUrl,
     cover_color = :coverColor,
     score = :score,
-    total_episodes = :totalEpisodes
+    total_episodes = :totalEpisodes,
+    next_airing_episode = :nextAiringEpisode
 WHERE anilist_id = :anilistId;
 
 lastInsertedRowId:
