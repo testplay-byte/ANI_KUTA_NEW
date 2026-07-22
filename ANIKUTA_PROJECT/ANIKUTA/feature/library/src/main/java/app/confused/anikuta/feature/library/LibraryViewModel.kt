@@ -64,17 +64,18 @@ class LibraryViewModel(
                 LibraryData(animeList, categories, progressMap, prefs)
             }.collect { data ->
                 val continueWatching = deriveContinueWatching(data.progressMap)
+                val p = data.prefs
                 _state.update { it.copy(
                     isLoading = false,
                     libraryAnime = data.animeList,
                     categories = data.categories,
                     continueWatching = continueWatching,
-                    displayMode = prefs.displayMode,
-                    columns = prefs.columns,
-                    sort = LibrarySort(prefs.sortType, prefs.sortAscending),
-                    showContinueWatching = prefs.showContinueWatching,
-                    showEpisodeBadge = prefs.showEpisodeBadge,
-                    showScoreBadge = prefs.showScoreBadge,
+                    displayMode = p.displayMode,
+                    columns = p.columns,
+                    sort = LibrarySort(p.sortType, p.sortAscending),
+                    showContinueWatching = p.showContinueWatching,
+                    showEpisodeBadge = p.showEpisodeBadge,
+                    showScoreBadge = p.showScoreBadge,
                 ) }
             }
         }

@@ -156,20 +156,20 @@ class CategoryRepositoryImpl(
     // ── Anime ↔ Category junction ──
 
     override fun observeCategoriesForAnime(animeId: Long): Flow<List<Category>> =
-        database.animeCategoryQueries.selectCategoriesByAnimeId(animeId, CategoryMapper::map)
+        database.anime_categoryQueries.selectCategoriesByAnimeId(animeId, CategoryMapper::map)
             .asFlow()
             .mapToList(dispatchers.io)
 
     override suspend fun getAnimeCategories(animeId: Long): List<Category> =
-        database.animeCategoryQueries.selectCategoriesByAnimeId(animeId, CategoryMapper::map)
+        database.anime_categoryQueries.selectCategoriesByAnimeId(animeId, CategoryMapper::map)
             .executeAsList()
 
     override suspend fun setAnimeCategories(animeId: Long, categoryIds: List<Long>) {
         Log.d(TAG, "setAnimeCategories: animeId=$animeId, categoryIds=$categoryIds")
         database.transaction {
-            database.animeCategoryQueries.deleteByAnimeId(animeId)
+            database.anime_categoryQueries.deleteByAnimeId(animeId)
             categoryIds.forEachIndexed { index, categoryId ->
-                database.animeCategoryQueries.insert(
+                database.anime_categoryQueries.insert(
                     animeId = animeId,
                     categoryId = categoryId,
                     order = index.toLong(),
@@ -179,7 +179,7 @@ class CategoryRepositoryImpl(
     }
 
     override suspend fun countAnimeInCategory(categoryId: Long): Int =
-        database.animeCategoryQueries.countAnimeInCategory(categoryId)
+        database.anime_categoryQueries.countAnimeInCategory(categoryId)
             .executeAsOne()
             .toInt()
 

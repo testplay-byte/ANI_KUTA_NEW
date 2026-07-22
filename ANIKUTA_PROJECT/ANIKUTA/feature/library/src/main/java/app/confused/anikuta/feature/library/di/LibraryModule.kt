@@ -4,7 +4,7 @@ import app.confused.anikuta.core.preferences.PreferenceStore
 import app.confused.anikuta.feature.library.LibraryPreferences
 import app.confused.anikuta.feature.library.LibraryViewModel
 import org.koin.core.module.Module
-import org.koin.androidx.viewmodel.dsl.viewModelOf
+import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 /**

@@ -54,6 +54,7 @@ import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
+import app.confused.anikuta.feature.library.LibraryScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionRepoSettingsScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
 import app.confused.anikuta.feature.videoresolver.ResolverResult
@@ -214,6 +215,10 @@ private fun AnikutaApp() {
                     "home" -> BrowseScreen(
                         api = anilistApi,
                         onOpenAnime = { id -> detailAnimeId = id },
+                    )
+                    "library" -> LibraryScreen(
+                        onOpenAnime = { id -> detailAnimeId = id },
+                        onOpenContinueWatching = { item -> detailAnimeId = item.anilistId },
                     )
                     "more" -> MoreScreen(
                         onOpenSettings = { showSettings = true },

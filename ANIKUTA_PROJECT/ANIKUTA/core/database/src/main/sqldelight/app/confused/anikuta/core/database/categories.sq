@@ -53,5 +53,8 @@ UPDATE categories SET category_order = :order WHERE _id = :id;
 updateHidden:
 UPDATE categories SET hidden = :hidden WHERE _id = :id;
 
+lastInsertedRowId:
+SELECT last_insert_rowid();
+
 delete:
 DELETE FROM categories WHERE _id = :id;
