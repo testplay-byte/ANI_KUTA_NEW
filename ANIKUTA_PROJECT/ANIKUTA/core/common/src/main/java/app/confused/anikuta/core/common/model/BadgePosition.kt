@@ -1,7 +1,5 @@
 package app.confused.anikuta.core.common.model
 
-import androidx.compose.ui.Alignment
-
 /**
  * Where a badge (episode count or score) is positioned on a library grid card.
  *
@@ -21,14 +19,6 @@ enum class BadgePosition {
     TOP_END,
     BOTTOM_START,
     BOTTOM_END,
-}
-
-/** Maps a [BadgePosition] to a Compose [Alignment]. */
-fun BadgePosition.toAlignment(): Alignment = when (this) {
-    BadgePosition.TOP_START -> Alignment.TopStart
-    BadgePosition.TOP_END -> Alignment.TopEnd
-    BadgePosition.BOTTOM_START -> Alignment.BottomStart
-    BadgePosition.BOTTOM_END -> Alignment.BottomEnd
 }
 
 /**

@@ -37,7 +37,6 @@ import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.oppositeOnSameEdge
-import app.confused.anikuta.core.common.model.toAlignment
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 
@@ -242,4 +241,12 @@ fun LibraryGridCard(
             // COVER_ONLY: no title below
         }
     }
+}
+
+/** Maps a [BadgePosition] to a Compose [Alignment]. Public so other Compose modules can use it. */
+fun BadgePosition.toAlignment(): Alignment = when (this) {
+    BadgePosition.TOP_START -> Alignment.TopStart
+    BadgePosition.TOP_END -> Alignment.TopEnd
+    BadgePosition.BOTTOM_START -> Alignment.BottomStart
+    BadgePosition.BOTTOM_END -> Alignment.BottomEnd
 }
