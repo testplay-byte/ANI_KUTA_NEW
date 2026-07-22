@@ -10,6 +10,7 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.core.anilist)
+    implementation(projects.core.preferences)
     // Episode metadata — for enriching episode list with titles, descriptions, thumbnails
     implementation(projects.core.episodeMetadata)
     // Source API — for AnimeSource, SEpisode, AnimeFilterList (ADR-029)
