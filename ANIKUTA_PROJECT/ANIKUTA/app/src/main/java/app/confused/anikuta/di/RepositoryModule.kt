@@ -30,4 +30,5 @@ val repositoryModule: Module = module {
     single<CategoryRepository> { CategoryRepositoryImpl(get(), get()) }
     single<EpisodeRepository> { EpisodeRepositoryImpl(get(), get()) }
     single<HistoryRepository> { HistoryRepositoryImpl(get(), get()) }
+    single { app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences(get()) }
 }

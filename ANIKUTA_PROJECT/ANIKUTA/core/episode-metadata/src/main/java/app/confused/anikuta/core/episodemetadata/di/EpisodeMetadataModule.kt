@@ -34,6 +34,8 @@ val episodeMetadataModule: Module = module {
     }
     // Shared JSON parser
     single { Json { ignoreUnknownKeys = true } }
+    // Metadata preferences
+    single { EpisodeMetadataPreferences(get()) }
 
     single { EpisodeMetadataSourceRegistry() }
     single { JikanMalSource(get(), get()) }
@@ -44,6 +46,6 @@ val episodeMetadataModule: Module = module {
         registry.register(get<JikanMalSource>())
         registry.register(get<AnikageCcSource>())
         registry.register(get<AniListStreamingSource>())
-        EpisodeMetadataRepository(registry)
+        EpisodeMetadataRepository(registry, get())
     }
 }

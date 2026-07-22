@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
  */
 class EpisodeMetadataRepository(
     private val registry: EpisodeMetadataSourceRegistry,
+    private val preferences: EpisodeMetadataPreferences,
 ) {
     private val cache = mutableMapOf<Int, Map<Int, EpisodeMetadata>>()
 
@@ -54,6 +55,12 @@ class EpisodeMetadataRepository(
      */
     suspend fun fetchAll(request: EpisodeMetadataRequest): Map<Int, EpisodeMetadata> =
         withContext(Dispatchers.IO) {
+            // Check if metadata fetching is enabled
+            if (!preferences.enabled().get()) {
+                Log.d(TAG, "Metadata fetching disabled by user — skipping")
+                return@withContext emptyMap()
+            }
+
             // Check cache first
             cache[request.animeId]?.let { cached ->
                 Log.d(TAG, "Cache hit for animeId=${request.animeId} (${cached.size} episodes)")
@@ -82,10 +89,17 @@ class EpisodeMetadataRepository(
                 }.awaitAll()
             }.toMutableList()
 
+            // Read field-level preferences
+            val fetchTitles = preferences.fetchTitles().get()
+            val fetchSummaries = preferences.fetchSummaries().get()
+            val fetchThumbnails = preferences.fetchThumbnails().get()
+            val fetchAirDates = preferences.fetchAirDates().get()
+
             // Merge per-field (first non-null wins, in source registration order)
+            // Fields the user disabled are set to null (not fetched)
             val episodeCount = request.episodeCount.coerceAtLeast(1)
             val merged = mutableMapOf<Int, EpisodeMetadata>()
-            val fallbackThumb = request.bannerImage
+            val fallbackThumb = if (fetchThumbnails) request.bannerImage else null
 
             for (epNum in 1..episodeCount) {
                 var title: String? = null
@@ -98,10 +112,10 @@ class EpisodeMetadataRepository(
                 for (sourceResult in results) {
                     val ep = sourceResult[epNum] ?: continue
                     hasAnyData = true
-                    if (title == null && ep.title != null) title = ep.title
-                    if (description == null && ep.description != null) description = ep.description
-                    if (thumbnailUrl == null && ep.thumbnailUrl != null) thumbnailUrl = ep.thumbnailUrl
-                    if (airDate == null && ep.airDate != null) airDate = ep.airDate
+                    if (fetchTitles && title == null && ep.title != null) title = ep.title
+                    if (fetchSummaries && description == null && ep.description != null) description = ep.description
+                    if (fetchThumbnails && thumbnailUrl == null && ep.thumbnailUrl != null) thumbnailUrl = ep.thumbnailUrl
+                    if (fetchAirDates && airDate == null && ep.airDate != null) airDate = ep.airDate
                     if (ep.filler) filler = true
                 }
 

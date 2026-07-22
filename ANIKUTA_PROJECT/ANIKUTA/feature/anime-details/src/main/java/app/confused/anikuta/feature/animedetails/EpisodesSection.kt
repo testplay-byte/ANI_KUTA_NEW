@@ -242,6 +242,7 @@ private fun EpisodeList(
     episodes: List<SEpisode>,
     watchedEpisodes: Set<String>,
     episodeMetadata: Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>,
+    displayPrefs: EpisodeDisplayPrefs? = null,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
@@ -255,6 +256,7 @@ private fun EpisodeList(
                 index = index,
                 isWatched = watchedEpisodes.contains(episode.url),
                 metadata = metadata,
+                displayPrefs = displayPrefs,
                 onClick = {
                     currentSource?.let { source ->
                         onOpenEpisode(episode, source, episodes)
@@ -268,11 +270,14 @@ private fun EpisodeList(
 }
 
 /**
- * A single episode row — number badge, name, play icon, watched grayscale.
+ * A single episode row — fully customizable display with thumbnail, title,
+ * description, date, audio pills, and episode number.
+ *
  * When metadata is available, shows the enriched title (from metadata sources),
- * a description preview, and a thumbnail.
+ * description, and thumbnail. Layout is controlled by EpisodeDisplayPreferences.
  *
  * Alternating backgrounds (zebra stripe) per design language §6.
+ * Title and description have dedicated surface backgrounds for visual separation.
  */
 @Composable
 private fun EpisodeRow(
@@ -280,6 +285,7 @@ private fun EpisodeRow(
     index: Int,
     isWatched: Boolean,
     metadata: app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata? = null,
+    displayPrefs: EpisodeDisplayPrefs? = null,
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
 ) {
@@ -290,8 +296,22 @@ private fun EpisodeRow(
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
     }
 
-    // Use metadata title if available, otherwise parse the extension title,
-    // otherwise fall back to "Episode N"
+    // Apply preferences or use defaults
+    val showThumbnail = displayPrefs?.showThumbnails ?: true
+    val showTitle = displayPrefs?.showTitles ?: true
+    val showSummary = displayPrefs?.showSummaries ?: true
+    val showDate = displayPrefs?.showDates ?: false
+    val showNumber = displayPrefs?.showEpisodeNumber ?: true
+    val showAudioPills = displayPrefs?.showAudioPills ?: false
+    val thumbPos = displayPrefs?.thumbnailPosition ?: "left"
+    val titlePos = displayPrefs?.titlePosition ?: "right"
+    val synopsisPos = displayPrefs?.synopsisPosition ?: "below"
+    val epNumPos = displayPrefs?.episodeNumberPosition ?: "overlay"
+    val thumbSize = displayPrefs?.thumbnailSize ?: "medium"
+    val titleMaxLines = displayPrefs?.titleMaxLines ?: 2
+    val synopsisMaxLines = displayPrefs?.synopsisMaxLines ?: 3
+
+    // Use metadata title if available, otherwise parse the extension title
     val displayTitle = metadata?.title
         ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
             episode.name, episode.episode_number
@@ -299,84 +319,261 @@ private fun EpisodeRow(
         ?: episode.name.ifBlank { "Episode ${formatEpisodeNumber(episode.episode_number)}" }
 
     val description = metadata?.description ?: episode.summary
-    val thumbnailUrl = metadata?.thumbnailUrl
+    val thumbnailUrl = if (showThumbnail) metadata?.thumbnailUrl else null
 
-    Row(
+    // Thumbnail sizes
+    val (thumbWidth, thumbHeight) = when (thumbSize) {
+        "small" -> 100.dp to 56.dp
+        "large" -> 160.dp to 90.dp
+        else -> 120.dp to 68.dp  // medium (default)
+    }
+
+    // Audio pills from scanlator
+    val scanlatorUpper = episode.scanlator?.uppercase() ?: ""
+    val hasSub = scanlatorUpper.contains("SUB")
+    val hasDub = scanlatorUpper.contains("DUB")
+    val hasHsub = scanlatorUpper.contains("HSUB")
+    val hasAnyAudioPills = showAudioPills && (hasSub || hasDub || hasHsub)
+
+    // Date
+    val dateText = if (showDate && (metadata?.airDate ?: 0L) > 0) {
+        formatDate(metadata!!.airDate!!)
+    } else if (showDate && episode.date_upload > 0) {
+        formatDate(episode.date_upload * 1000)
+    } else null
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 3.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
             .watchedEpisodeEffect(isWatched)
             .clip(RoundedCornerShape(12.dp))
             .background(cardColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(10.dp),
     ) {
-        // Episode thumbnail (if available from metadata) OR number badge
-        if (!thumbnailUrl.isNullOrBlank()) {
-            coil3.compose.AsyncImage(
-                model = thumbnailUrl,
-                contentDescription = displayTitle,
-                modifier = Modifier
-                    .size(width = 64.dp, height = 40.dp)
-                    .clip(RoundedCornerShape(6.dp)),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            )
-            Spacer(modifier = Modifier.size(8.dp))
-        } else {
-            // Number badge fallback
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.size(40.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = formatEpisodeNumber(episode.episode_number),
-                        fontFamily = RobotoFamily,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            // Thumbnail (left position)
+            if (thumbnailUrl != null && thumbPos == "left") {
+                Box {
+                    coil3.compose.AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = displayTitle,
+                        modifier = Modifier
+                            .size(width = thumbWidth, height = thumbHeight)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     )
+                    // Episode number overlay on thumbnail
+                    if (showNumber && epNumPos == "overlay") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                        ) {
+                            Text(
+                                text = formatEpisodeNumber(episode.episode_number),
+                                fontFamily = RobotoFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.size(10.dp))
+            } else if (showNumber && epNumPos == "badge" && thumbPos == "left") {
+                // Number badge (no thumbnail)
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = formatEpisodeNumber(episode.episode_number),
+                            fontFamily = RobotoFamily,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.size(10.dp))
+            }
+
+            // Right-side content column
+            Column(modifier = Modifier.weight(1f)) {
+                // Title (with background)
+                if (showTitle) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().then(
+                            if (thumbPos == "right" || thumbnailUrl == null) Modifier.fillMaxWidth()
+                            else Modifier.fillMaxWidth()
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (showNumber && epNumPos == "badge" && (thumbnailUrl != null && thumbPos == "left")) {
+                                // Badge already shown on left — skip
+                            } else if (showNumber && epNumPos == "badge" && thumbnailUrl == null) {
+                                // Badge already shown on left — skip
+                            }
+                            Text(
+                                text = displayTitle,
+                                fontFamily = RobotoFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = titleMaxLines,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = "Play episode",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(onClick = onClick),
+                            )
+                        }
+                    }
+                }
+
+                // Date + audio pills row
+                if (dateText != null || hasAnyAudioPills) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (dateText != null) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            ) {
+                                Text(
+                                    text = dateText,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                        if (hasAnyAudioPills) {
+                            if (hasSub) {
+                                Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                                    Text("SUB", fontFamily = RobotoFamily, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            if (hasDub) {
+                                Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
+                                    Text("DUB", fontFamily = RobotoFamily, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            if (hasHsub) {
+                                Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                                    Text("HSUB", fontFamily = RobotoFamily, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Synopsis (with background)
+                if (showSummary && !description.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = description,
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = synopsisMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.size(12.dp))
-        }
-        // Episode title + description
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = displayTitle,
-                fontFamily = RobotoFamily,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (!description.isNullOrBlank()) {
-                Spacer(modifier = Modifier.size(2.dp))
-                Text(
-                    text = description,
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+
+            // Thumbnail (right position)
+            if (thumbnailUrl != null && thumbPos == "right") {
+                Spacer(modifier = Modifier.size(10.dp))
+                Box {
+                    coil3.compose.AsyncImage(
+                        model = thumbnailUrl,
+                        contentDescription = displayTitle,
+                        modifier = Modifier
+                            .size(width = thumbWidth, height = thumbHeight)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                    if (showNumber && epNumPos == "overlay") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                        ) {
+                            Text(
+                                text = formatEpisodeNumber(episode.episode_number),
+                                fontFamily = RobotoFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
-        // Play icon
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = "Play episode",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .size(24.dp)
-                .clickable(onClick = onClick),
-        )
     }
 }
+
+/** Formats epoch millis to "MMM dd, yyyy". */
+private fun formatDate(epochMillis: Long): String {
+    return try {
+        val sdf = java.text.SimpleDateFormat("MMM dd, yyyy", java.util.Locale.US)
+        sdf.format(java.util.Date(epochMillis))
+    } catch (e: Exception) {
+        ""
+    }
+}
+
+/** Display preferences passed to EpisodeRow (simplified from EpisodeDisplayPreferences). */
+data class EpisodeDisplayPrefs(
+    val showThumbnails: Boolean = true,
+    val showTitles: Boolean = true,
+    val showSummaries: Boolean = true,
+    val showDates: Boolean = false,
+    val showEpisodeNumber: Boolean = true,
+    val showAudioPills: Boolean = false,
+    val thumbnailPosition: String = "left",
+    val titlePosition: String = "right",
+    val synopsisPosition: String = "below",
+    val datePosition: String = "right_below_synopsis",
+    val episodeNumberPosition: String = "overlay",
+    val thumbnailSize: String = "medium",
+    val titleMaxLines: Int = 2,
+    val synopsisMaxLines: Int = 3,
+)
 
 /** Formats an episode number: 5.0f → "5", 5.5f → "5.5", -1f → "?". */
 private fun formatEpisodeNumber(num: Float): String {
