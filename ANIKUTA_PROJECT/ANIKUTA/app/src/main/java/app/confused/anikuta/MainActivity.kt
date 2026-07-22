@@ -127,9 +127,9 @@ private fun AnikutaApp() {
     val repoRepository: ExtensionRepoRepository = koinInject()
     val repoApi: ExtensionRepoApi = koinInject()
 
-    // Tracks the episode+source+episodeList being resolved (for retry on Error + watch page)
+    // Tracks the episode+source+episodeList+watchCtx being resolved (for retry + watch page)
     var resolveTarget by remember {
-        mutableStateOf<Triple<SEpisode, AnimeSource, List<SEpisode>>?>(null)
+        mutableStateOf<ResolveTarget?>(null)
     }
 
     // The extension result currently being linked to AniList (search page → linking sheet).
@@ -163,11 +163,17 @@ private fun AnikutaApp() {
     /**
      * Resolves videos from [source] for [episode] and updates [resolverState].
      * Called when the user taps an episode on the detail screen.
-     * Stores the full [episodeList] so the watch page can switch episodes.
+     * Stores the full [episodeList] + [watchCtx] so the watch page can switch
+     * episodes + render rich metadata.
      */
-    fun resolveEpisode(episode: SEpisode, source: AnimeSource, episodeList: List<SEpisode>) {
+    fun resolveEpisode(
+        episode: SEpisode,
+        source: AnimeSource,
+        episodeList: List<SEpisode>,
+        watchCtx: app.confused.anikuta.feature.animedetails.WatchEpisodeContext,
+    ) {
         val epNum = episode.episode_number.toInt().let { if (it > 0) it else 0 }
-        resolveTarget = Triple(episode, source, episodeList)
+        resolveTarget = ResolveTarget(episode, source, episodeList, watchCtx)
         resolverState = VideoResolverState.Resolving(epNum)
         Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name} (${episodeList.size} episodes)")
 
@@ -213,8 +219,8 @@ private fun AnikutaApp() {
                         detailAnimeId = null
                         resolverState = VideoResolverState.Hidden
                     },
-                    onOpenEpisode = { episode, source, episodeList ->
-                        resolveEpisode(episode, source, episodeList)
+                    onOpenEpisode = { episode, source, episodeList, watchCtx ->
+                        resolveEpisode(episode, source, episodeList, watchCtx)
                     },
                 )
             }
@@ -334,23 +340,23 @@ private fun AnikutaApp() {
                         resolverState = VideoResolverState.Hidden
                         val target = resolveTarget
                         if (target != null) {
-                            val (episode, source, episodeList) = target
                             watchTarget = WatchRequest(
                                 videoUrl = video.url,
                                 videoHeaders = video.videoHeaders,
-                                videoTitle = video.videoTitle.ifBlank { episode.name },
+                                videoTitle = video.videoTitle.ifBlank { target.episode.name },
                                 anilistId = detailAnimeId ?: 0,
-                                animeTitle = "",
-                                coverUrl = null,
-                                coverColor = null,
-                                episodeUrl = episode.url,
-                                episodeNumber = episode.episode_number,
-                                sourceId = source.id,
-                                source = source,
+                                animeTitle = target.watchCtx.animeTitle,
+                                coverUrl = target.watchCtx.coverUrl,
+                                coverColor = null, // TODO: extract from coverUrl via Palette
+                                episodeUrl = target.episode.url,
+                                episodeNumber = target.episode.episode_number,
+                                sourceId = target.source.id,
+                                source = target.source,
                                 videoServer = "",
                                 videoAudio = "",
                                 videoQuality = 0,
-                                episodeList = episodeList,
+                                episodeList = target.episodeList,
+                                episodeMetadata = target.watchCtx.episodeMetadata,
                                 subtitleTracks = video.subtitleTracks,
                                 audioTracks = video.audioTracks,
                                 resolvedServers = servers,
@@ -358,8 +364,8 @@ private fun AnikutaApp() {
                         }
                     },
                     onRetry = {
-                        resolveTarget?.let { (episode, source, episodeList) ->
-                            resolveEpisode(episode, source, episodeList)
+                        resolveTarget?.let { rt ->
+                            resolveEpisode(rt.episode, rt.source, rt.episodeList, rt.watchCtx)
                         }
                     },
                 )
@@ -563,3 +569,15 @@ private fun PlaceholderScreen(title: String) {
         }
     }
 }
+
+/**
+ * Holds the episode being resolved + its source + the full episode list + the
+ * watch context (anime title, cover, metadata map). Used for retry-on-error
+ * and for constructing the [WatchRequest] when the user picks a video.
+ */
+private data class ResolveTarget(
+    val episode: SEpisode,
+    val source: AnimeSource,
+    val episodeList: List<SEpisode>,
+    val watchCtx: app.confused.anikuta.feature.animedetails.WatchEpisodeContext,
+)

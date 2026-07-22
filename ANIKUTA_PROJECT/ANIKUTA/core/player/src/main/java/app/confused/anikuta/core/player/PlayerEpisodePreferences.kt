@@ -64,4 +64,35 @@ class PlayerEpisodePreferences(
 
     fun downloadButtonPlacement(): Preference<String> =
         store.getString("player_ep_dl_btn_pos", "episode_row")
+
+    // ── Background toggles (parity with the details page's EpisodeDisplayPreferences) ──
+    // Per user: "the details page and the watch page would be customizable
+    // separately." These mirror the details page's background toggles but use
+    // separate player_ep_* keys so the two are independently configurable.
+
+    /** Whether the title gets a dedicated background container. */
+    fun showTitleBackground(): Preference<Boolean> =
+        store.getBoolean("player_ep_show_title_bg", true)
+
+    /** Whether the date pill gets a dedicated background. */
+    fun showDateBackground(): Preference<Boolean> =
+        store.getBoolean("player_ep_show_date_bg", true)
+
+    /** Whether the audio pills get a dedicated background. */
+    fun showAudioBackground(): Preference<Boolean> =
+        store.getBoolean("player_ep_show_audio_bg", true)
+
+    /** Whether the synopsis gets a dedicated background container. */
+    fun showSynopsisBackground(): Preference<Boolean> =
+        store.getBoolean("player_ep_show_synopsis_bg", true)
+
+    // ── Line-count prefs ──
+
+    /** Max lines for episode title: 1 (default) or 2. */
+    fun titleMaxLines(): Preference<Int> =
+        store.getInt("player_ep_title_lines", 1)
+
+    /** Max lines for episode synopsis: default 2 (per user request). */
+    fun synopsisMaxLines(): Preference<Int> =
+        store.getInt("player_ep_synopsis_lines", 2)
 }

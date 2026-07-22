@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -69,6 +71,7 @@ import app.confused.anikuta.core.player.controls.MinimizedControls
 import app.confused.anikuta.feature.videoresolver.ResolverResult
 import app.confused.anikuta.feature.videoresolver.ResolverService
 import `is`.xyz.mpv.MPVLib
+import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -952,6 +955,13 @@ private fun WatchScreenContent(
                 // so it updates when the user switches episodes).
                 item(key = "description") {
                     val currentEp = watchRequest.episodeList.getOrNull(currentEpisodeIndex)
+                    val epNumInt = currentEp?.episode_number?.toInt() ?: watchRequest.episodeNumber.toInt()
+                    val currentMetadata = watchRequest.episodeMetadata[epNumInt]
+                    // Audio availability for the current episode
+                    val haystack = ((currentEp?.scanlator ?: "") + " " + (currentEp?.name ?: "")).uppercase()
+                    val hasHsub = haystack.contains("HSUB") || haystack.contains("HARDSUB")
+                    val hasSub = haystack.contains("SUB") && !hasHsub
+                    val hasDub = haystack.contains("DUB") && !hasHsub
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -962,8 +972,16 @@ private fun WatchScreenContent(
                     ) {
                         EpisodeDescriptionSection(
                             episodeNumber = currentEp?.episode_number ?: watchRequest.episodeNumber,
-                            episodeTitle = currentEp?.name ?: watchRequest.videoTitle,
-                            summary = currentEp?.summary,
+                            episodeTitle = currentMetadata?.title
+                                ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
+                                    currentEp?.name ?: "", currentEp?.episode_number ?: watchRequest.episodeNumber,
+                                )
+                                ?: currentEp?.name ?: watchRequest.videoTitle,
+                            summary = currentMetadata?.description ?: currentEp?.summary,
+                            airDate = currentMetadata?.airDate,
+                            hasSub = hasSub,
+                            hasDub = hasDub,
+                            hasHsub = hasHsub,
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                         )
                     }
@@ -1011,11 +1029,14 @@ private fun WatchScreenContent(
                             }
 
                             // Episode list (plain Column — NO nested LazyColumn)
+                            val watchDisplayPrefs = rememberWatchEpisodeDisplayPrefs()
                             watchRequest.episodeList.forEachIndexed { index, ep ->
+                                val epNumInt = ep.episode_number.toInt().let { if (it > 0) it else 0 }
+                                val epMetadata = watchRequest.episodeMetadata[epNumInt]
                                 EpisodeRow(
-                                    episodeNumber = ep.episode_number,
-                                    episodeTitle = ep.name,
-                                    summary = ep.summary,
+                                    episode = ep,
+                                    metadata = epMetadata,
+                                    displayPrefs = watchDisplayPrefs,
                                     isCurrent = index == currentEpisodeIndex,
                                     isSwitching = isSwitching && index == currentEpisodeIndex,
                                     onClick = { onSwitchEpisode(index) },
@@ -1300,6 +1321,10 @@ private fun EpisodeDescriptionSection(
     episodeNumber: Float,
     episodeTitle: String,
     summary: String?,
+    airDate: Long? = null,
+    hasSub: Boolean = false,
+    hasDub: Boolean = false,
+    hasHsub: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1335,6 +1360,38 @@ private fun EpisodeDescriptionSection(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
+        // Release date + audio versions row
+        val dateText = if (airDate != null && airDate > 0) formatWatchDate(airDate) else null
+        val hasAudio = hasSub || hasDub || hasHsub
+        if (dateText != null || hasAudio) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (dateText != null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    ) {
+                        Text(
+                            text = dateText,
+                            fontFamily = RobotoFamily,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+                if (hasAudio) {
+                    WatchAudioPills(hasSub = hasSub, hasDub = hasDub, hasHsub = hasHsub)
+                }
+            }
+        }
         // Summary — expandable (3 lines collapsed, full when expanded)
         if (!summary.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -1342,6 +1399,7 @@ private fun EpisodeDescriptionSection(
                 text = summary,
                 fontFamily = RobotoFamily,
                 fontSize = 13.sp,
+                lineHeight = 16.sp,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = if (expanded) Int.MAX_VALUE else 3,
@@ -1362,37 +1420,117 @@ private fun EpisodeDescriptionSection(
     }
 }
 
+/** Formats epoch seconds to "MMM d, yyyy". */
+private fun formatWatchDate(epochSeconds: Long): String {
+    return try {
+        val sdf = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+        sdf.format(java.util.Date(epochSeconds * 1000L))
+    } catch (e: Exception) { "" }
+}
+
+/** Audio pills for the watch page — full names (SUB•DUB) with dot separators. */
+@Composable
+private fun WatchAudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
+    val parts = buildList {
+        if (hasSub) add("SUB")
+        if (hasDub) add("DUB")
+        if (hasHsub) add("HSUB")
+    }
+    if (parts.isEmpty()) return
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            parts.forEachIndexed { idx, label ->
+                if (idx > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(3.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                    )
+                }
+                Text(
+                    text = label,
+                    fontFamily = RobotoFamily,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+}
+
 /**
- * A single episode row in the watch page episode list.
+ * A single episode row in the watch page episode list — mirrors the details-page
+ * two-section design (thumbnail + title + meta on top; synopsis on bottom) but
+ * uses [WatchEpisodeDisplayPrefs] (separate from the details page) + highlights
+ * the current episode with a primary border + "Now Playing" indicator.
  *
- * Per design language:
- * - Alternating card backgrounds (surfaceContainerLow / surfaceContainerHigh)
- * - Current episode: highlighted with primary border + tonal elevation + "now playing" icon
- * - Episode number badge (primaryContainer pill)
- * - Title (Medium weight, onSurface)
- * - Proper spacing and rounded corners (12dp)
- * - Switching animation: pulsing background on current episode
+ * Per user: "add the whole metadata functionality here too and all of those
+ * things like showing the thumbnail, title, and release date, and also showing
+ * the sub and dub episode availability and also the description, and also
+ * properly highlighting the episode."
  */
 @Composable
 private fun EpisodeRow(
-    episodeNumber: Float,
-    episodeTitle: String,
-    summary: String?,
+    episode: SEpisode,
+    metadata: app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata?,
+    displayPrefs: WatchEpisodeDisplayPrefs,
     isCurrent: Boolean,
     isSwitching: Boolean,
     onClick: () -> Unit,
 ) {
-    // Alternating background colors (zebra stripe)
-    val isEven = episodeNumber.toInt() % 2 == 0
-    val baseColor = if (isEven) {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    } else {
-        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.4f)
+    val epNum = episode.episode_number
+    val epNumText = "EP ${formatEpisodeNumber(epNum)}"
+    val bareEpNum = formatEpisodeNumber(epNum)
+
+    // Use metadata title if available, otherwise parse the extension title
+    val displayTitle = metadata?.title
+        ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(episode.name, epNum)
+        ?: episode.name.ifBlank { "Episode $bareEpNum" }
+    val description = metadata?.description ?: episode.summary
+    val thumbnailUrl = if (displayPrefs.showThumbnails) {
+        metadata?.thumbnailUrl ?: episode.preview_url
+    } else null
+
+    // Audio availability — parse BOTH scanlator AND episode name
+    val haystack = ((episode.scanlator ?: "") + " " + episode.name).uppercase()
+    val hasHsub = haystack.contains("HSUB") || haystack.contains("HARDSUB")
+    val hasSub = haystack.contains("SUB") && !hasHsub
+    val hasDub = haystack.contains("DUB") && !hasHsub
+    val hasAnyAudio = displayPrefs.showAudioPills && (hasSub || hasDub || hasHsub)
+
+    // Date — prefer metadata airDate, fall back to episode.date_upload
+    val dateText = if (displayPrefs.showDates) {
+        val airDate = metadata?.airDate
+        when {
+            airDate != null && airDate > 0 -> formatWatchDate(airDate)
+            episode.date_upload > 0 -> formatWatchDate(episode.date_upload / 1000)
+            else -> null
+        }
+    } else null
+
+    val (thumbWidth, thumbHeight) = when (displayPrefs.thumbnailSize) {
+        "small" -> 100.dp to 56.dp
+        "large" -> 160.dp to 90.dp
+        else -> 120.dp to 68.dp
     }
+
+    // Card color — current episode gets highlighted; no alternating zebra-stripe
     val cardColor = if (isCurrent) {
         MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
-        baseColor
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
     }
 
     Surface(
@@ -1407,70 +1545,310 @@ private fun EpisodeRow(
         shadowElevation = if (isCurrent) 2.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 3.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
             .clickable(onClick = onClick),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Episode number badge — primaryContainer pill
-            Surface(
-                color = if (isCurrent) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.size(40.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = formatEpisodeNumber(episodeNumber),
-                        fontFamily = RobotoFamily,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimary
-                               else MaterialTheme.colorScheme.onPrimaryContainer,
+        Column(modifier = Modifier.padding(10.dp)) {
+            // ══ TOP SECTION: thumbnail + title/meta ══
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                // Thumbnail (left) with EP overlay badge
+                if (thumbnailUrl != null) {
+                    Box {
+                        coil3.compose.AsyncImage(
+                            model = thumbnailUrl,
+                            contentDescription = displayTitle,
+                            modifier = Modifier
+                                .size(width = thumbWidth, height = thumbHeight)
+                                .clip(RoundedCornerShape(10.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        )
+                        if (displayPrefs.showEpisodeNumber) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                            ) {
+                                Text(
+                                    text = epNumText,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.size(10.dp))
+                } else if (displayPrefs.showEpisodeNumber) {
+                    // Circle fallback (no thumbnail)
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = bareEpNum,
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCurrent) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.size(10.dp))
+                }
+
+                // Right column: title (top) + meta (bottom)
+                val hasMetaRow = dateText != null || hasAnyAudio
+                if (displayPrefs.showTitles || hasMetaRow) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(IntrinsicSize.Min),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        // Title (with optional background) + "Now Playing" indicator
+                        if (displayPrefs.showTitles) {
+                            if (isCurrent) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Now playing",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Text(
+                                        text = "Now Playing",
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                Spacer(Modifier.size(2.dp))
+                            }
+                            if (displayPrefs.showTitleBackground) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        text = displayTitle,
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = displayPrefs.titleMaxLines,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = displayTitle,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = displayPrefs.titleMaxLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+
+                        // Date + Audio pills (separate, with spacer)
+                        if (hasMetaRow) {
+                            Spacer(Modifier.size(6.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                if (dateText != null) {
+                                    WatchDatePill(text = dateText, showBackground = displayPrefs.showDateBackground)
+                                }
+                                if (hasAnyAudio) {
+                                    WatchAudioPillsWithBg(
+                                        hasSub = hasSub,
+                                        hasDub = hasDub,
+                                        hasHsub = hasHsub,
+                                        showBackground = displayPrefs.showAudioBackground,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (thumbnailUrl != null || displayPrefs.showEpisodeNumber) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                // Switching indicator on current episode
+                if (isCurrent && isSwitching) {
+                    Spacer(modifier = Modifier.size(8.dp))
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
-            Spacer(modifier = Modifier.size(12.dp))
-            // Episode title + "now playing" indicator
-            Column(modifier = Modifier.weight(1f)) {
-                if (isCurrent) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+
+            // ══ BOTTOM SECTION: Synopsis (with optional background) ══
+            if (displayPrefs.showSummaries && !description.isNullOrBlank()) {
+                Spacer(Modifier.size(8.dp))
+                if (displayPrefs.showSynopsisBackground) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Now playing",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp),
-                        )
                         Text(
-                            text = "Now Playing",
+                            text = description,
                             fontFamily = RobotoFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = displayPrefs.synopsisMaxLines,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         )
                     }
+                } else {
+                    Text(
+                        text = description,
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = displayPrefs.synopsisMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Date pill for the watch episode row. */
+@Composable
+private fun WatchDatePill(text: String, showBackground: Boolean) {
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ) {
+            Text(
+                text = text,
+                fontFamily = RobotoFamily,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+    } else {
+        Text(
+            text = text,
+            fontFamily = RobotoFamily,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** Audio pills for the watch episode row — with optional background. */
+@Composable
+private fun WatchAudioPillsWithBg(
+    hasSub: Boolean,
+    hasDub: Boolean,
+    hasHsub: Boolean,
+    showBackground: Boolean,
+) {
+    val parts = buildList {
+        if (hasSub) add("SUB")
+        if (hasDub) add("DUB")
+        if (hasHsub) add("HSUB")
+    }
+    if (parts.isEmpty()) return
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                parts.forEachIndexed { idx, label ->
+                    if (idx > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                        )
+                    }
+                    Text(
+                        text = label,
+                        fontFamily = RobotoFamily,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            parts.forEachIndexed { idx, label ->
+                if (idx > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(3.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                    )
                 }
                 Text(
-                    text = episodeTitle.ifBlank { "Episode ${formatEpisodeNumber(episodeNumber)}" },
+                    text = label,
                     fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // Switching indicator on current episode
-            if (isCurrent && isSwitching) {
-                androidx.compose.material3.CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
+                    softWrap = false,
                 )
             }
         }

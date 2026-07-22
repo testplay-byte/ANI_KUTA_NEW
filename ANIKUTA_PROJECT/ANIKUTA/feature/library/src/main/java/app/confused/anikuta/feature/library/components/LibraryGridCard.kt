@@ -36,6 +36,8 @@ import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
+import app.confused.anikuta.core.common.model.oppositeOnSameEdge
+import app.confused.anikuta.core.common.model.toAlignment
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 
@@ -124,9 +126,9 @@ fun LibraryGridCard(
                     EpisodeBadgeMode.TOTAL -> item.totalEpisodes?.takeIf { it > 0 }?.let { "$it ep" }
                     EpisodeBadgeMode.RELEASED -> item.releasedEpisodes?.takeIf { it > 0 }?.let { "$it ep" }
                 }
-                if (epText != null) {
-                    // In compact grid, force top positions (bottom is occupied by title)
-                    val effectivePos = if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
+                // Compute the episode badge's effective position (compact grid clamps to top).
+                val epEffectivePos = if (epText != null) {
+                    if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
                         if (episodeBadgePosition == BadgePosition.BOTTOM_START || episodeBadgePosition == BadgePosition.BOTTOM_END) {
                             BadgePosition.TOP_END
                         } else {
@@ -135,9 +137,12 @@ fun LibraryGridCard(
                     } else {
                         episodeBadgePosition
                     }
+                } else null
+
+                if (epText != null && epEffectivePos != null) {
                     Box(
                         modifier = Modifier
-                            .align(effectivePos.toAlignment())
+                            .align(epEffectivePos.toAlignment())
                             .padding(4.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.primary)
@@ -147,6 +152,7 @@ fun LibraryGridCard(
                             text = epText,
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 9.sp,
+                            lineHeight = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = RobotoFamily,
                         )
@@ -157,7 +163,7 @@ fun LibraryGridCard(
                 val score = item.score
                 if (showScoreBadge && score != null) {
                     // In compact grid, force top positions
-                    val effectivePos = if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
+                    var scoreEffectivePos = if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
                         if (scoreBadgePosition == BadgePosition.BOTTOM_START || scoreBadgePosition == BadgePosition.BOTTOM_END) {
                             BadgePosition.TOP_START
                         } else {
@@ -166,9 +172,15 @@ fun LibraryGridCard(
                     } else {
                         scoreBadgePosition
                     }
+                    // Overlap fix: if the score badge would land on the SAME corner as the
+                    // episode badge, shift it to the opposite corner on the same edge.
+                    // Per user: "When I select right for both of them it overlaps them."
+                    if (epEffectivePos != null && scoreEffectivePos == epEffectivePos) {
+                        scoreEffectivePos = scoreEffectivePos.oppositeOnSameEdge()
+                    }
                     Box(
                         modifier = Modifier
-                            .align(effectivePos.toAlignment())
+                            .align(scoreEffectivePos.toAlignment())
                             .padding(4.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.primary)
@@ -178,6 +190,7 @@ fun LibraryGridCard(
                             text = "${score.toInt()}",
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 9.sp,
+                            lineHeight = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = RobotoFamily,
                         )
@@ -229,12 +242,4 @@ fun LibraryGridCard(
             // COVER_ONLY: no title below
         }
     }
-}
-
-/** Maps a [BadgePosition] to a Compose [Alignment]. */
-private fun BadgePosition.toAlignment(): Alignment = when (this) {
-    BadgePosition.TOP_START -> Alignment.TopStart
-    BadgePosition.TOP_END -> Alignment.TopEnd
-    BadgePosition.BOTTOM_START -> Alignment.BottomStart
-    BadgePosition.BOTTOM_END -> Alignment.BottomEnd
 }

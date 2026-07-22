@@ -1,5 +1,7 @@
 package app.confused.anikuta.core.common.model
 
+import androidx.compose.ui.Alignment
+
 /**
  * Where a badge (episode count or score) is positioned on a library grid card.
  *
@@ -19,4 +21,29 @@ enum class BadgePosition {
     TOP_END,
     BOTTOM_START,
     BOTTOM_END,
+}
+
+/** Maps a [BadgePosition] to a Compose [Alignment]. */
+fun BadgePosition.toAlignment(): Alignment = when (this) {
+    BadgePosition.TOP_START -> Alignment.TopStart
+    BadgePosition.TOP_END -> Alignment.TopEnd
+    BadgePosition.BOTTOM_START -> Alignment.BottomStart
+    BadgePosition.BOTTOM_END -> Alignment.BottomEnd
+}
+
+/**
+ * Returns the opposite corner on the SAME edge (top or bottom).
+ * Used for overlap resolution when two badges would land on the same corner.
+ *  - TOP_START → TOP_END (and vice versa)
+ *  - BOTTOM_START → BOTTOM_END (and vice versa)
+ *
+ * Per user: "When I select right for both of them it overlaps them." This
+ * shifts the second badge to the other side of the same edge so they don't
+ * paint on top of each other.
+ */
+fun BadgePosition.oppositeOnSameEdge(): BadgePosition = when (this) {
+    BadgePosition.TOP_START -> BadgePosition.TOP_END
+    BadgePosition.TOP_END -> BadgePosition.TOP_START
+    BadgePosition.BOTTOM_START -> BadgePosition.BOTTOM_END
+    BadgePosition.BOTTOM_END -> BadgePosition.BOTTOM_START
 }

@@ -56,7 +56,7 @@ fun AnimeDetailScreen(
     sourceMatcher: SourceMatcher,
     extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
     onBack: () -> Unit,
-    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit = { _, _, _ -> },
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit = { _, _, _, _ -> },
 ) {
     val context = LocalContext.current
 

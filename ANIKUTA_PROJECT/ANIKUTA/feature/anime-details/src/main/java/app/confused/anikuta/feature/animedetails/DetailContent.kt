@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.confused.anikuta.core.anilist.model.AniListAnime
 import app.confused.anikuta.core.anilist.model.coverColorHex
+import app.confused.anikuta.core.anilist.model.coverUrl
 import app.confused.anikuta.core.anilist.model.displayTitle
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -58,7 +59,7 @@ fun DetailContent(
     onToggleSave: () -> Unit,
     onLongPressSave: () -> Unit,
     onBack: () -> Unit,
-    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
+    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
     onRefresh: () -> Unit,
@@ -111,6 +112,15 @@ fun DetailContent(
 
             // ── Episodes ──
             item {
+                // Construct the WatchEpisodeContext (anime title + cover + metadata
+                // map) so the watch page can render rich episode rows + theme itself.
+                // Per user: "the meta data of the episode which the user wants to play
+                // does not get shared to the watch page."
+                val watchCtx = WatchEpisodeContext(
+                    animeTitle = anime.displayTitle,
+                    coverUrl = anime.coverUrl,
+                    episodeMetadata = episodeMetadata,
+                )
                 EpisodesSection(
                     episodeState = episodeState,
                     currentMatch = currentMatch,
@@ -124,7 +134,9 @@ fun DetailContent(
                     hasSearched = hasSearched,
                     availableSources = availableSources,
                     initialSearchQuery = anime.displayTitle,
-                    onOpenEpisode = onOpenEpisode,
+                    onOpenEpisode = { episode, source, episodes ->
+                        onOpenEpisode(episode, source, episodes, watchCtx)
+                    },
                     onToggleWatched = onToggleWatched,
                     onSwitchSource = onSwitchSource,
                     onManualSearch = onManualSearch,

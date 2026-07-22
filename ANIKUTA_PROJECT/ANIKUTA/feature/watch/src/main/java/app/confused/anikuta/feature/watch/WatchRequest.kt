@@ -31,6 +31,7 @@ data class WatchRequest(
     val videoAudio: String,
     val videoQuality: Int,
     val episodeList: List<SEpisode>,
+    val episodeMetadata: Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata> = emptyMap(),
     val subtitleTracks: List<SubtitleTrack> = emptyList(),
     val audioTracks: List<SubtitleTrack> = emptyList(),
     val resolvedServers: List<ResolverServer> = emptyList(),

@@ -11,10 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.List
@@ -220,6 +223,55 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sortTab(
     sortAscending: Boolean,
     onSortChange: (LibrarySortType, Boolean) -> Unit,
 ) {
+    // ── Direction (at the TOP per user request) ──
+    item { OptionLabel("Direction") }
+    item {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(
+                "Ascending" to true to Icons.Filled.ArrowUpward,
+                "Descending" to false to Icons.Filled.ArrowDownward,
+            ).forEach { (label, asc, icon) ->
+                val isSelected = sortAscending == asc
+                Surface(
+                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f).clickable { onSortChange(sortType, asc) },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = label,
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Sort by (below direction) ──
+    item { Spacer(Modifier.height(20.dp)) }
     item { OptionLabel("Sort by") }
     LibrarySortType.entries.forEach { type ->
         item {
@@ -230,37 +282,6 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sortTab(
             )
         }
         item { Spacer(Modifier.height(6.dp)) }
-    }
-    item {
-        Spacer(Modifier.height(8.dp))
-        OptionLabel("Direction")
-    }
-    item {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf("Ascending" to true, "Descending" to false).forEach { (label, asc) ->
-                val isSelected = sortAscending == asc
-                Surface(
-                    color = if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f).clickable { onSortChange(sortType, asc) },
-                ) {
-                    Text(
-                        text = label,
-                        fontFamily = RobotoFamily,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 10.dp),
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -335,7 +356,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
     // ── Columns (grid modes only) ──
     if (displayMode != LibraryDisplayMode.LIST) {
         item {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             OptionLabel("Columns per row")
         }
         item {
@@ -349,7 +370,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
 
     // ── Title lines ──
     item {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         OptionLabel("Title lines")
     }
     item {
@@ -361,8 +382,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
     }
 
     // ── Episode badge ──
+    // Per user: "the off button should be on the very left side and when it is
+    // selected they should be in a red-colored theme instead of green. On the
+    // very right side it should show the total and in the middle it should
+    // show the released ones."
     item {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         OptionLabel("Episode Badge")
     }
     item {
@@ -370,10 +395,20 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf("Released" to EpisodeBadgeMode.RELEASED, "Total" to EpisodeBadgeMode.TOTAL, "Off" to EpisodeBadgeMode.OFF).forEach { (label, mode) ->
+            // New order: Off (left, red) → Released (middle, green) → Total (right, green)
+            listOf("Off" to EpisodeBadgeMode.OFF, "Released" to EpisodeBadgeMode.RELEASED, "Total" to EpisodeBadgeMode.TOTAL).forEach { (label, mode) ->
                 val isSelected = episodeBadgeMode == mode
+                // Off uses red (error) theme when selected; Released + Total use green (primary).
+                val selectedBg = when (mode) {
+                    EpisodeBadgeMode.OFF -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.primary
+                }
+                val selectedFg = when (mode) {
+                    EpisodeBadgeMode.OFF -> MaterialTheme.colorScheme.onError
+                    else -> MaterialTheme.colorScheme.onPrimary
+                }
                 Surface(
-                    color = if (isSelected) MaterialTheme.colorScheme.primary
+                    color = if (isSelected) selectedBg
                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f).clickable { onEpisodeBadgeModeChange(mode) },
@@ -383,7 +418,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
                         fontFamily = RobotoFamily,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                        color = if (isSelected) selectedFg
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(vertical = 8.dp),
@@ -410,7 +445,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
 
     // ── Score badge ──
     item {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         OptionLabel("Score Badge")
     }
     item {
@@ -424,7 +459,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
     // ── Score badge position (compact grid = top only) ──
     if (showScoreBadge) {
         item {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             OptionLabel("Score Badge Position")
         }
         item {
@@ -438,7 +473,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.displayBadgesTab(
 
     // ── Toggles ──
     item {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         OptionLabel("Toggles")
     }
     item {
