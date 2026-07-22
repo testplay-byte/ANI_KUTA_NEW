@@ -1,5 +1,6 @@
 package app.confused.anikuta.core.episodemetadata.di
 
+import app.confused.anikuta.core.episodemetadata.EpisodeMetadataPreferences
 import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository
 import app.confused.anikuta.core.episodemetadata.source.EpisodeMetadataSourceRegistry
 import app.confused.anikuta.core.episodemetadata.source.anikage.AnikageCcSource
