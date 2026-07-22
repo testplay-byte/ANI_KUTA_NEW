@@ -4,13 +4,64 @@
 **Agent:** ANIKUTA Search Page Implementation Agent
 **Branch:** `feature/search-page`
 **PR:** https://github.com/testplay-byte/ANI_KUTA_NEW/pull/1 (DRAFT — do not merge)
-**Final commit:** `bde381a` — CI ✅ PASSED (run #105), APK artifact uploaded
-**APK:** `anikuta-debug-arm64-v8a` (~41 MB) —
-  https://github.com/testplay-byte/ANI_KUTA_NEW/actions/runs/29880718459
+**Latest commit:** `ad37410` — CI ✅ PASSED (run #115), APK artifact uploaded
+**APK:** `anikuta-debug-arm64-v8a` (~39 MB) —
+  https://github.com/testplay-byte/ANI_KUTA_NEW/actions/runs/29886635919
+
+## Round 1 UX improvements (commit `ad37410`, after owner test feedback)
+
+The owner tested the initial build + provided detailed feedback. 20 fixes
+across 9 groups were implemented in one coherent round:
+
+1. **Spacing** — reduced the vertical gap between the quick row (filters/sort)
+   and the content below (topbar trailing spacer 4dp→2dp; content top padding
+   tightened).
+2. **Recent searches** — (a) collapse state now persists across screen changes
+   + app restart via a new `SearchUiPreferences` store; (b) AniList and
+   Extension now have SEPARATE recents lists (per-source `RecentSearchesStore`);
+   (c) Extension mode now shows its own recents (was AniList-only).
+3. **Filter sheet** — (a) filters are now BUFFERED (pending vs applied) — the
+   sheet edits a pending copy; only "Apply filters" syncs + re-fetches (fixes
+   "processing results before I clicked apply"); (b) Flat view content panel
+   uses `animateContentSize()` — no sudden height jumps when switching tabs;
+   (c) all AniList filter options present (genres/year/season/format/status/
+   score/sort).
+4. **Pagination** — AniList results now paginate on scroll-near-bottom
+   (`currentPage++`, append); a "Loading more…" footer shows while fetching;
+   `canLoadMore` stops when a page returns < 30 results.
+5. **Sort dropdown** — redesigned: rounded surface, RobotoFamily, primary-
+   colored active row + check icon.
+6. **Score badge** — redesigned: dark translucent pill + lime star + white
+   score (better contrast on any cover).
+7. **Extension results UI** — (a) row titles now single-line; (b) removed the
+   extension name from below extension cards (rows + search grid); (c) removed
+   the "count · extensionName" from the Popular/Latest section header.
+8. **Source toggle + picker** — (a) toggle widened 180dp→200dp + tighter
+   padding (fixes "Extensi..." truncation); (b) new `ExtensionSourcePickerSheet`
+   — a styled bottom sheet (dragHandle=null) with primaryContainer highlight +
+   check on the selected source (replaces the ugly DropdownMenu).
+9. **Linking flow UX** — (a) "Linked to AniList" toast only on FRESH links, not
+   cache hits (`wasCached` flag); (b) linking sheet delayed 400ms — fast
+   resolves skip the sheet entirely (no split-second flash); (c) "No matches on
+   AniList" message now centered vertically in the sheet body.
+10. **Preferred source for episodes** — `ExtensionLinkStore` gained a reverse
+    lookup (`getPreferredSourceForAnilist`); `AnimeDetailViewModel` now prefers
+    the source the user came from (via the link store) when no explicit source-
+    switcher preference exists — fixes "it sometimes picks a completely
+    different extension" for episode loading.
+
+New files: `SearchUiPreferences.kt`, `ExtensionSourcePickerSheet.kt`.
+Modified: `RecentSearchesStore.kt` (per-source), `SearchViewModel.kt` (pending
+filters + pagination + per-source recents), `SearchScreen.kt`, `FilterSheet.kt`,
+`ResultsCard.kt`, `ResultAnimeCard.kt`, `ExtensionResultsView.kt`,
+`RecentSearchesCard.kt`, `SearchTopBar.kt`, `SourceToggle.kt`,
+`ExtensionLinkingSheet.kt`, `ExtensionLinkingViewModel.kt`,
+`ExtensionLinkStore.kt`, `AnimeDetailViewModel.kt`, `AnimeDetailScreen.kt`,
+`MainActivity.kt`, `SearchModule.kt`.
 
 ---
 
-## What was built
+## What was built (initial — commit bde381a)
 
 A new `:feature:search` module implementing the dual-source Search page
 (AniList + Extension), ported from the prototype at
