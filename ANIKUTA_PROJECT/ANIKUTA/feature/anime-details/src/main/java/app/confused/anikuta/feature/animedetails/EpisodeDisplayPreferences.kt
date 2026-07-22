@@ -72,9 +72,9 @@ class EpisodeDisplayPreferences(
     fun titleMaxLines(): Preference<Int> =
         store.getInt("pref_ep_title_lines", 1)
 
-    /** Max lines for episode synopsis: 1, 2, 3, or 0 (expandable). */
+    /** Max lines for episode synopsis: default 2 (per user request). */
     fun synopsisMaxLines(): Preference<Int> =
-        store.getInt("pref_ep_synopsis_lines", 3)
+        store.getInt("pref_ep_synopsis_lines", 2)
 
     // ── Background toggles ──
     // Per user request: "give the user the option to show or hide these fun options,
@@ -85,9 +85,13 @@ class EpisodeDisplayPreferences(
     fun showTitleBackground(): Preference<Boolean> =
         store.getBoolean("pref_ep_show_title_bg", true)
 
-    /** Whether the date + audio row gets a dedicated background container. */
-    fun showMetaBackground(): Preference<Boolean> =
-        store.getBoolean("pref_ep_show_meta_bg", true)
+    /** Whether the date pill gets a dedicated background. */
+    fun showDateBackground(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_date_bg", true)
+
+    /** Whether the audio pills get a dedicated background. */
+    fun showAudioBackground(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_audio_bg", true)
 
     /** Whether the synopsis gets a dedicated background container. */
     fun showSynopsisBackground(): Preference<Boolean> =

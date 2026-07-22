@@ -1,6 +1,7 @@
 package app.confused.anikuta.feature.library
 
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.Category
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
@@ -52,18 +53,21 @@ data class LibraryState(
     val columns: Int = 3,           // 0 = auto (adaptive)
     val sort: LibrarySort = LibrarySort.DEFAULT,
     val searchQuery: String = "",
+    val searchMode: Boolean = false,
     val selectionMode: Boolean = false,
     val selectedIds: Set<Long> = emptySet(),     // animes._id
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
     val showContinueWatching: Boolean = true,
     val episodeBadgeMode: EpisodeBadgeMode = EpisodeBadgeMode.RELEASED,
+    val episodeBadgePosition: BadgePosition = BadgePosition.TOP_END,
     val showScoreBadge: Boolean = false,
+    val scoreBadgePosition: BadgePosition = BadgePosition.BOTTOM_END,
     val showTotalEntries: Boolean = false,
     val titleLines: Int = 2,  // 1, 2, or 3 max lines for anime titles
     val dialog: LibraryDialog? = null,
 ) {
     val isLibraryEmpty: Boolean get() = libraryAnime.isEmpty()
-    val hasActiveSearch: Boolean get() = searchQuery.isNotBlank()
+    val hasActiveSearch: Boolean get() = searchMode
     val totalEntryCount: Int get() = libraryAnime.size
 }
 

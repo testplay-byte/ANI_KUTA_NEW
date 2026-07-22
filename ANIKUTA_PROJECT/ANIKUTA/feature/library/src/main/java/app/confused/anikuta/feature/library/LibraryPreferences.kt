@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.library
 
+import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySortType
@@ -52,4 +53,12 @@ class LibraryPreferences(
     /** Number of lines for anime titles in grid/list (1, 2, or 3). */
     fun titleLines(): Preference<Int> =
         store.getInt("pref_library_title_lines", 2)
+
+    /** Where the episode badge sits on the card. */
+    fun episodeBadgePosition(): Preference<BadgePosition> =
+        store.getEnum("pref_library_episode_badge_pos", BadgePosition.TOP_END)
+
+    /** Where the score badge sits on the card. */
+    fun scoreBadgePosition(): Preference<BadgePosition> =
+        store.getEnum("pref_library_score_badge_pos", BadgePosition.BOTTOM_END)
 }

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -52,7 +51,8 @@ fun EpisodeDisplaySettingsScreen(onBack: () -> Unit) {
     val showAudioPills by prefs.showAudioPills().changes().collectAsState(initial = prefs.showAudioPills().get())
     val titleLines by prefs.titleMaxLines().changes().collectAsState(initial = prefs.titleMaxLines().get())
     val showTitleBg by prefs.showTitleBackground().changes().collectAsState(initial = prefs.showTitleBackground().get())
-    val showMetaBg by prefs.showMetaBackground().changes().collectAsState(initial = prefs.showMetaBackground().get())
+    val showDateBg by prefs.showDateBackground().changes().collectAsState(initial = prefs.showDateBackground().get())
+    val showAudioBg by prefs.showAudioBackground().changes().collectAsState(initial = prefs.showAudioBackground().get())
     val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
 
     SettingsSubpageScaffold(title = "Episode display", onBack = onBack) {
@@ -129,11 +129,19 @@ fun EpisodeDisplaySettingsScreen(onBack: () -> Unit) {
                         )
                         InGroupDivider()
                         SwitchSettingsRow(
-                            icon = Icons.Filled.FormatPaint,
-                            title = "Date & audio background",
-                            subtitle = "Give the date and audio pills a shared background container",
-                            checked = showMetaBg,
-                            onCheckedChange = { prefs.showMetaBackground().set(it) },
+                            icon = Icons.Filled.CalendarMonth,
+                            title = "Date background",
+                            subtitle = "Give the release date pill its own background",
+                            checked = showDateBg,
+                            onCheckedChange = { prefs.showDateBackground().set(it) },
+                        )
+                        InGroupDivider()
+                        SwitchSettingsRow(
+                            icon = Icons.Filled.RecordVoiceOver,
+                            title = "Audio background",
+                            subtitle = "Give the SUB / DUB / HSUB pills their own background",
+                            checked = showAudioBg,
+                            onCheckedChange = { prefs.showAudioBackground().set(it) },
                         )
                         InGroupDivider()
                         SwitchSettingsRow(

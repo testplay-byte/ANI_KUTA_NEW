@@ -38,20 +38,10 @@ private const val DEMO_EP_NUM = 5f
 /**
  * The live preview shown at the top of every episode-settings screen.
  *
- * Renders a representative episode row with dummy data, parameterized by the
- * current [prefs] snapshot. The preview is **sticky** (non-scrolling) — placed
- * above the scrollable options list — so the user sees the effect of every
- * toggle immediately.
- *
  * Mirrors the real `EpisodeRow` in `feature:anime-details` — the SAME two-section
- * layout (top: thumbnail + title + meta; bottom: synopsis), the SAME background
- * containers, the SAME pill design. If the real row changes, update this preview
- * to match.
- *
- * @param prefs The current display-prefs snapshot.
- * @param hasSub Whether the demo row should show a SUB pill (default true).
- * @param hasDub Whether the demo row should show a DUB pill (default true).
- * @param hasHsub Whether the demo row should show a HSUB pill (default false).
+ * layout, the SAME separate date/audio pills, the SAME themed green EP badge,
+ * the SAME pill heights, the SAME tight synopsis line spacing. If the real row
+ * changes, update this preview to match.
  */
 @Composable
 fun EpisodeRowPreview(
@@ -61,7 +51,6 @@ fun EpisodeRowPreview(
     hasHsub: Boolean = false,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        // "LIVE PREVIEW" label
         Text(
             text = "LIVE PREVIEW",
             fontFamily = RobotoFamily,
@@ -99,9 +88,9 @@ private fun PreviewEpisodeRow(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
-            // ══ TOP SECTION: thumbnail (left) + title/meta (right, 2 sub-sections) ══
+            // ══ TOP SECTION ══
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                // Thumbnail (left) — gradient box as dummy thumbnail + overlay badge
+                // Thumbnail (left) with themed green EP overlay
                 if (prefs.showThumbnails) {
                     Box {
                         Box(
@@ -117,17 +106,17 @@ private fun PreviewEpisodeRow(
                         if (prefs.showEpisodeNumber) {
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = Color.Black.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
                             ) {
                                 Text(
                                     text = epNumText,
                                     fontFamily = RobotoFamily,
                                     fontSize = 11.sp,
-                                    lineHeight = 13.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     maxLines = 1,
                                     softWrap = false,
                                 )
@@ -136,7 +125,6 @@ private fun PreviewEpisodeRow(
                     }
                     Spacer(modifier = Modifier.size(10.dp))
                 } else if (prefs.showEpisodeNumber) {
-                    // Circle fallback (no thumbnail)
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -155,7 +143,7 @@ private fun PreviewEpisodeRow(
                     Spacer(modifier = Modifier.size(10.dp))
                 }
 
-                // Right column: title (top) + meta (bottom)
+                // Right column: title (top) + meta (bottom, SEPARATE pills)
                 if (prefs.showTitles || hasMetaRow) {
                     Column(
                         modifier = Modifier
@@ -196,30 +184,25 @@ private fun PreviewEpisodeRow(
                             }
                         }
 
-                        // Date + Audio (with optional shared background)
+                        // Date + Audio as SEPARATE pills with a spacer above
                         if (hasMetaRow) {
-                            if (prefs.showMetaBackground) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surfaceContainer,
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    PreviewDateAndAudioRow(
-                                        prefs = prefs,
+                            Spacer(Modifier.size(6.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                if (prefs.showDates) {
+                                    PreviewDatePill(showBackground = prefs.showDateBackground)
+                                }
+                                if (hasAudio) {
+                                    PreviewAudioPills(
                                         hasSub = hasSub,
                                         hasDub = hasDub,
                                         hasHsub = hasHsub,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        showBackground = prefs.showAudioBackground,
                                     )
                                 }
-                            } else {
-                                PreviewDateAndAudioRow(
-                                    prefs = prefs,
-                                    hasSub = hasSub,
-                                    hasDub = hasDub,
-                                    hasHsub = hasHsub,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
                             }
                         }
                     }
@@ -228,7 +211,7 @@ private fun PreviewEpisodeRow(
                 }
             }
 
-            // ══ BOTTOM SECTION: Synopsis (with optional background) ══
+            // ══ BOTTOM SECTION: Synopsis ══
             if (prefs.showSummaries) {
                 Spacer(Modifier.size(8.dp))
                 if (prefs.showSynopsisBackground) {
@@ -241,6 +224,7 @@ private fun PreviewEpisodeRow(
                             text = DEMO_SYNOPSIS,
                             fontFamily = RobotoFamily,
                             fontSize = 12.sp,
+                            lineHeight = 15.sp,
                             fontWeight = FontWeight.Normal,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = prefs.synopsisMaxLines,
@@ -253,6 +237,7 @@ private fun PreviewEpisodeRow(
                         text = DEMO_SYNOPSIS,
                         fontFamily = RobotoFamily,
                         fontSize = 12.sp,
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = prefs.synopsisMaxLines,
@@ -265,67 +250,88 @@ private fun PreviewEpisodeRow(
     }
 }
 
-/**
- * The date pill + audio pills row for the preview. Mirrors the real
- * `DateAndAudioRow` — minimal pill height, full audio names "SUB•DUB".
- */
 @Composable
-private fun PreviewDateAndAudioRow(
-    prefs: EpisodeDisplayPrefs,
-    hasSub: Boolean,
-    hasDub: Boolean,
-    hasHsub: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val hasAudio = prefs.showAudioPills && (hasSub || hasDub || hasHsub)
-    if (!prefs.showDates && !hasAudio) return
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (prefs.showDates) {
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            ) {
-                Text(
-                    text = DEMO_DATE,
-                    fontFamily = RobotoFamily,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+private fun PreviewDatePill(showBackground: Boolean) {
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ) {
+            Text(
+                text = DEMO_DATE,
+                fontFamily = RobotoFamily,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                maxLines = 1,
+                softWrap = false,
+            )
         }
-        if (hasAudio) {
-            PreviewAudioPills(hasSub = hasSub, hasDub = hasDub, hasHsub = hasHsub)
-        }
+    } else {
+        Text(
+            text = DEMO_DATE,
+            fontFamily = RobotoFamily,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
-/**
- * The audio-pills composable for the preview. ALWAYS uses full names
- * ("SUB", "DUB", "HSUB") separated by 3dp dots → "SUB•DUB".
- */
 @Composable
-private fun PreviewAudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
+private fun PreviewAudioPills(
+    hasSub: Boolean,
+    hasDub: Boolean,
+    hasHsub: Boolean,
+    showBackground: Boolean,
+) {
     val parts = buildList {
         if (hasSub) add("SUB")
         if (hasDub) add("DUB")
         if (hasHsub) add("HSUB")
     }
     if (parts.isEmpty()) return
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    ) {
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                parts.forEachIndexed { idx, label ->
+                    if (idx > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                        )
+                    }
+                    Text(
+                        text = label,
+                        fontFamily = RobotoFamily,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+        }
+    } else {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
@@ -342,7 +348,7 @@ private fun PreviewAudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean
                     text = label,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
-                    lineHeight = 12.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

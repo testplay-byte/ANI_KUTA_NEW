@@ -3,6 +3,7 @@ package app.confused.anikuta.feature.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySort
@@ -77,7 +78,9 @@ class LibraryViewModel(
                         sort = LibrarySort(prefs.sortType, prefs.sortAscending),
                         showContinueWatching = prefs.showContinueWatching,
                         episodeBadgeMode = prefs.episodeBadgeMode,
+                        episodeBadgePosition = prefs.episodeBadgePosition,
                         showScoreBadge = prefs.showScoreBadge,
+                        scoreBadgePosition = prefs.scoreBadgePosition,
                         showTotalEntries = prefs.showTotalEntries,
                         titleLines = prefs.titleLines,
                     ) }
@@ -98,7 +101,9 @@ class LibraryViewModel(
         val sortAscending: Boolean,
         val showContinueWatching: Boolean,
         val episodeBadgeMode: EpisodeBadgeMode,
+        val episodeBadgePosition: BadgePosition,
         val showScoreBadge: Boolean,
+        val scoreBadgePosition: BadgePosition,
         val showTotalEntries: Boolean,
         val titleLines: Int,
     )
@@ -128,21 +133,30 @@ class LibraryViewModel(
             preferences.sortType().changes(),
             preferences.sortAscending().changes(),
         ) { mode, columns, sortType, sortAsc ->
-            PrefSnapshot(mode, columns, sortType, sortAsc, true, EpisodeBadgeMode.RELEASED, false, false, 2)
+            PrefSnapshot(mode, columns, sortType, sortAsc, true, EpisodeBadgeMode.RELEASED, BadgePosition.TOP_END, false, BadgePosition.BOTTOM_END, false, 2)
         }
         val badges = combine(
             preferences.showContinueWatching().changes(),
             preferences.episodeBadgeMode().changes(),
+            preferences.episodeBadgePosition().changes(),
             preferences.showScoreBadge().changes(),
-            preferences.showTotalEntries().changes(),
-        ) { cw, epMode, score, total ->
-            Quad(cw, epMode, score, total)
+        ) { cw, epMode, epPos, score ->
+            Quad(cw, epMode, epPos, score)
         }
-        return combine(displaySort, badges, preferences.titleLines().changes()) { snap, (cw, epMode, score, total), titleLines ->
+        val badges2 = combine(
+            preferences.showTotalEntries().changes(),
+            preferences.titleLines().changes(),
+            preferences.scoreBadgePosition().changes(),
+        ) { total, titleLines, scorePos ->
+            Triple(total, titleLines, scorePos)
+        }
+        return combine(displaySort, badges, badges2) { snap, (cw, epMode, epPos, score), (total, titleLines, scorePos) ->
             snap.copy(
                 showContinueWatching = cw,
                 episodeBadgeMode = epMode,
+                episodeBadgePosition = epPos,
                 showScoreBadge = score,
+                scoreBadgePosition = scorePos,
                 showTotalEntries = total,
                 titleLines = titleLines,
             )
@@ -225,8 +239,16 @@ class LibraryViewModel(
         preferences.episodeBadgeMode().set(mode)
     }
 
+    fun setEpisodeBadgePosition(pos: BadgePosition) {
+        preferences.episodeBadgePosition().set(pos)
+    }
+
     fun setShowScoreBadge(enabled: Boolean) {
         preferences.showScoreBadge().set(enabled)
+    }
+
+    fun setScoreBadgePosition(pos: BadgePosition) {
+        preferences.scoreBadgePosition().set(pos)
     }
 
     fun setShowContinueWatching(enabled: Boolean) {
@@ -254,6 +276,17 @@ class LibraryViewModel(
 
     fun setSearchQuery(query: String) {
         _state.update { it.copy(searchQuery = query) }
+    }
+
+    /** Activates search mode (shows the search bar + focuses the text field). */
+    fun toggleSearch() {
+        _state.update {
+            if (it.searchMode) {
+                it.copy(searchMode = false, searchQuery = "")
+            } else {
+                it.copy(searchMode = true)
+            }
+        }
     }
 
     fun toggleSelection(animeId: Long) {

@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -353,9 +352,10 @@ private fun EpisodeRow(
     val showAudioPills = displayPrefs?.showAudioPills ?: true
     val thumbSize = displayPrefs?.thumbnailSize ?: "medium"
     val titleMaxLines = displayPrefs?.titleMaxLines ?: 1
-    val synopsisMaxLines = displayPrefs?.synopsisMaxLines ?: 3
+    val synopsisMaxLines = displayPrefs?.synopsisMaxLines ?: 2
     val showTitleBg = displayPrefs?.showTitleBackground ?: true
-    val showMetaBg = displayPrefs?.showMetaBackground ?: true
+    val showDateBg = displayPrefs?.showDateBackground ?: true
+    val showAudioBg = displayPrefs?.showAudioBackground ?: true
     val showSynopsisBg = displayPrefs?.showSynopsisBackground ?: true
 
     // Use metadata title if available, otherwise parse the extension title
@@ -476,34 +476,36 @@ private fun EpisodeRow(
                         }
                     }
 
-                    // Bottom sub-section: Date + Audio (with optional shared background)
+                    // Bottom sub-section: Date + Audio as SEPARATE pills (each with its own
+                    // optional background). Per user: "they don't need to actually get a
+                    // separate dedicated background for both of them together. They already
+                    // have a slight subtle background to themselves."
+                    // A spacer sits between the title and this row so they don't touch.
+                    // Per user: "There should be some spacing between them."
                     if (hasMetaRow) {
-                        if (showMetaBg) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                DateAndAudioRow(
-                                    dateText = dateText,
-                                    showDate = showDate,
+                        Spacer(Modifier.size(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            // Date pill (with optional individual background)
+                            if (showDate && dateText != null) {
+                                DatePill(
+                                    text = dateText,
+                                    showBackground = showDateBg,
+                                    modifier = Modifier,
+                                )
+                            }
+                            // Audio pills (with optional individual background)
+                            if (showAudioPills && (hasSub || hasDub || hasHsub)) {
+                                AudioPills(
                                     hasSub = hasSub,
                                     hasDub = hasDub,
                                     hasHsub = hasHsub,
-                                    showAudioPills = showAudioPills,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    showBackground = showAudioBg,
                                 )
                             }
-                        } else {
-                            DateAndAudioRow(
-                                dateText = dateText,
-                                showDate = showDate,
-                                hasSub = hasSub,
-                                hasDub = hasDub,
-                                hasHsub = hasHsub,
-                                showAudioPills = showAudioPills,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
                         }
                     }
                 }
@@ -526,6 +528,10 @@ private fun EpisodeRow(
                         text = description,
                         fontFamily = RobotoFamily,
                         fontSize = 12.sp,
+                        // Per user: "reduce line spacing by quite a lot so that there is
+                        // only about 3-4dp of spacing between each individual line."
+                        // lineHeight 15.sp with 12.sp font ≈ 3dp extra line gap.
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = synopsisMaxLines,
@@ -538,6 +544,7 @@ private fun EpisodeRow(
                     text = description,
                     fontFamily = RobotoFamily,
                     fontSize = 12.sp,
+                    lineHeight = 15.sp,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = synopsisMaxLines,
@@ -552,8 +559,11 @@ private fun EpisodeRow(
 /**
  * The episode thumbnail with the overlay episode-number badge.
  *
- * The overlay badge: semi-transparent BLACK pill (70% alpha) at the top-left
- * corner. 6dp corners, `labelSmall` Bold White text, tight 6dp/1dp padding.
+ * The overlay badge: themed primary green (per user: "you could go with the
+ * themed colored background like how you were going previously so it would
+ * be okay, like the green theme colored"). 6dp corners, Bold White text,
+ * slightly taller padding (6dp/2dp) per user: "increase the background height
+ * of the episode count by a little bit but not that much."
  */
 @Composable
 private fun EpisodeThumbnail(
@@ -576,7 +586,8 @@ private fun EpisodeThumbnail(
         if (showNumber) {
             Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = Color.Black.copy(alpha = 0.7f),
+                // Themed primary green per user request.
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(4.dp),
@@ -585,10 +596,10 @@ private fun EpisodeThumbnail(
                     text = epNumText,
                     fontFamily = RobotoFamily,
                     fontSize = 11.sp,
-                    lineHeight = 13.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     maxLines = 1,
                     softWrap = false,
                 )
@@ -618,74 +629,108 @@ private fun CircleEpisodeNumber(bareEpNum: String) {
 }
 
 /**
- * The date pill + audio pills row.
- *
- * Per user request: pills have MINIMAL height. Uses `labelSmall`-equivalent
- * sizing with tight 6dp/1dp padding (was 8dp/3dp — too tall per user feedback).
- *
- * Audio pills ALWAYS show full names: "SUB", "DUB", "HSUB" with dot separators
- * → "SUB•DUB" (per user: "make sure that it shows the full name, like SUB•DUB").
+ * The date pill. Per user: "increase their height by a little bit so that it
+ * looks good" — padding 6dp/2dp + lineHeight 14.sp (was 6dp/1dp + 12.sp which
+ * was too short). When [showBackground] is true, gets a subtle `outlineVariant`
+ * surface; when false, renders as plain text.
  */
 @Composable
-private fun DateAndAudioRow(
-    dateText: String?,
-    showDate: Boolean,
-    hasSub: Boolean,
-    hasDub: Boolean,
-    hasHsub: Boolean,
-    showAudioPills: Boolean,
+private fun DatePill(
+    text: String,
+    showBackground: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val hasAudio = showAudioPills && (hasSub || hasDub || hasHsub)
-    if (!showDate && !hasAudio) return
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showDate && dateText != null) {
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            ) {
-                Text(
-                    text = dateText,
-                    fontFamily = RobotoFamily,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+            modifier = modifier,
+        ) {
+            Text(
+                text = text,
+                fontFamily = RobotoFamily,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                maxLines = 1,
+                softWrap = false,
+            )
         }
-        if (hasAudio) {
-            AudioPills(hasSub = hasSub, hasDub = hasDub, hasHsub = hasHsub)
-        }
+    } else {
+        Text(
+            text = text,
+            fontFamily = RobotoFamily,
+            fontSize = 10.sp,
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
 /**
- * The audio-pills composable — one `outlineVariant` surface holding all detected
- * audio versions. ALWAYS uses full names ("SUB", "DUB", "HSUB") separated by
- * 3dp dots → "SUB•DUB" (per user request — not short letters).
+ * The audio-pills composable — one surface holding all detected versions.
+ * ALWAYS uses full names ("SUB", "DUB", "HSUB") separated by 3dp dots →
+ * "SUB•DUB" (per user request).
+ * Per user: "increase their height by a little bit" — padding 6dp/2dp +
+ * lineHeight 14.sp.
+ * When [showBackground] is true, gets a subtle `outlineVariant` surface;
+ * when false, renders as plain text with dot separators.
  */
 @Composable
-private fun AudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
+private fun AudioPills(
+    hasSub: Boolean,
+    hasDub: Boolean,
+    hasHsub: Boolean,
+    showBackground: Boolean,
+) {
     val parts = buildList {
         if (hasSub) add("SUB")
         if (hasDub) add("DUB")
         if (hasHsub) add("HSUB")
     }
     if (parts.isEmpty()) return
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.outlineVariant,
-    ) {
+    if (showBackground) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                parts.forEachIndexed { idx, label ->
+                    if (idx > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(3.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                        )
+                    }
+                    Text(
+                        text = label,
+                        fontFamily = RobotoFamily,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+        }
+    } else {
+        // No background — plain text with dot separators
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
@@ -702,7 +747,7 @@ private fun AudioPills(hasSub: Boolean, hasDub: Boolean, hasHsub: Boolean) {
                     text = label,
                     fontFamily = RobotoFamily,
                     fontSize = 10.sp,
-                    lineHeight = 12.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -758,13 +803,14 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
     val titleLines by prefs.titleMaxLines().changes().collectAsState(initial = prefs.titleMaxLines().get())
     val synopsisLines by prefs.synopsisMaxLines().changes().collectAsState(initial = prefs.synopsisMaxLines().get())
     val showTitleBg by prefs.showTitleBackground().changes().collectAsState(initial = prefs.showTitleBackground().get())
-    val showMetaBg by prefs.showMetaBackground().changes().collectAsState(initial = prefs.showMetaBackground().get())
+    val showDateBg by prefs.showDateBackground().changes().collectAsState(initial = prefs.showDateBackground().get())
+    val showAudioBg by prefs.showAudioBackground().changes().collectAsState(initial = prefs.showAudioBackground().get())
     val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
 
     return remember(
         showNumber, showTitles, showSummaries, showThumbnails, showDates, showAudioPills,
         thumbPos, titlePos, synopsisPos, datePos, epNumPos, thumbSize, titleLines, synopsisLines,
-        showTitleBg, showMetaBg, showSynopsisBg,
+        showTitleBg, showDateBg, showAudioBg, showSynopsisBg,
     ) {
         EpisodeDisplayPrefs(
             showThumbnails = showThumbnails,
@@ -782,7 +828,8 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
             titleMaxLines = titleLines,
             synopsisMaxLines = synopsisLines,
             showTitleBackground = showTitleBg,
-            showMetaBackground = showMetaBg,
+            showDateBackground = showDateBg,
+            showAudioBackground = showAudioBg,
             showSynopsisBackground = showSynopsisBg,
         )
     }
@@ -813,10 +860,11 @@ data class EpisodeDisplayPrefs(
     val episodeNumberPosition: String = "overlay",
     val thumbnailSize: String = "medium",
     val titleMaxLines: Int = 1,
-    val synopsisMaxLines: Int = 3,
+    val synopsisMaxLines: Int = 2,
     // ── Background toggles (per user request: show/hide element backgrounds) ──
     val showTitleBackground: Boolean = true,
-    val showMetaBackground: Boolean = true,
+    val showDateBackground: Boolean = true,
+    val showAudioBackground: Boolean = true,
     val showSynopsisBackground: Boolean = true,
 )
 

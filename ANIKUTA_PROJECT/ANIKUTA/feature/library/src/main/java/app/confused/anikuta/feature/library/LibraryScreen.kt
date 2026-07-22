@@ -113,31 +113,25 @@ fun LibraryScreen(
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Pinned header ──
-            // Search button + settings button are BOTH in the header actions,
-            // on the same row. Search is on the LEFT of settings.
+            // Search + settings buttons are in a SHARED container (a pill-shaped
+            // surface) so they look joined together. Per user: "align the search
+            // button with the settings button together so that both of those are
+            // inside our dedicated background, like a container."
+            // The header is pinned (never scrolls with content).
             CollapsingHeader(
                 title = headerTitle,
                 collapsed = collapsed,
                 actions = {
                     if (!state.selectionMode) {
-                        // Search button (LEFT of settings)
-                        HeaderActionButton(
-                            icon = Icons.Filled.Search,
-                            contentDescription = "Search library",
-                            onClick = { viewModel.setSearchQuery(" ") }, // activate search mode
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        // Settings button (FAR RIGHT)
-                        HeaderActionButton(
-                            icon = Icons.Filled.Tune,
-                            contentDescription = "Library settings",
-                            onClick = { viewModel.showCustomizeSheet() },
+                        HeaderActionGroup(
+                            onSearch = { viewModel.toggleSearch() },
+                            onSettings = { viewModel.showCustomizeSheet() },
                         )
                     }
                 },
             )
 
-            // ── Search bar (appears when search is activated) ──
+            // ── Search bar (appears when search mode is active) ──
             if (!state.selectionMode && state.hasActiveSearch) {
                 Row(
                     modifier = Modifier
@@ -146,7 +140,7 @@ fun LibraryScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SearchField(
-                        query = state.searchQuery.trim(),
+                        query = state.searchQuery,
                         onQueryChange = { viewModel.setSearchQuery(it) },
                         placeholder = "Search library",
                         modifier = Modifier.weight(1f),
@@ -155,7 +149,7 @@ fun LibraryScreen(
                     HeaderActionButton(
                         icon = Icons.Filled.Close,
                         contentDescription = "Close search",
-                        onClick = { viewModel.setSearchQuery("") },
+                        onClick = { viewModel.toggleSearch() },
                     )
                 }
             }
@@ -262,7 +256,9 @@ fun LibraryScreen(
                 displayMode = state.displayMode,
                 columns = state.columns,
                 episodeBadgeMode = state.episodeBadgeMode,
+                episodeBadgePosition = state.episodeBadgePosition,
                 showScoreBadge = state.showScoreBadge,
+                scoreBadgePosition = state.scoreBadgePosition,
                 showContinueWatching = state.showContinueWatching,
                 showTotalEntries = state.showTotalEntries,
                 titleLines = state.titleLines,
@@ -271,7 +267,9 @@ fun LibraryScreen(
                 onDisplayModeChange = { viewModel.setDisplayMode(it) },
                 onColumnsChange = { viewModel.setColumns(it) },
                 onEpisodeBadgeModeChange = { viewModel.setEpisodeBadgeMode(it) },
+                onEpisodeBadgePositionChange = { viewModel.setEpisodeBadgePosition(it) },
                 onShowScoreBadgeChange = { viewModel.setShowScoreBadge(it) },
+                onScoreBadgePositionChange = { viewModel.setScoreBadgePosition(it) },
                 onShowContinueWatchingChange = { viewModel.setShowContinueWatching(it) },
                 onShowTotalEntriesChange = { viewModel.setShowTotalEntries(it) },
                 onTitleLinesChange = { viewModel.setTitleLines(it) },
@@ -362,7 +360,9 @@ private fun GridContent(
                 selectionMode = state.selectionMode,
                 displayMode = state.displayMode,
                 episodeBadgeMode = state.episodeBadgeMode,
+                episodeBadgePosition = state.episodeBadgePosition,
                 showScoreBadge = state.showScoreBadge,
+                scoreBadgePosition = state.scoreBadgePosition,
                 titleLines = state.titleLines,
                 onClick = { onItemClick(anime) },
                 onLongClick = { onItemLongClick(anime) },
@@ -584,17 +584,54 @@ private fun OptionSheetRow(
     }
 }
 
+/**
+ * A shared pill-shaped container holding the search + settings buttons together.
+ * Per user: "align the search button with the settings button together so that
+ * both of those are inside our dedicated background, like a container, so that
+ * they both look joined together."
+ */
+@Composable
+private fun HeaderActionGroup(
+    onSearch: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(50),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            HeaderActionButton(
+                icon = Icons.Filled.Search,
+                contentDescription = "Search library",
+                onClick = onSearch,
+                inGroup = true,
+            )
+            HeaderActionButton(
+                icon = Icons.Filled.Tune,
+                contentDescription = "Library settings",
+                onClick = onSettings,
+                inGroup = true,
+            )
+        }
+    }
+}
+
 @Composable
 private fun HeaderActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    inGroup: Boolean = false,
 ) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(34.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(if (inGroup) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

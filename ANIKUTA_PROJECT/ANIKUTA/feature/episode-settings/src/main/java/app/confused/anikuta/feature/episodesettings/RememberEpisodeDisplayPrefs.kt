@@ -33,13 +33,14 @@ fun rememberEpisodeDisplayPrefs(): EpisodeDisplayPrefs {
     val titleLines by prefs.titleMaxLines().changes().collectAsState(initial = prefs.titleMaxLines().get())
     val synopsisLines by prefs.synopsisMaxLines().changes().collectAsState(initial = prefs.synopsisMaxLines().get())
     val showTitleBg by prefs.showTitleBackground().changes().collectAsState(initial = prefs.showTitleBackground().get())
-    val showMetaBg by prefs.showMetaBackground().changes().collectAsState(initial = prefs.showMetaBackground().get())
+    val showDateBg by prefs.showDateBackground().changes().collectAsState(initial = prefs.showDateBackground().get())
+    val showAudioBg by prefs.showAudioBackground().changes().collectAsState(initial = prefs.showAudioBackground().get())
     val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
 
     return remember(
         showNumber, showTitles, showSummaries, showThumbnails, showDates, showAudioPills,
         thumbPos, titlePos, synopsisPos, datePos, epNumPos, thumbSize, titleLines, synopsisLines,
-        showTitleBg, showMetaBg, showSynopsisBg,
+        showTitleBg, showDateBg, showAudioBg, showSynopsisBg,
     ) {
         EpisodeDisplayPrefs(
             showThumbnails = showThumbnails,
@@ -57,7 +58,8 @@ fun rememberEpisodeDisplayPrefs(): EpisodeDisplayPrefs {
             titleMaxLines = titleLines,
             synopsisMaxLines = synopsisLines,
             showTitleBackground = showTitleBg,
-            showMetaBackground = showMetaBg,
+            showDateBackground = showDateBg,
+            showAudioBackground = showAudioBg,
             showSynopsisBackground = showSynopsisBg,
         )
     }

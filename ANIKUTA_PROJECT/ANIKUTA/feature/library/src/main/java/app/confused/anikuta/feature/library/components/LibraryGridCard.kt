@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.BadgePosition
 import app.confused.anikuta.core.common.model.EpisodeBadgeMode
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
@@ -41,13 +42,14 @@ import coil3.compose.AsyncImage
 /**
  * A grid cell showing an anime cover + optional title.
  *
- * Display modes:
- *  - [LibraryDisplayMode.COMPACT_GRID] — title overlaid on cover (bottom gradient).
- *  - [LibraryDisplayMode.COMFORTABLE_GRID] — title below cover (2 lines).
- *  - [LibraryDisplayMode.COVER_ONLY] — no title, just the cover.
+ * Badges (episode count + score) use THEMED backgrounds per user request:
+ * "you need to do the same thing here for the episode badge and for a score
+ * badge too" (i.e. themed colored backgrounds like the episode-count badge).
+ *  - Episode badge: themed `primary` green background, `onPrimary` text.
+ *  - Score badge: themed `primary` green background, `onPrimary` text.
  *
- * Badges (episode count + score) are compact pills with reduced height
- * per user feedback ("reduce by half").
+ * Badge positions are configurable (top/bottom L/R). In compact grid, only
+ * top positions are used (bottom is occupied by the title overlay).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -57,7 +59,9 @@ fun LibraryGridCard(
     selectionMode: Boolean,
     displayMode: LibraryDisplayMode,
     episodeBadgeMode: EpisodeBadgeMode,
+    episodeBadgePosition: BadgePosition,
     showScoreBadge: Boolean,
+    scoreBadgePosition: BadgePosition,
     titleLines: Int = 2,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -114,44 +118,70 @@ fun LibraryGridCard(
                     )
                 }
 
-                // ── Episode badge — compact pill (reduced height) ──
+                // ── Episode badge — themed primary green background ──
                 val epText = when (episodeBadgeMode) {
                     EpisodeBadgeMode.OFF -> null
                     EpisodeBadgeMode.TOTAL -> item.totalEpisodes?.takeIf { it > 0 }?.let { "$it ep" }
                     EpisodeBadgeMode.RELEASED -> item.releasedEpisodes?.takeIf { it > 0 }?.let { "$it ep" }
                 }
                 if (epText != null) {
-                    Text(
-                        text = epText,
-                        color = Color.White,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = RobotoFamily,
+                    // In compact grid, force top positions (bottom is occupied by title)
+                    val effectivePos = if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
+                        if (episodeBadgePosition == BadgePosition.BOTTOM_START || episodeBadgePosition == BadgePosition.BOTTOM_END) {
+                            BadgePosition.TOP_END
+                        } else {
+                            episodeBadgePosition
+                        }
+                    } else {
+                        episodeBadgePosition
+                    }
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(3.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color.Black.copy(alpha = 0.7f))
-                            .padding(horizontal = 3.dp, vertical = 1.dp),
-                    )
+                            .align(effectivePos.toAlignment())
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = epText,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = RobotoFamily,
+                        )
+                    }
                 }
 
-                // ── Score badge — compact pill (reduced height) ──
+                // ── Score badge — themed primary green background ──
                 val score = item.score
                 if (showScoreBadge && score != null) {
-                    Text(
-                        text = "${score.toInt()}",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = RobotoFamily,
+                    // In compact grid, force top positions
+                    val effectivePos = if (displayMode == LibraryDisplayMode.COMPACT_GRID) {
+                        if (scoreBadgePosition == BadgePosition.BOTTOM_START || scoreBadgePosition == BadgePosition.BOTTOM_END) {
+                            BadgePosition.TOP_START
+                        } else {
+                            scoreBadgePosition
+                        }
+                    } else {
+                        scoreBadgePosition
+                    }
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(3.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .align(effectivePos.toAlignment())
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.primary)
-                            .padding(horizontal = 3.dp, vertical = 1.dp),
-                    )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = "${score.toInt()}",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = RobotoFamily,
+                        )
+                    }
                 }
 
                 // ── Selection checkmark ──
@@ -199,4 +229,12 @@ fun LibraryGridCard(
             // COVER_ONLY: no title below
         }
     }
+}
+
+/** Maps a [BadgePosition] to a Compose [Alignment]. */
+private fun BadgePosition.toAlignment(): Alignment = when (this) {
+    BadgePosition.TOP_START -> Alignment.TopStart
+    BadgePosition.TOP_END -> Alignment.TopEnd
+    BadgePosition.BOTTOM_START -> Alignment.BottomStart
+    BadgePosition.BOTTOM_END -> Alignment.BottomEnd
 }
