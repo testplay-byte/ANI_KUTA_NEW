@@ -33,6 +33,7 @@ data class AniListAnime(
     @SerialName("source") val source: String? = null,
     @SerialName("countryOfOrigin") val countryOfOrigin: String? = null,
     @SerialName("isAdult") val isAdult: Boolean? = null,
+    @SerialName("idMal") val idMal: Int? = null,
 )
 
 @Serializable

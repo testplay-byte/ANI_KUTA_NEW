@@ -21,7 +21,7 @@ import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadataRequest
  * - TMDB (The Movie Database) — per owner's plan.
  */
 interface EpisodeMetadataSource {
-    /** Unique source identifier (e.g. "anilist", "jikan", "kitsu", "tmdb"). */
+    /** Unique source identifier (e.g. "anilist", "jikan", "kitsu", "anikage"). */
     val id: String
 
     /** Human-readable name. */
@@ -30,8 +30,16 @@ interface EpisodeMetadataSource {
     /** Whether this source supports the given anime (e.g. by ID type). */
     fun supports(request: EpisodeMetadataRequest): Boolean
 
-    /** Fetch episode metadata for the given request. */
-    suspend fun fetch(request: EpisodeMetadataRequest): EpisodeMetadata?
+    /**
+     * Fetch ALL episode metadata for the given anime in one call.
+     * Returns a map of episodeNumber → EpisodeMetadata.
+     *
+     * This is more efficient than fetching per-episode because most sources
+     * (Jikan, Anikage, Kitsu) return all episodes in a single API call.
+     *
+     * @return Map<episodeNumber (1-based), EpisodeMetadata>. Empty if no data.
+     */
+    suspend fun fetchAll(request: EpisodeMetadataRequest): Map<Int, EpisodeMetadata>
 
     /** The fields this source can provide (for merge priority). */
     val providedFields: Set<EpisodeMetadataField>

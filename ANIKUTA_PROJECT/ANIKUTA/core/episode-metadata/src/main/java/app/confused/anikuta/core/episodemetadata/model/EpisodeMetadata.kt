@@ -26,11 +26,18 @@ data class EpisodeMetadata(
  * @param animeId The AniList anime ID.
  * @param animeTitle The anime's display title (for search).
  * @param episodeNumber The episode number.
+ * @param malId The MyAnimeList ID (for Jikan + Kitsu sources). Null if unknown.
+ * @param bannerImage Fallback thumbnail (anime banner/cover) for sources that
+ *   don't provide per-episode thumbnails.
+ * @param episodeCount Total episode count (for batch fetching).
  */
 data class EpisodeMetadataRequest(
     val animeId: Int,
     val animeTitle: String,
     val episodeNumber: Int,
+    val malId: Int? = null,
+    val bannerImage: String? = null,
+    val episodeCount: Int = 0,
 )
 
 /**

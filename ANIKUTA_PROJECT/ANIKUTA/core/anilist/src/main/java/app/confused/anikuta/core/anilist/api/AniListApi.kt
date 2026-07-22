@@ -351,6 +351,7 @@ class AniListApi(
             source
             countryOfOrigin
             isAdult
+            idMal
         """
 
         private const val TRENDING_QUERY = """

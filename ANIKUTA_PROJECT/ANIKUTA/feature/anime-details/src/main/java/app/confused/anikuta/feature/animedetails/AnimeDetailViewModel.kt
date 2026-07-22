@@ -60,6 +60,7 @@ class AnimeDetailViewModel(
     private val animeRepository: AnimeRepository,
     private val categoryRepository: CategoryRepository,
     private val extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
+    private val episodeMetadataRepository: app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -70,6 +71,10 @@ class AnimeDetailViewModel(
 
     private val _episodeState = MutableStateFlow<EpisodeState>(EpisodeState.Idle)
     val episodeState: StateFlow<EpisodeState> = _episodeState.asStateFlow()
+
+    /** Per-episode metadata map (episodeNumber → EpisodeMetadata). */
+    private val _episodeMetadata = MutableStateFlow<Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>>(emptyMap())
+    val episodeMetadata: StateFlow<Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>> = _episodeMetadata.asStateFlow()
 
     /** All sources that matched the anime (for the source switcher). */
     private val _allMatches = MutableStateFlow<List<SourceMatcher.SourceMatch>>(emptyList())
@@ -523,6 +528,11 @@ class AnimeDetailViewModel(
                 } else {
                     _episodeState.value = EpisodeState.Loaded(episodes, match.source.name)
                     Log.i(TAG, "Loaded ${episodes.size} episodes from '${match.source.name}'")
+
+                    // ── Fetch episode metadata in the background ──
+                    // Enriches the episode list with titles, descriptions, thumbnails,
+                    // and air dates from AniList/Jikan/Anikage sources.
+                    fetchEpisodeMetadata(episodes.size)
                 }
             } catch (e: Throwable) {
                 // Catch Throwable — see loadAnimeDetails for rationale.
@@ -530,6 +540,37 @@ class AnimeDetailViewModel(
                 val msg = "Failed to load episodes: ${e.message}"
                 _episodeState.value = EpisodeState.Error(msg)
                 Toast.makeText(appContext, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /**
+     * Fetch per-episode metadata (titles, descriptions, thumbnails, air dates)
+     * from all registered metadata sources (Jikan, Anikage, AniList).
+     *
+     * Runs in the background — the episode list is shown immediately with
+     * extension-provided data, then enriched when metadata arrives.
+     * The [episodeMetadata] StateFlow updates reactively, causing the UI to
+     * re-render with rich titles + thumbnails.
+     */
+    private fun fetchEpisodeMetadata(episodeCount: Int) {
+        viewModelScope.launch {
+            try {
+                val anime = (_animeState.value as? DetailState.Success)?.anime ?: return@launch
+                val request = app.confused.anikuta.core.episodemetadata.model.EpisodeMetadataRequest(
+                    animeId = anilistId,
+                    animeTitle = anime.displayTitle,
+                    episodeNumber = 1, // not used for batch fetch
+                    malId = anime.idMal,
+                    bannerImage = anime.bannerImage ?: anime.coverImage?.let { it.extraLarge ?: it.large ?: it.medium },
+                    episodeCount = episodeCount,
+                )
+                Log.i(TAG, "Fetching episode metadata: anilistId=$anilistId, malId=${anime.idMal}, epCount=$episodeCount")
+                val metadata = episodeMetadataRepository.fetchAll(request)
+                _episodeMetadata.value = metadata
+                Log.i(TAG, "Episode metadata loaded: ${metadata.size} episodes enriched")
+            } catch (e: Exception) {
+                Log.w(TAG, "Episode metadata fetch failed (non-fatal — episodes still show with extension data)", e)
             }
         }
     }

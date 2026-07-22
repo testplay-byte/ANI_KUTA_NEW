@@ -73,6 +73,7 @@ fun EpisodesSection(
     currentMatch: SourceMatcher.SourceMatch?,
     allMatches: List<SourceMatcher.SourceMatch>,
     watchedEpisodes: Set<String>,
+    episodeMetadata: Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>,
     isSearching: Boolean,
     manualSearchResults: List<SourceMatcher.ManualSearchResult>,
     manualSearchErrors: List<Pair<String, String>>,
@@ -181,6 +182,7 @@ fun EpisodesSection(
             is EpisodeState.Loaded -> EpisodeList(
                 episodes = episodeState.episodes,
                 watchedEpisodes = watchedEpisodes,
+                episodeMetadata = episodeMetadata,
                 onOpenEpisode = onOpenEpisode,
                 currentSource = currentMatch?.source,
                 onToggleWatched = onToggleWatched,
@@ -239,16 +241,20 @@ fun EpisodesSection(
 private fun EpisodeList(
     episodes: List<SEpisode>,
     watchedEpisodes: Set<String>,
+    episodeMetadata: Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         episodes.forEachIndexed { index, episode ->
+            val epNum = episode.episode_number.toInt().coerceAtLeast(1)
+            val metadata = episodeMetadata[epNum]
             EpisodeRow(
                 episode = episode,
                 index = index,
                 isWatched = watchedEpisodes.contains(episode.url),
+                metadata = metadata,
                 onClick = {
                     currentSource?.let { source ->
                         onOpenEpisode(episode, source, episodes)
@@ -263,6 +269,9 @@ private fun EpisodeList(
 
 /**
  * A single episode row — number badge, name, play icon, watched grayscale.
+ * When metadata is available, shows the enriched title (from metadata sources),
+ * a description preview, and a thumbnail.
+ *
  * Alternating backgrounds (zebra stripe) per design language §6.
  */
 @Composable
@@ -270,6 +279,7 @@ private fun EpisodeRow(
     episode: SEpisode,
     index: Int,
     isWatched: Boolean,
+    metadata: app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata? = null,
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
 ) {
@@ -279,6 +289,17 @@ private fun EpisodeRow(
     } else {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
     }
+
+    // Use metadata title if available, otherwise parse the extension title,
+    // otherwise fall back to "Episode N"
+    val displayTitle = metadata?.title
+        ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
+            episode.name, episode.episode_number
+        )
+        ?: episode.name.ifBlank { "Episode ${formatEpisodeNumber(episode.episode_number)}" }
+
+    val description = metadata?.description ?: episode.summary
+    val thumbnailUrl = metadata?.thumbnailUrl
 
     Row(
         modifier = Modifier
@@ -291,34 +312,60 @@ private fun EpisodeRow(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Episode number badge
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.size(40.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
+        // Episode thumbnail (if available from metadata) OR number badge
+        if (!thumbnailUrl.isNullOrBlank()) {
+            coil3.compose.AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = displayTitle,
+                modifier = Modifier
+                    .size(width = 64.dp, height = 40.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            )
+            Spacer(modifier = Modifier.size(8.dp))
+        } else {
+            // Number badge fallback
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = formatEpisodeNumber(episode.episode_number),
+                        fontFamily = RobotoFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.size(12.dp))
+        }
+        // Episode title + description
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = displayTitle,
+                fontFamily = RobotoFamily,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (!description.isNullOrBlank()) {
+                Spacer(modifier = Modifier.size(2.dp))
                 Text(
-                    text = formatEpisodeNumber(episode.episode_number),
+                    text = description,
                     fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Spacer(modifier = Modifier.size(12.dp))
-        // Episode name
-        Text(
-            text = episode.name.ifBlank { "Episode ${formatEpisodeNumber(episode.episode_number)}" },
-            fontFamily = RobotoFamily,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
         // Play icon
         Icon(
             imageVector = Icons.Filled.PlayArrow,

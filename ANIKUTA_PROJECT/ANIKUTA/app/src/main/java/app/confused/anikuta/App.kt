@@ -11,6 +11,7 @@ import app.confused.anikuta.core.common.repository.CategoryRepository
 import app.confused.anikuta.di.searchModule
 import app.confused.anikuta.core.preferences.di.preferenceModule
 import app.confused.anikuta.core.player.di.playerModule
+import app.confused.anikuta.core.episodemetadata.di.episodeMetadataModule
 import eu.kanade.tachiyomi.animesource.ExtensionAppHolder
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +84,7 @@ class App : Application() {
                 preferenceModule,
                 playerModule,
                 libraryModule,
+                episodeMetadataModule,
             )
         }
 

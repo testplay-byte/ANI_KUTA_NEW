@@ -60,9 +60,10 @@ fun AnimeDetailScreen(
 ) {
     val context = LocalContext.current
 
-    // Inject repositories via Koin (for library save functionality).
+    // Inject repositories via Koin (for library save functionality + episode metadata).
     val animeRepository: app.confused.anikuta.core.common.repository.AnimeRepository = org.koin.core.context.GlobalContext.get().get()
     val categoryRepository: app.confused.anikuta.core.common.repository.CategoryRepository = org.koin.core.context.GlobalContext.get().get()
+    val episodeMetadataRepository: app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository = org.koin.core.context.GlobalContext.get().get()
 
     @Suppress("UNCHECKED_CAST")
     val vm: AnimeDetailViewModel = viewModel(
@@ -77,6 +78,7 @@ fun AnimeDetailScreen(
                     animeRepository = animeRepository,
                     categoryRepository = categoryRepository,
                     extensionLinkStore = extensionLinkStore,
+                    episodeMetadataRepository = episodeMetadataRepository,
                     appContext = context.applicationContext,
                 ) as T
         },
@@ -87,6 +89,7 @@ fun AnimeDetailScreen(
     val currentMatch by vm.currentMatch.collectAsState()
     val allMatches by vm.allMatches.collectAsState()
     val watchedEpisodes by vm.watchedEpisodes.collectAsState()
+    val episodeMetadata by vm.episodeMetadata.collectAsState()
     val isRefreshing by vm.isRefreshing.collectAsState()
     val isSearching by vm.isSearching.collectAsState()
     val manualSearchResults by vm.manualSearchResults.collectAsState()
@@ -115,6 +118,7 @@ fun AnimeDetailScreen(
                 currentMatch = currentMatch,
                 allMatches = allMatches,
                 watchedEpisodes = watchedEpisodes,
+                episodeMetadata = episodeMetadata,
                 isRefreshing = isRefreshing,
                 isSearching = isSearching,
                 manualSearchResults = manualSearchResults,
