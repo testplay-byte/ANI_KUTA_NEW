@@ -82,6 +82,7 @@ Follows `RULES/ai-agent-rules.md` §4 (modularity): `:feature:*`, `:core`, `:dat
 │   ├── :feature:updates                ← Updates feed
 │   ├── :feature:history                ← History screen
 │   ├── :feature:browse                 ← Browse sources / extensions
+│   ├── :feature:search                 ← Search page (dual-source: AniList + extension, ADR-010/029)
 │   ├── :feature:my                     ← MY screen (personalized dashboard, ADR-021)
 │   ├── :feature:more                   ← More tab (settings, downloads, stats, about)
 │   ├── :feature:anime-details          ← Anime details screen (blurred cover, gradient)

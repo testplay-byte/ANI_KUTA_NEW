@@ -49,6 +49,7 @@ import app.confused.anikuta.core.designsystem.component.NavItem
 import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.data.extension.AnimeExtensionManager
+import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
@@ -56,13 +57,19 @@ import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionRepoSettingsScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
+import app.confused.anikuta.feature.search.data.RecentSearchesStore
+import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
+import app.confused.anikuta.feature.search.ui.SearchScreen
+import app.confused.anikuta.feature.search.viewmodel.SearchResult
 import app.confused.anikuta.feature.videoresolver.ResolverResult
 import app.confused.anikuta.feature.videoresolver.ResolverService
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import app.confused.anikuta.feature.watch.WatchRequest
 import app.confused.anikuta.feature.watch.WatchScreen
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -103,6 +110,10 @@ private fun AnikutaApp() {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // Search-page stores (registered in searchModule + extensionModule)
+    val recentsStore: RecentSearchesStore = koinInject()
+    val extensionLinkStore: ExtensionLinkStore = koinInject()
+
     // Repo layer (for the ExtensionsSettings + RepoSettings screens)
     val repoRepository: ExtensionRepoRepository = koinInject()
     val repoApi: ExtensionRepoApi = koinInject()
@@ -112,11 +123,18 @@ private fun AnikutaApp() {
         mutableStateOf<Triple<SEpisode, AnimeSource, List<SEpisode>>?>(null)
     }
 
-    // Handle back gesture for sub-screens + resolver sheet
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden) {
+    // The extension result currently being linked to AniList (search page → linking sheet).
+    // Null when no linking is in progress.
+    var linkingTarget by remember {
+        mutableStateOf<Pair<AnimeCatalogueSource, SAnime>?>(null)
+    }
+
+    // Handle back gesture for sub-screens + resolver sheet + linking sheet
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null) {
         when {
             watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
+            linkingTarget != null -> linkingTarget = null
             detailAnimeId != null -> {
                 detailAnimeId = null
                 resolverState = VideoResolverState.Hidden
@@ -215,6 +233,19 @@ private fun AnikutaApp() {
                         api = anilistApi,
                         onOpenAnime = { id -> detailAnimeId = id },
                     )
+                    "search" -> SearchScreen(
+                        anilistApi = anilistApi,
+                        extensionManager = extensionManager,
+                        sourceMatcher = sourceMatcher,
+                        recentsStore = recentsStore,
+                        onOpenAnime = { id -> detailAnimeId = id },
+                        onOpenExtensionResult = { result ->
+                            // Start the extension→AniList linking flow (Phase D).
+                            // The linking sheet auto-searches AniList by the SAnime title;
+                            // on success it calls onLinked (opens detail) + shows a toast.
+                            linkingTarget = result.source to result.sAnime
+                        },
+                    )
                     "more" -> MoreScreen(
                         onOpenSettings = { showSettings = true },
                     )
@@ -282,6 +313,39 @@ private fun AnikutaApp() {
                     },
                 )
             }
+        }
+
+        // Extension→AniList linking sheet overlay (Phase D).
+        // Shown when the user taps an extension result on the Search page.
+        // The sheet auto-searches AniList by the SAnime title:
+        //  - On link success → opens the existing AnimeDetailScreen (by AniList ID)
+        //    + shows a "Linked to AniList" toast.
+        //  - On "go without linking" → shows a toast (extension-only detail page
+        //    is a future enhancement; the existing AnimeDetailScreen needs an ID).
+        if (linkingTarget != null) {
+            val (source, sAnime) = linkingTarget!!
+            ExtensionLinkingSheet(
+                source = source,
+                sAnime = sAnime,
+                anilistApi = anilistApi,
+                linkStore = extensionLinkStore,
+                onLinked = { anilistId ->
+                    linkingTarget = null
+                    Toast.makeText(context, "Linked to AniList", Toast.LENGTH_SHORT).show()
+                    detailAnimeId = anilistId
+                },
+                onGoWithoutLinking = { extSource, extSAnime ->
+                    linkingTarget = null
+                    Toast.makeText(
+                        context,
+                        "Extension-only detail page is a future enhancement. " +
+                            "Install the AniList-linked version to watch.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    Log.i("AnikutaSearch", "Go-without-linking: ${extSAnime.title} from ${extSource.name}")
+                },
+                onDismiss = { linkingTarget = null },
+            )
         }
     }
 }
