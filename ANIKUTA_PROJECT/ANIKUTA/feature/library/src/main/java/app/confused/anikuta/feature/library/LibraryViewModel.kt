@@ -174,6 +174,28 @@ class LibraryViewModel(
         preferences.sortAscending().set(ascending)
     }
 
+    fun setShowEpisodeBadge(enabled: Boolean) {
+        preferences.showEpisodeBadge().set(enabled)
+    }
+
+    fun setShowScoreBadge(enabled: Boolean) {
+        preferences.showScoreBadge().set(enabled)
+    }
+
+    fun setShowContinueWatching(enabled: Boolean) {
+        preferences.showContinueWatching().set(enabled)
+    }
+
+    fun createCategory(name: String) {
+        viewModelScope.launch {
+            try {
+                categoryRepository.create(name)
+            } catch (e: Exception) {
+                Log.e(TAG, "createCategory failed", e)
+            }
+        }
+    }
+
     fun setSearchQuery(query: String) {
         _state.update { it.copy(searchQuery = query) }
     }

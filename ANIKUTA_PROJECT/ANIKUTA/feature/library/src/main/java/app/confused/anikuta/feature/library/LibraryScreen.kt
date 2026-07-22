@@ -40,7 +40,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,12 +57,16 @@ import app.confused.anikuta.core.common.model.LibrarySortType
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.SearchField
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.feature.library.components.AddCategoryDialog
+import app.confused.anikuta.feature.library.components.CategoryPickerDialog
 import app.confused.anikuta.feature.library.components.CategoryTabs
 import app.confused.anikuta.feature.library.components.ContinueWatchingSection
+import app.confused.anikuta.feature.library.components.CustomizeSheet
 import app.confused.anikuta.feature.library.components.LibraryEmptyState
 import app.confused.anikuta.feature.library.components.LibraryGridCard
 import app.confused.anikuta.feature.library.components.LibraryListRow
 import app.confused.anikuta.feature.library.components.SelectionActionBar
+import app.confused.anikuta.feature.library.components.SortSheet
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -237,6 +243,69 @@ fun LibraryScreen(
                     onDelete = { viewModel.showDeleteConfirmation() },
                 )
             }
+        }
+
+        // ── Sheets + dialogs ──
+        when (val dialog = state.dialog) {
+            is LibraryDialog.CustomizeSheet -> CustomizeSheet(
+                displayMode = state.displayMode,
+                columns = state.columns,
+                showEpisodeBadge = state.showEpisodeBadge,
+                showScoreBadge = state.showScoreBadge,
+                showContinueWatching = state.showContinueWatching,
+                onDisplayModeChange = { viewModel.setDisplayMode(it) },
+                onColumnsChange = { viewModel.setColumns(it) },
+                onShowEpisodeBadgeChange = { viewModel.setShowEpisodeBadge(it) },
+                onShowScoreBadgeChange = { viewModel.setShowScoreBadge(it) },
+                onShowContinueWatchingChange = { viewModel.setShowContinueWatching(it) },
+                onDismiss = { viewModel.dismissDialog() },
+            )
+            is LibraryDialog.SortSheet -> SortSheet(
+                sortType = state.sort.type,
+                ascending = state.sort.ascending,
+                onSortChange = { type, asc -> viewModel.setSort(type, asc) },
+                onDismiss = { viewModel.dismissDialog() },
+            )
+            is LibraryDialog.MoveToCategorySheet -> {
+                var showAddCategory by remember { mutableStateOf(false) }
+                if (!showAddCategory) {
+                    CategoryPickerDialog(
+                        categories = state.categories,
+                        selectedCategoryIds = emptySet(),
+                        onConfirm = { ids -> viewModel.moveSelectedToCategories(ids.toList()) },
+                        onDismiss = { viewModel.dismissDialog() },
+                        onAddNewCategory = { showAddCategory = true },
+                    )
+                } else {
+                    AddCategoryDialog(
+                        onConfirm = { name ->
+                            viewModel.createCategory(name)
+                            showAddCategory = false
+                        },
+                        onDismiss = { showAddCategory = false },
+                    )
+                }
+            }
+            is LibraryDialog.DeleteConfirmation -> {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viewModel.dismissDialog() },
+                    title = { Text("Remove from Library", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) },
+                    text = { Text("Remove ${dialog.animeIds.size} anime from your library?") },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.removeSelectedFromLibrary() },
+                        ) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error, fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { viewModel.dismissDialog() }) {
+                            Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.SemiBold)
+                        }
+                    },
+                )
+            }
+            null -> {}
         }
     }
 }
