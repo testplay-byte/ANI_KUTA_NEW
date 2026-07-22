@@ -40,6 +40,11 @@ class AnimeMapperTest {
             lastRefresh = 1700050000L,
             lastMetadataFetch = 1700060000L,
             nextEpisodeCheck = 1700110000L,
+            anilistId = 12345L,
+            coverColor = "#B1F256",
+            score = 85.0,
+            totalEpisodes = 24L,
+            lastWatched = 1700070000L,
         )
 
         assertEquals(1L, anime.id)
@@ -76,6 +81,11 @@ class AnimeMapperTest {
             lastRefresh = 0L,
             lastMetadataFetch = null,
             nextEpisodeCheck = null,
+            anilistId = null,
+            coverColor = null,
+            score = null,
+            totalEpisodes = null,
+            lastWatched = 0L,
         )
 
         assertEquals(2L, anime.id)
@@ -111,6 +121,11 @@ class AnimeMapperTest {
             lastRefresh = 0L,
             lastMetadataFetch = null,
             nextEpisodeCheck = null,
+            anilistId = null,
+            coverColor = null,
+            score = null,
+            totalEpisodes = null,
+            lastWatched = 0L,
         )
 
         assertTrue(anime.genre.isEmpty())
@@ -140,6 +155,11 @@ class AnimeMapperTest {
             lastRefresh = 0L,
             lastMetadataFetch = null,
             nextEpisodeCheck = null,
+            anilistId = null,
+            coverColor = null,
+            score = null,
+            totalEpisodes = null,
+            lastWatched = 0L,
         )
 
         assertEquals(listOf("Action", "Comedy"), anime.genre)
