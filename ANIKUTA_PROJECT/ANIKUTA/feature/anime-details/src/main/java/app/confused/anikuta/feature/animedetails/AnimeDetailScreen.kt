@@ -54,6 +54,7 @@ fun AnimeDetailScreen(
     api: AniListApi,
     extensionManager: AnimeExtensionManager,
     sourceMatcher: SourceMatcher,
+    extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit = { _, _, _ -> },
 ) {
@@ -75,6 +76,7 @@ fun AnimeDetailScreen(
                     sourceMatcher = sourceMatcher,
                     animeRepository = animeRepository,
                     categoryRepository = categoryRepository,
+                    extensionLinkStore = extensionLinkStore,
                     appContext = context.applicationContext,
                 ) as T
         },

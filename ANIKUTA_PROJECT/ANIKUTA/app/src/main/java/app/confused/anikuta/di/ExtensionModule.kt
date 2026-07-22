@@ -3,6 +3,7 @@ package app.confused.anikuta.di
 import android.content.Context
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.api.AnimeExtensionApi
+import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
 import app.confused.anikuta.data.extension.installer.AnimeExtensionInstaller
 import app.confused.anikuta.data.extension.loader.AnimeExtensionLoader
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
@@ -61,4 +62,9 @@ val extensionModule: Module = module {
 
     // ── SourceMatcher (Step 5 — searches trusted sources by title) ──
     single { SourceMatcher(get()) }
+
+    // ── ExtensionLinkStore (caches extension→AniList links for the Search page) ──
+    // Depends on PreferenceStore (provided by preferenceModule). Shared between
+    // :feature:search (linking sheet) and the future extension-only detail page.
+    single { ExtensionLinkStore(get()) }
 }

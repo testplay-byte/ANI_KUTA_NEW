@@ -47,6 +47,9 @@ import kotlinx.coroutines.withContext
  * @param api the AniList API client.
  * @param extensionManager provides the live list of installed + trusted sources.
  * @param sourceMatcher searches sources by title.
+ * @param extensionLinkStore caches extension→AniList links — used to prefer the
+ *   source the user originally came from when loading episodes (fixes the
+ *   "wrong extension picked" issue the owner reported).
  * @param appContext for SharedPreferences + Toast (application-scoped).
  */
 class AnimeDetailViewModel(
@@ -56,6 +59,7 @@ class AnimeDetailViewModel(
     private val sourceMatcher: SourceMatcher,
     private val animeRepository: AnimeRepository,
     private val categoryRepository: CategoryRepository,
+    private val extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -473,11 +477,28 @@ class AnimeDetailViewModel(
                 }
 
                 // Check if the user has a persisted source preference for this anime.
-                val preferredSourceId = sourcePrefs.getLong(sourcePrefKey(anilistId), -1L)
+                // Two sources of preference, in priority order:
+                //   1. SharedPreferences (set when the user manually switches source
+                //      via the source switcher — explicit user choice).
+                //   2. ExtensionLinkStore reverse lookup (the source the user came
+                //      from via the search→link flow — fixes the owner's report:
+                //      "it does not load the episodes from the exact same extension
+                //      from which I went to the details page").
+                val explicitPrefId = sourcePrefs.getLong(sourcePrefKey(anilistId), -1L)
+                val linkedPrefId = extensionLinkStore.getPreferredSourceForAnilist(anilistId)
+                val preferredSourceId = when {
+                    explicitPrefId != -1L -> explicitPrefId
+                    linkedPrefId != null -> linkedPrefId
+                    else -> -1L
+                }
                 val selected = all.firstOrNull { it.source.id == preferredSourceId } ?: all.first()
 
                 _currentMatch.value = selected
-                Log.i(TAG, "Selected source: '${selected.source.name}' (score=${selected.score})")
+                Log.i(
+                    TAG,
+                    "Selected source: '${selected.source.name}' (score=${selected.score}, " +
+                        "preferredId=$preferredSourceId, explicit=$explicitPrefId, linked=$linkedPrefId)",
+                )
                 loadEpisodes(selected)
             } catch (e: Throwable) {
                 // Catch Throwable — see loadAnimeDetails for rationale.
