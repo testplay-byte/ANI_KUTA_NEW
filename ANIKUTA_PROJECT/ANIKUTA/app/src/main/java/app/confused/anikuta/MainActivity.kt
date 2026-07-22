@@ -22,9 +22,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -402,6 +404,13 @@ private fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
+    var showEpisodeListSettings by remember { mutableStateOf(false) }
+    var showMetadataSettings by remember { mutableStateOf(false) }
+
+    // Inject preferences
+    val episodeDisplayPrefs: app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences = org.koin.core.context.GlobalContext.get().get()
+    val metadataPrefs: app.confused.anikuta.core.episodemetadata.EpisodeMetadataPreferences = org.koin.core.context.GlobalContext.get().get()
+
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "Settings", scrollState = scrollState)
         LazyColumn(
@@ -417,7 +426,38 @@ private fun SettingsScreen(
                     onClick = onOpenExtensions,
                 )
             }
+            item {
+                SettingsSectionLabel("Episode List")
+                MoreRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Episode Display",
+                    subtitle = "Customize how episodes appear (thumbnail, title, summary)",
+                    onClick = { showEpisodeListSettings = true },
+                )
+                MoreRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "Episode Metadata",
+                    subtitle = "Configure metadata fetching (titles, descriptions, thumbnails)",
+                    onClick = { showMetadataSettings = true },
+                )
+            }
         }
+    }
+
+    // Episode list settings sheet
+    if (showEpisodeListSettings) {
+        app.confused.anikuta.feature.animedetails.EpisodeListSettingsSheet(
+            prefs = episodeDisplayPrefs,
+            onDismiss = { showEpisodeListSettings = false },
+        )
+    }
+
+    // Metadata settings sheet
+    if (showMetadataSettings) {
+        app.confused.anikuta.core.episodemetadata.MetadataSettingsSheet(
+            prefs = metadataPrefs,
+            onDismiss = { showMetadataSettings = false },
+        )
     }
 }
 
