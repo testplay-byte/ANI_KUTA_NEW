@@ -433,7 +433,7 @@ private fun ToggleRow(
         )
         CustomToggle(
             checked = checked,
-            onCheckedChange = onChange,
+            onChange = onChange,
         )
     }
 }
