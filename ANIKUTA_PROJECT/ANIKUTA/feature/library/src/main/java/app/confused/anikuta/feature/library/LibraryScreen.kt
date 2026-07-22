@@ -1,5 +1,8 @@
 package app.confused.anikuta.feature.library
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,18 +29,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Sort
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -52,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +55,7 @@ import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.LibraryDisplayMode
 import app.confused.anikuta.core.common.model.LibrarySortType
 import app.confused.anikuta.core.designsystem.component.AddCategoryDialog
+import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CategoryPickerDialog
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.SearchField
@@ -78,26 +75,17 @@ import org.koin.androidx.compose.koinViewModel
  *
  * Layout (top to bottom):
  *  1. CollapsingHeader (pinned) — title "Library" (or "N in Library" when
- *     showTotalEntries is on) + search button + overflow menu button.
- *  2. Category tabs (pinned) — All + each category. Replaced by Select All/Clear
- *     bar in selection mode.
- *  3. Search field (collapsible — tap search icon to show).
- *  4. LazyVerticalGrid or LazyColumn — the library items. Continue-watching
- *     section is a full-span item at the top (when enabled + non-empty).
+ *     showTotalEntries is on) + pill-shaped search button + options (Tune) button.
+ *  2. Category tabs (pinned) — All + each category.
+ *  3. Search bar (animated — appears when the search pill is tapped).
+ *  4. LazyVerticalGrid or LazyColumn — the library items.
  *  5. SelectionActionBar (overlay, bottom) — when in selection mode.
  *
- * Per user decisions:
- *  - Q2: sort is GLOBAL.
- *  - Q3: display mode is GLOBAL.
- *  - Q5: continue-watching is a section at the top.
- *  - Q6: NO status filter.
- *  - Q9: state-based navigation (not Voyager).
- *
- * UI improvements (round 2):
- *  - Combined overflow menu (sort + view mode + customize) in header.
- *  - Search button in header, left of the menu button.
- *  - "N in Library" heading when showTotalEntries is on.
- *  - Category tab filtering now works (uses animeCategoryLinks).
+ * UI improvements (round 3):
+ *  - Search button is a wider pill with "Search" text + icon. Tapping it
+ *    transitions into a full-width search bar with keyboard.
+ *  - Options button opens a bottom-up sheet (not a dropdown) with Sort,
+ *    Display modes, and Customize entry.
  */
 @Composable
 fun LibraryScreen(
@@ -116,7 +104,6 @@ fun LibraryScreen(
         gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 20
     }
 
-    // Header title: "N in Library" when showTotalEntries is on, else "Library".
     val headerTitle = when {
         state.selectionMode -> "${state.selectedIds.size} selected"
         state.showTotalEntries -> "${state.totalEntryCount} in Library"
@@ -125,31 +112,47 @@ fun LibraryScreen(
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Pinned header with combined search + overflow menu ──
+            // ── Pinned header with pill search + options button ──
             CollapsingHeader(
                 title = headerTitle,
                 collapsed = collapsed,
                 actions = {
                     if (!state.selectionMode) {
-                        // Search button (left of the menu button)
-                        HeaderActionButton(
-                            icon = if (state.hasActiveSearch) Icons.Filled.Close else Icons.Filled.Search,
-                            contentDescription = "Search",
+                        // Pill-shaped search button (transitions to search bar on tap)
+                        SearchPillButton(
+                            isActive = state.hasActiveSearch,
                             onClick = {
-                                viewModel.setSearchQuery(if (state.hasActiveSearch) "" else " ")
+                                viewModel.setSearchQuery(if (state.hasActiveSearch) "" else "")
+                                // Toggle search mode: empty string = inactive, non-empty = active
+                                if (!state.hasActiveSearch) {
+                                    viewModel.setSearchQuery(" ") // activate search mode
+                                }
                             },
                         )
                         Spacer(Modifier.width(8.dp))
-                        // Combined overflow menu button
-                        OverflowMenuButton(
-                            displayMode = state.displayMode,
-                            onSort = { viewModel.showSortSheet() },
-                            onDisplayMode = { viewModel.setDisplayMode(it) },
-                            onCustomize = { viewModel.showCustomizeSheet() },
+                        // Options button (opens bottom-up sheet)
+                        HeaderActionButton(
+                            icon = Icons.Filled.Tune,
+                            contentDescription = "Library options",
+                            onClick = { viewModel.showOptionsSheet() },
                         )
                     }
                 },
             )
+
+            // ── Animated search bar (appears when search pill is tapped) ──
+            AnimatedVisibility(
+                visible = state.hasActiveSearch,
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                SearchField(
+                    query = state.searchQuery,
+                    onQueryChange = { viewModel.setSearchQuery(it) },
+                    placeholder = "Search library",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
 
             // ── Category tabs or Select All/Clear bar ──
             if (state.selectionMode) {
@@ -165,16 +168,6 @@ fun LibraryScreen(
                     categories = state.categories,
                     activeFilter = state.activeFilter,
                     onSelect = { viewModel.setActiveFilter(it) },
-                )
-            }
-
-            // ── Search field (collapsible) ──
-            if (state.hasActiveSearch) {
-                SearchField(
-                    query = state.searchQuery,
-                    onQueryChange = { viewModel.setSearchQuery(it) },
-                    placeholder = "Search library",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
 
@@ -259,6 +252,15 @@ fun LibraryScreen(
 
         // ── Sheets + dialogs ──
         when (val dialog = state.dialog) {
+            is LibraryDialog.OptionsSheet -> OptionsSheet(
+                displayMode = state.displayMode,
+                onSort = { viewModel.showSortSheet() },
+                onDisplayMode = {
+                    viewModel.setDisplayMode(it)
+                },
+                onCustomize = { viewModel.showCustomizeSheet() },
+                onDismiss = { viewModel.dismissDialog() },
+            )
             is LibraryDialog.CustomizeSheet -> CustomizeSheet(
                 displayMode = state.displayMode,
                 columns = state.columns,
@@ -411,78 +413,173 @@ private fun ListContent(
     }
 }
 
-// ── Overflow menu (combined sort + view mode + customize) ──
+// ── Pill-shaped search button ──
 
 @Composable
-private fun OverflowMenuButton(
+private fun SearchPillButton(
+    isActive: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(50),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (isActive) Icons.Filled.Close else Icons.Filled.Search,
+                contentDescription = if (isActive) "Close search" else "Search",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "Search",
+                fontFamily = RobotoFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ── Options bottom-up sheet (replaces dropdown) ──
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun OptionsSheet(
     displayMode: LibraryDisplayMode,
     onSort: () -> Unit,
     onDisplayMode: (LibraryDisplayMode) -> Unit,
     onCustomize: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    AnikutaBottomSheet(onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Library Options",
+                fontFamily = RobotoFamily,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(16.dp))
 
-    Box {
-        HeaderActionButton(
-            icon = Icons.Filled.Tune,
-            contentDescription = "Library options",
-            onClick = { expanded = true },
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            // Sort
-            DropdownMenuItem(
-                text = { Text("Sort", fontFamily = RobotoFamily, fontWeight = FontWeight.SemiBold) },
-                leadingIcon = { Icon(Icons.Outlined.Sort, contentDescription = null) },
+            // Sort entry
+            OptionSheetRow(
+                label = "Sort",
                 onClick = {
-                    expanded = false
+                    onDismiss()
                     onSort()
                 },
             )
-            // Display mode section
-            DropdownMenuItem(
-                text = { Text("Compact Grid", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COMPACT_GRID) FontWeight.ExtraBold else FontWeight.SemiBold) },
-                leadingIcon = { if (displayMode == LibraryDisplayMode.COMPACT_GRID) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+            Spacer(Modifier.height(8.dp))
+
+            // Display modes section label
+            Text(
+                text = "DISPLAY MODE",
+                fontFamily = RobotoFamily,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+            )
+
+            OptionSheetRow(
+                label = "Compact Grid",
+                isSelected = displayMode == LibraryDisplayMode.COMPACT_GRID,
                 onClick = {
-                    expanded = false
                     onDisplayMode(LibraryDisplayMode.COMPACT_GRID)
+                    onDismiss()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Comfortable Grid", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COMFORTABLE_GRID) FontWeight.ExtraBold else FontWeight.SemiBold) },
-                leadingIcon = { if (displayMode == LibraryDisplayMode.COMFORTABLE_GRID) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+            OptionSheetRow(
+                label = "Comfortable Grid",
+                isSelected = displayMode == LibraryDisplayMode.COMFORTABLE_GRID,
                 onClick = {
-                    expanded = false
                     onDisplayMode(LibraryDisplayMode.COMFORTABLE_GRID)
+                    onDismiss()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("Cover Only", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.COVER_ONLY) FontWeight.ExtraBold else FontWeight.SemiBold) },
-                leadingIcon = { if (displayMode == LibraryDisplayMode.COVER_ONLY) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+            OptionSheetRow(
+                label = "Cover Only",
+                isSelected = displayMode == LibraryDisplayMode.COVER_ONLY,
                 onClick = {
-                    expanded = false
                     onDisplayMode(LibraryDisplayMode.COVER_ONLY)
+                    onDismiss()
                 },
             )
-            DropdownMenuItem(
-                text = { Text("List", fontFamily = RobotoFamily, fontWeight = if (displayMode == LibraryDisplayMode.LIST) FontWeight.ExtraBold else FontWeight.SemiBold) },
-                leadingIcon = { if (displayMode == LibraryDisplayMode.LIST) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) else Icon(Icons.Outlined.GridView, contentDescription = null) },
+            OptionSheetRow(
+                label = "List",
+                isSelected = displayMode == LibraryDisplayMode.LIST,
                 onClick = {
-                    expanded = false
                     onDisplayMode(LibraryDisplayMode.LIST)
+                    onDismiss()
                 },
             )
-            // Customize
-            DropdownMenuItem(
-                text = { Text("Customize", fontFamily = RobotoFamily, fontWeight = FontWeight.SemiBold) },
-                leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+
+            Spacer(Modifier.height(12.dp))
+            OptionSheetRow(
+                label = "Customize",
                 onClick = {
-                    expanded = false
+                    onDismiss()
                     onCustomize()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun OptionSheetRow(
+    label: String,
+    isSelected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Surface(
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                else Color.Transparent,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                fontFamily = RobotoFamily,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = if (isSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+            )
+            if (isSelected) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(50),
+                ) {
+                    Text(
+                        text = "✓",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = RobotoFamily,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -510,7 +607,7 @@ private fun HeaderActionButton(
     }
 }
 
-// ── Selection top bar (replaces CategoryTabs in selection mode) ──
+// ── Selection top bar ──
 
 @Composable
 private fun SelectionTopBar(
@@ -546,20 +643,12 @@ private fun SelectionPill(text: String, icon: androidx.compose.ui.graphics.vecto
     }
 }
 
-// ── Filtering + sorting (uses animeCategoryLinks for category filtering) ──
+// ── Filtering + sorting ──
 
-/**
- * Apply the current category filter + search query + sort to the library anime.
- *
- * Category filtering uses [LibraryState.animeCategoryLinks] — a map from
- * animeId to the set of categoryIds it belongs to. When the active filter is
- * [CategoryFilter.One], only anime whose id maps to a set containing the
- * selected category's id are shown.
- */
 private fun filteredSortedItems(state: LibraryState): List<Anime> {
     var result = state.libraryAnime
 
-    // Category filter — uses the anime_category junction data.
+    // Category filter
     result = when (state.activeFilter) {
         is CategoryFilter.All -> result
         is CategoryFilter.One -> {

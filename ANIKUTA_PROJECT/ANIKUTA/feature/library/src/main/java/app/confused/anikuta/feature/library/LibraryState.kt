@@ -72,6 +72,8 @@ data class LibraryState(
 sealed interface LibraryDialog {
     data object CustomizeSheet : LibraryDialog
     data object SortSheet : LibraryDialog
+    /** The combined options bottom-up sheet (sort + display modes + customize entry). */
+    data object OptionsSheet : LibraryDialog
     /** Category picker for selection-mode "move to category". */
     data class MoveToCategorySheet(val animeIds: List<Long>) : LibraryDialog
     /** Delete confirmation. */

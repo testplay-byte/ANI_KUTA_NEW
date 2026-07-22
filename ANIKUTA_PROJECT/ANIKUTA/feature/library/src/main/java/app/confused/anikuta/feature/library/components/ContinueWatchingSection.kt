@@ -39,12 +39,12 @@ import coil3.compose.AsyncImage
  * "Continue Watching" rail — wrapped in a dedicated background surface so it
  * visually stands out from the rest of the library grid.
  *
- * Each card shows:
- *  - The cover image (2:3 aspect ratio, matching grid cards).
- *  - A bottom gradient overlay with the anime title + "EP N" text on top of
- *    the cover (per user feedback: "showing it on top of the cover would be
- *    a much better idea").
- *  - A thin progress bar at the very bottom of the cover.
+ * Per user feedback (round 3): covers should be LANDSCAPE (16:9), not portrait.
+ * The title + episode info is overlaid on the cover with a bottom gradient.
+ * A thin progress bar sits at the very bottom of the cover.
+ *
+ * If the cover URL is null/blank, a surfaceVariant placeholder with the anime
+ * title is shown instead of a blank box.
  */
 @Composable
 fun ContinueWatchingSection(
@@ -52,8 +52,6 @@ fun ContinueWatchingSection(
     onClick: (ContinueWatchingItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Dedicated background surface — uses primaryContainer at low alpha so the
-    // section stands out from the main background.
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f),
         shape = RoundedCornerShape(16.dp),
@@ -90,16 +88,17 @@ private fun ContinueWatchingCard(
     item: ContinueWatchingItem,
     onClick: () -> Unit,
 ) {
+    // Landscape 16:9 ratio per user request.
     Box(
         modifier = Modifier
-            .width(100.dp)
+            .width(160.dp)
             .clickable(onClick = onClick),
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(2f / 3f)
+                    .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant),
             ) {
@@ -110,6 +109,21 @@ private fun ContinueWatchingCard(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
+                } else {
+                    // Placeholder: show the anime title centered on surfaceVariant.
+                    Text(
+                        text = item.animeTitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = RobotoFamily,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 8.dp),
+                    )
                 }
 
                 // Bottom gradient overlay for text readability.
@@ -118,7 +132,7 @@ private fun ContinueWatchingCard(
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                0.4f to Color.Transparent,
+                                0.5f to Color.Transparent,
                                 1.0f to Color.Black.copy(alpha = 0.85f),
                             ),
                         ),
@@ -129,7 +143,7 @@ private fun ContinueWatchingCard(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .padding(horizontal = 5.dp, vertical = 4.dp),
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = item.animeTitle,

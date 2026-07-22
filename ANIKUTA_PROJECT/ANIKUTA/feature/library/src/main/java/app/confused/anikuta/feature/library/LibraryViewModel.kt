@@ -63,7 +63,7 @@ class LibraryViewModel(
                 }.combine(preferencesFlow()) { data, prefs ->
                     Pair(data, prefs)
                 }.collect { (data, prefs) ->
-                    val continueWatching = deriveContinueWatching(data.progressMap)
+                    val continueWatching = deriveContinueWatching(data.progressMap, data.animeList)
                     val animeCategoryLinks = buildAnimeCategoryMap(data.links)
                     Log.d(TAG, "State updated: ${data.animeList.size} anime, ${data.categories.size} categories, ${data.links.size} links")
                     _state.update { it.copy(
@@ -152,7 +152,22 @@ class LibraryViewModel(
 
     // ── Continue-watching derivation ──
 
-    private fun deriveContinueWatching(progressMap: Map<String, WatchProgressStore.Progress>): List<ContinueWatchingItem> {
+    /**
+     * Derive continue-watching items from the watch progress map.
+     *
+     * Cross-references with the library anime list to fill in cover URLs when
+     * the progress entry doesn't have one (older progress entries may lack
+     * the coverUrl field).
+     */
+    private fun deriveContinueWatching(
+        progressMap: Map<String, WatchProgressStore.Progress>,
+        libraryAnime: List<Anime>,
+    ): List<ContinueWatchingItem> {
+        // Build a lookup: anilistId → anime (for cover URL fallback).
+        val animeByAnilistId = libraryAnime.mapNotNull { anime ->
+            anime.anilistId?.let { it to anime }
+        }.toMap()
+
         // Group by anilistId, pick the most-recently-watched episode per anime.
         val byAnime = mutableMapOf<Int, MutableList<Map.Entry<String, WatchProgressStore.Progress>>>()
         for (entry in progressMap.entries) {
@@ -165,10 +180,13 @@ class LibraryViewModel(
             val ratio = if (progress.durationSeconds > 0) {
                 (progress.positionSeconds.toFloat() / progress.durationSeconds.toFloat()).coerceIn(0f, 1f)
             } else 0f
+            // Fallback: use the library anime's cover URL if progress doesn't have one.
+            val coverUrl = progress.coverUrl ?: animeByAnilistId[anilistId]?.coverUrl
+            val animeTitle = progress.animeTitle ?: animeByAnilistId[anilistId]?.title ?: "Unknown"
             ContinueWatchingItem(
                 anilistId = anilistId,
-                animeTitle = progress.animeTitle ?: "Unknown",
-                coverUrl = progress.coverUrl,
+                animeTitle = animeTitle,
+                coverUrl = coverUrl,
                 episodeNumber = if (progress.episodeNumber >= 0) progress.episodeNumber.toInt() else -1,
                 episodeTitle = progress.title,
                 progress = ratio,
@@ -255,6 +273,10 @@ class LibraryViewModel(
 
     fun showCustomizeSheet() {
         _state.update { it.copy(dialog = LibraryDialog.CustomizeSheet) }
+    }
+
+    fun showOptionsSheet() {
+        _state.update { it.copy(dialog = LibraryDialog.OptionsSheet) }
     }
 
     fun showSortSheet() {

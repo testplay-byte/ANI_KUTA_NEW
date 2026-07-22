@@ -23,11 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,19 +49,12 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 /**
  * A floating Dialog for picking categories.
  *
- * Per user decision Q7: the detail-page save button long-press opens a
- * "floating kind of menu" — this Dialog is that menu.
- *
- * Redesigned (round 2) for a more compact, polished look:
- *  - Compact rows (less vertical padding).
- *  - Lime-green check icon on selected categories.
- *  - Smaller dialog height (fits more categories without overwhelming).
- *  - "Add new category" row with accent styling.
+ * Redesigned (round 3) with proper styled buttons:
+ *  - Done = filled primary button
+ *  - Cancel = outlined button
  *
  * @param categories All visible categories.
- * @param selectedCategoryIds The IDs currently selected (pre-checked). This
- *   is loaded by the caller before showing the dialog — the anime's current
- *   categories are passed here so they show tick marks.
+ * @param selectedCategoryIds The IDs currently selected (pre-checked).
  * @param onConfirm Called with the new set of selected category IDs.
  * @param onDismiss Called when the dialog is cancelled.
  * @param onAddNewCategory Called when the user taps "Add new category".
@@ -139,23 +134,32 @@ fun CategoryPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(currentSelection.value.toSet()) }) {
+            Button(
+                onClick = { onConfirm(currentSelection.value.toSet()) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                shape = RoundedCornerShape(50),
+            ) {
                 Text(
                     "Done",
                     fontFamily = RobotoFamily,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
                 )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(50),
+            ) {
                 Text(
                     "Cancel",
                     fontFamily = RobotoFamily,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
