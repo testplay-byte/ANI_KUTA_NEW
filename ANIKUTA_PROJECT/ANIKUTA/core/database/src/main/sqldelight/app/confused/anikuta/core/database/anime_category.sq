@@ -1,4 +1,4 @@
--- anime_category.sq — Junction table for anime ↔ category
+-- anime_category.sq — Junction table for anime ↔ category (many-to-many)
 
 CREATE TABLE anime_category (
     _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -12,12 +12,33 @@ CREATE TABLE anime_category (
 selectByAnimeId:
 SELECT * FROM anime_category WHERE anime_id = :animeId;
 
+selectAll:
+SELECT * FROM anime_category;
+
 selectByCategoryId:
 SELECT * FROM anime_category WHERE category_id = :categoryId ORDER BY category_order;
 
+selectCategoriesByAnimeId:
+SELECT c.* FROM categories c
+INNER JOIN anime_category ac ON c._id = ac.category_id
+WHERE ac.anime_id = :animeId
+ORDER BY c.category_order;
+
+selectAnimeIdsByCategoryId:
+SELECT anime_id FROM anime_category WHERE category_id = :categoryId ORDER BY category_order;
+
+countAnimeInCategory:
+SELECT COUNT(*) FROM anime_category WHERE category_id = :categoryId;
+
 insert:
-INSERT INTO anime_category (anime_id, category_id, category_order)
+INSERT OR IGNORE INTO anime_category (anime_id, category_id, category_order)
 VALUES (:animeId, :categoryId, :order);
 
 deleteByAnimeId:
 DELETE FROM anime_category WHERE anime_id = :animeId;
+
+deleteByAnimeIdAndCategoryId:
+DELETE FROM anime_category WHERE anime_id = :animeId AND category_id = :categoryId;
+
+deleteByCategoryId:
+DELETE FROM anime_category WHERE category_id = :categoryId;

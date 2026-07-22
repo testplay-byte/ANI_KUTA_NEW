@@ -9,6 +9,13 @@ package app.confused.anikuta.core.common.model
  * - [lastRefresh] — last time the library entry was refreshed from the source.
  * - [lastMetadataFetch] — last time metadata was fetched (AniList/extension).
  * - [nextEpisodeCheck] — when to next check for a new episode (ADR-014).
+ *
+ * Library columns (Phase A — library page):
+ * - [anilistId] — the AniList media ID, used to link WatchProgressStore entries.
+ * - [coverColor] — hex color extracted from the cover for dynamic theming.
+ * - [score] — AniList average score (0-100).
+ * - [totalEpisodes] — AniList total episodes count.
+ * - [lastWatched] — epoch ms of last watch activity (for "Last watched" sort).
  */
 data class Anime(
     val id: Long,
@@ -33,7 +40,28 @@ data class Anime(
     val lastRefresh: Long,
     val lastMetadataFetch: Long?,
     val nextEpisodeCheck: Long?,
-)
+    // Library columns (Phase A)
+    val anilistId: Int?,
+    val coverColor: String?,
+    val score: Double?,
+    val totalEpisodes: Int?,
+    val lastWatched: Long,
+    val nextAiringEpisode: Int?,
+) {
+    /**
+     * The number of episodes that have aired (released).
+     *
+     * If [nextAiringEpisode] is not null, the anime is still airing and
+     * released = nextAiringEpisode - 1. If null, the anime is finished and
+     * released = [totalEpisodes].
+     */
+    val releasedEpisodes: Int?
+        get() = when {
+            nextAiringEpisode != null && nextAiringEpisode > 0 -> nextAiringEpisode - 1
+            totalEpisodes != null -> totalEpisodes
+            else -> null
+        }
+}
 
 /** Anime publishing status. */
 object AnimeStatus {

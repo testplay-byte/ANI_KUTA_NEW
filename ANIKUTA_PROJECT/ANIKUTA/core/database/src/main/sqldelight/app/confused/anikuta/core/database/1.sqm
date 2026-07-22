@@ -1,0 +1,30 @@
+-- 1.sqm — migrate from v1 to v2: library page support
+--
+-- Adds:
+--   - animes: anilist_id, cover_color, score, total_episodes, last_watched columns
+--   - categories: hidden column + Default category seed (id=1) + delete trigger
+--   - anime_category: new junction queries (no schema change, just new queries)
+--
+-- This migration is safe for existing dev installs. The Default category seed
+-- uses INSERT OR IGNORE so it won't conflict if somehow already present.
+
+-- ── animes: add AniList linkage + cached metadata + last-watched tracking ──
+ALTER TABLE animes ADD COLUMN anilist_id INTEGER;
+ALTER TABLE animes ADD COLUMN cover_color TEXT;
+ALTER TABLE animes ADD COLUMN score REAL;
+ALTER TABLE animes ADD COLUMN total_episodes INTEGER;
+ALTER TABLE animes ADD COLUMN last_watched INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE animes ADD COLUMN next_airing_episode INTEGER;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_anilist_id
+ON animes(anilist_id) WHERE anilist_id IS NOT NULL;
+
+-- ── categories: add hidden column + seed Default ──
+ALTER TABLE categories ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
+
+INSERT OR IGNORE INTO categories (_id, name, category_order, flags, hidden)
+VALUES (1, 'Default', 0, 0, 0);
+
+-- Note: Default-category deletion protection is enforced at the application
+-- layer (CategoryRepositoryImpl.delete throws for id=1). A DB trigger was
+-- omitted because SQLDelight's parser doesn't recognize OLD/NEW in triggers.

@@ -7,6 +7,8 @@ import app.confused.anikuta.core.common.model.Anime
  *
  * Parameter order and types match the `animes` table columns (CREATE TABLE order).
  * SQLDelight calls this mapper with the column values; we convert types here.
+ *
+ * Phase A: added anilistId, coverColor, score, totalEpisodes, lastWatched.
  */
 object AnimeMapper {
 
@@ -33,6 +35,12 @@ object AnimeMapper {
         lastRefresh: Long,
         lastMetadataFetch: Long?,
         nextEpisodeCheck: Long?,
+        anilistId: Long?,
+        coverColor: String?,
+        score: Double?,
+        totalEpisodes: Long?,
+        lastWatched: Long,
+        nextAiringEpisode: Long?,
     ): Anime = Anime(
         id = id,
         url = url,
@@ -55,5 +63,11 @@ object AnimeMapper {
         lastRefresh = lastRefresh,
         lastMetadataFetch = lastMetadataFetch,
         nextEpisodeCheck = nextEpisodeCheck,
+        anilistId = anilistId?.toInt(),
+        coverColor = coverColor,
+        score = score,
+        totalEpisodes = totalEpisodes?.toInt(),
+        lastWatched = lastWatched,
+        nextAiringEpisode = nextAiringEpisode?.toInt(),
     )
 }
