@@ -90,37 +90,63 @@ episodeSettingsPage != null -> {
 ## 4. The episode row (in `:feature:anime-details`)
 
 The actual episode row lives in `feature/anime-details/.../EpisodesSection.kt`
-(`EpisodeRow` composable). It was rebuilt to match the OLD ANIKUTA design:
+(`EpisodeRow` composable). It uses a **fixed two-section layout** (per user spec):
 
-### 4.1 Episode number badge (3 variants)
+```
+┌───────────────────────────────────────────────────┐
+│  TOP SECTION (height driven by thumbnail)          │
+│  ┌──────────┐  ┌─ Title (bg) ──────────────────┐  │
+│  │          │  │ EP 3  The Dragon's Labyrinth   │  │
+│  │ Thumbnail│  └────────────────────────────────┘  │
+│  │  EP 3   │  ┌─ Date + Audio (bg) ────────────┐  │
+│  │          │  │ Mar 15, 2024  SUB•DUB          │  │
+│  └──────────┘  └────────────────────────────────┘  │
+├───────────────────────────────────────────────────┤
+│  BOTTOM SECTION                                    │
+│  ┌─ Synopsis (bg) ──────────────────────────────┐  │
+│  │ A young adventurer discovers a hidden...     │  │
+│  └──────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────┘
+```
 
-| Variant | When | Design |
-|---|---|---|
-| **Overlay** (default) | `episodeNumberPosition == "overlay"` + thumbnail present | `Surface(RoundedCornerShape(6.dp), Color.Black.copy(0.7f))` at TopStart/TopEnd of thumbnail, 4dp outer pad. Text `"EP N"` in `labelSmall` Bold **White**, 6dp/2dp inner pad. |
-| **Badge** | `episodeNumberPosition == "badge"` | `Surface(RoundedCornerShape(6.dp), primaryContainer)`. Same text, `onPrimaryContainer`. Sits inline before the title. |
-| **Circle** (fallback) | No thumbnail + position ≠ "badge" | `Surface(CircleShape, surfaceVariant, size=40.dp)`. Bare number (no "EP"), `labelMedium` Bold, `onSurfaceVariant`. |
+- The top section's right side is divided into TWO equal sub-sections:
+  title (top) + date/audio (bottom). Height is driven by the thumbnail.
+- Each element (title, date+audio, synopsis) gets a **dedicated background
+  container** (toggleable): title = `surfaceContainerHigh`, meta = `surfaceContainer`,
+  synopsis = `surfaceContainerLow`.
+- **No alternating zebra-stripe** — all rows use `surfaceVariant@0.2` (single
+  lighter shade).
+- Layout position prefs are **dormant** — the row uses this single fixed view.
+  Only thumbnail SIZE is active.
+
+### 4.1 Episode number badge (overlay)
+- `Surface(RoundedCornerShape(6.dp), Color.Black.copy(0.7f))` at TopStart of
+  the thumbnail, 4dp outer pad.
+- Text `"EP N"` in RobotoFamily 11sp Bold **White**, tight 6dp/1dp inner pad,
+  `lineHeight = 13.sp`.
+- Circle fallback (no thumbnail): 40dp `surfaceVariant` disc, bare number.
 
 ### 4.2 Title
-- Plain `Text` on the card (NO `surfaceContainerHigh` box — was too heavy).
-- `maxLines = titleMaxLines` (default **1** per user request — "force single line").
-- Configurable 1 or 2 via the Display settings screen.
-- `FontWeight.Bold`, `onSurface`, `RobotoFamily`.
+- Inside a `surfaceContainerHigh` background container (toggleable via
+  `showTitleBackground`). When toggled off, renders as plain text.
+- `maxLines = titleMaxLines` (default **1** — "force single line"), configurable 1/2.
+- `FontWeight.Bold`, `onSurface`, `RobotoFamily`, 14sp, 8dp/4dp inner pad.
 
-### 4.3 Date
-- `outlineVariant` pill, `labelSmall` Medium, `onSurfaceVariant`, 8dp/3dp pad.
-- Format: `"MMM d, yyyy"`.
-- Source: `metadata.airDate` (epoch seconds → ×1000) OR `episode.date_upload` (epoch millis).
-- Shown when `showDates` + data available.
+### 4.3 Date + Audio (shared meta background)
+- Inside a `surfaceContainer` background container (toggleable via
+  `showMetaBackground`). Holds the date pill + audio pills in a Row.
+- **Date pill**: `outlineVariant` surface, 10sp Medium, `onSurfaceVariant`,
+  tight 6dp/1dp pad, `lineHeight = 12.sp`. Format: `"MMM d, yyyy"`.
+- Source: `metadata.airDate` (epoch seconds → ×1000) OR `episode.date_upload`.
 
 ### 4.4 Audio pills (SUB/DUB/HSUB)
 - **Single** `outlineVariant` surface holding all detected versions.
-- 2+ versions → short letters ("S", "D") separated by 3dp dots; 1 version → full label ("SUB").
+- **ALWAYS uses full names**: "SUB", "DUB", "HSUB" separated by 3dp dots →
+  "SUB•DUB" (per user request — not short letters).
+- Tight 6dp/1dp pad, 10sp SemiBold, `lineHeight = 12.sp`.
 - Derived from `parseAudioAvailability(episode.scanlator, episode.name)` — checks BOTH
   (many extensions put the token in the episode name since `scanlator` is rarely set).
 - HSUB is checked before SUB (since "HSUB" contains "SUB" as a substring).
-- NOTE: True per-episode audio-track data (`Video.audioTracks`) is only available
-  after `getVideoList()` at watch time — not at episode-list time. This is the
-  pragmatic episode-list-time approach.
 
 ### 4.5 Thumbnail
 - `metadata.thumbnailUrl ?: episode.preview_url` (fallback so thumbnails render
@@ -129,8 +155,9 @@ The actual episode row lives in `feature/anime-details/.../EpisodesSection.kt`
 - `clip(RoundedCornerShape(10.dp))`, `ContentScale.Crop`.
 
 ### 4.6 Synopsis
-- Plain `Text` on the card (no surface background).
-- `maxLines = synopsisMaxLines` (default 3), `Ellipsis`.
+- Inside a `surfaceContainerLow` background container (toggleable via
+  `showSynopsisBackground`). When toggled off, renders as plain text.
+- `maxLines = synopsisMaxLines` (default 3), `Ellipsis`, 12sp Normal.
 
 ### 4.7 Watched effect
 - `Modifier.watchedEpisodeEffect(isWatched)` → grayscale (RenderEffect, API 31+) + alpha 0.55f.
@@ -179,6 +206,9 @@ All episode-display prefs (in `EpisodeDisplayPreferences`, package `feature.anim
 | `pref_ep_num_pos` | String | `"overlay"` | Layout screen Segmented (Overlay/Badge) |
 | `pref_ep_thumb_size` | String | `"medium"` | Layout screen Segmented (S/M/L) |
 | `pref_ep_synopsis_lines` | Int | `3` | (not yet in UI — reserved) |
+| `pref_ep_show_title_bg` | Boolean | `true` | Display screen Switch (Backgrounds group) |
+| `pref_ep_show_meta_bg` | Boolean | `true` | Display screen Switch (Backgrounds group) |
+| `pref_ep_show_synopsis_bg` | Boolean | `true` | Display screen Switch (Backgrounds group) |
 
 Episode-metadata prefs (in `EpisodeMetadataPreferences`, package `core.episodemetadata`):
 
