@@ -113,6 +113,7 @@ private fun AnikutaApp() {
     // Search-page stores (registered in searchModule + extensionModule)
     val recentsStore: RecentSearchesStore = koinInject()
     val extensionLinkStore: ExtensionLinkStore = koinInject()
+    val searchUiPreferences: app.confused.anikuta.feature.search.data.SearchUiPreferences = koinInject()
 
     // Repo layer (for the ExtensionsSettings + RepoSettings screens)
     val repoRepository: ExtensionRepoRepository = koinInject()
@@ -193,6 +194,7 @@ private fun AnikutaApp() {
                     api = anilistApi,
                     extensionManager = extensionManager,
                     sourceMatcher = sourceMatcher,
+                    extensionLinkStore = extensionLinkStore,
                     onBack = {
                         detailAnimeId = null
                         resolverState = VideoResolverState.Hidden
@@ -238,11 +240,13 @@ private fun AnikutaApp() {
                         extensionManager = extensionManager,
                         sourceMatcher = sourceMatcher,
                         recentsStore = recentsStore,
+                        uiPreferences = searchUiPreferences,
                         onOpenAnime = { id -> detailAnimeId = id },
                         onOpenExtensionResult = { result ->
-                            // Start the extension→AniList linking flow (Phase D).
+                            // Start the extension→AniList linking flow.
                             // The linking sheet auto-searches AniList by the SAnime title;
-                            // on success it calls onLinked (opens detail) + shows a toast.
+                            // on success it calls onLinked (opens detail). The sheet is
+                            // delayed 400ms so fast resolves skip it entirely (smoother UX).
                             linkingTarget = result.source to result.sAnime
                         },
                     )
@@ -318,8 +322,10 @@ private fun AnikutaApp() {
         // Extension→AniList linking sheet overlay (Phase D).
         // Shown when the user taps an extension result on the Search page.
         // The sheet auto-searches AniList by the SAnime title:
-        //  - On link success → opens the existing AnimeDetailScreen (by AniList ID)
-        //    + shows a "Linked to AniList" toast.
+        //  - On link success → opens the existing AnimeDetailScreen (by AniList ID).
+        //    A "Linked to AniList" toast is shown ONLY on fresh links (auto or
+        //    manual) — NOT on cache hits (per owner: "it should not show that
+        //    always"). The [wasCached] flag from the VM drives this.
         //  - On "go without linking" → shows a toast (extension-only detail page
         //    is a future enhancement; the existing AnimeDetailScreen needs an ID).
         if (linkingTarget != null) {
@@ -329,9 +335,14 @@ private fun AnikutaApp() {
                 sAnime = sAnime,
                 anilistApi = anilistApi,
                 linkStore = extensionLinkStore,
-                onLinked = { anilistId ->
+                onLinked = { anilistId, wasCached ->
                     linkingTarget = null
-                    Toast.makeText(context, "Linked to AniList", Toast.LENGTH_SHORT).show()
+                    if (!wasCached) {
+                        Toast.makeText(context, "Linked to AniList", Toast.LENGTH_SHORT).show()
+                        Log.i("AnikutaSearch", "Linked (fresh): ${sAnime.title} → AniList $anilistId")
+                    } else {
+                        Log.i("AnikutaSearch", "Linked (cached): ${sAnime.title} → AniList $anilistId (no toast)")
+                    }
                     detailAnimeId = anilistId
                 },
                 onGoWithoutLinking = { extSource, extSAnime ->

@@ -33,8 +33,16 @@ sealed class ExtensionLinkingState {
     /** Loading — the auto-search is running. */
     data object Loading : ExtensionLinkingState()
 
-    /** A link was resolved (cached or auto-linked). Open the AniList detail. */
-    data class Linked(val anilistId: Int) : ExtensionLinkingState()
+    /**
+     * A link was resolved (cached or auto-linked). Open the AniList detail.
+     *
+     * @param wasCached `true` if the link came from the [ExtensionLinkStore]
+     *   cache (instant, no network). The caller uses this to decide whether to
+     *   show a "Linked to AniList" toast — only show it on FRESH links (auto
+     *   or manual), not on cache hits (per owner: "it should not show that
+     *   always").
+     */
+    data class Linked(val anilistId: Int, val wasCached: Boolean = false) : ExtensionLinkingState()
 
     /**
      * Auto-search done, no confident match. Show the linking sheet with
@@ -96,8 +104,8 @@ class ExtensionLinkingViewModel(
         // 1. Cache check — skip the sheet entirely if we've linked this before.
         val cached = linkStore.getAniListId(source.id, sAnime.url)
         if (cached != null) {
-            Log.i(TAG, "Cache hit: ${sAnime.title} → AniList $cached (no sheet shown)")
-            _state.value = ExtensionLinkingState.Linked(cached)
+            Log.i(TAG, "Cache hit: ${sAnime.title} → AniList $cached (no sheet shown, no toast)")
+            _state.value = ExtensionLinkingState.Linked(cached, wasCached = true)
             return
         }
 

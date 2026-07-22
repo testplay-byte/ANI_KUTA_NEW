@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,23 +74,37 @@ fun ResultAnimeCard(
                 contentScale = ContentScale.Crop,
             )
             // Score badge (AniList only — extensions don't provide scores).
+            // Redesigned: dark translucent pill with a lime star + white score —
+            // high contrast on any cover, reads as a "rating" at a glance.
             val score = result.scoreBadge()
             if (score != null) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(6.dp),
+                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp),
                 ) {
-                    Text(
-                        text = "★ $score",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        fontFamily = RobotoFamily,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "★",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontFamily = RobotoFamily,
+                        )
+                        Spacer(Modifier.padding(horizontal = 2.dp))
+                        Text(
+                            text = score,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontFamily = RobotoFamily,
+                        )
+                    }
                 }
             }
         }
@@ -143,5 +158,7 @@ private fun SearchResult.metaLine(): String = when (this) {
         anime.episodes?.let { parts.add("$it ep") } ?: anime.seasonYear?.let { parts.add(it.toString()) }
         parts.joinToString(" · ")
     }
-    is SearchResult.Extension -> sourceName
+    // Extension results: no meta line (per owner request — don't show the
+    // extension name below the cover; the active source is shown in the toggle).
+    is SearchResult.Extension -> ""
 }

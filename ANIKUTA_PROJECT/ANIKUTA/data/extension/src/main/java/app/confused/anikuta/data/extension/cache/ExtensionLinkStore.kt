@@ -69,6 +69,26 @@ class ExtensionLinkStore(
         return store.get()[key(sourceId, animeUrl)]
     }
 
+    /**
+     * Reverse lookup: given an AniList ID, return the extension source ID that
+     * was used to link it most recently (or null if no link exists).
+     *
+     * Used by `AnimeDetailViewModel` to prefer the source the user originally
+     * came from when loading episodes — fixes the owner's report: "it does not
+     * load the episodes from the exact same extension from which I went to the
+     * details page. Instead it sometimes picks a completely different extension."
+     *
+     * The key format is `"$sourceId:$animeUrl"`, so we parse the sourceId out
+     * of the first matching key.
+     */
+    fun getPreferredSourceForAnilist(anilistId: Int): Long? {
+        val map = store.get()
+        val entry = map.entries.firstOrNull { it.value == anilistId } ?: return null
+        val k = entry.key
+        val sourceIdStr = k.substringBefore(':')
+        return sourceIdStr.toLongOrNull()
+    }
+
     /** All links (for backup / debugging). Key = "$sourceId:$animeUrl". */
     fun getAll(): Map<String, Int> = store.get()
 

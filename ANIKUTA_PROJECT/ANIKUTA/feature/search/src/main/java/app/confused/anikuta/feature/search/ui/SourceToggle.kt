@@ -87,7 +87,7 @@ private fun RowScope.SourceToggleSegment(
             .clip(RoundedCornerShape(50))
             .background(bg)
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {

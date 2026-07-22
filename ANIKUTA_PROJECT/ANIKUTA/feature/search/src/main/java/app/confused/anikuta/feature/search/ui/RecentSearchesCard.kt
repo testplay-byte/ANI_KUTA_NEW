@@ -52,7 +52,15 @@ import androidx.compose.ui.unit.sp
  *   + delete (28dp circle, `Close` 14dp).
  * - "Show N more" / "Show less" when `recents.size > 3`.
  *
+ * The collapsed state is **hoisted** to the caller (and persisted via
+ * [SearchUiPreferences]) so it survives screen changes + app restart — per the
+ * owner's request: "it should stay collapsed if it was previously collapsed,
+ * even if the app is closed and reopened again or the user goes to another
+ * screen".
+ *
  * @param recents most-recent first.
+ * @param collapsed whether the card is currently collapsed (controlled).
+ * @param onToggleCollapsed called when the user taps the collapse/show control.
  * @param onPick re-searches the picked recent.
  * @param onRemove deletes one recent.
  * @param onClear clears all.
@@ -60,11 +68,12 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun RecentSearchesCard(
     recents: List<String>,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
     onPick: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClear: () -> Unit,
 ) {
-    var collapsed by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
     val visibleCount = if (expanded) recents.size else minOf(3, recents.size)
     val visible = recents.take(visibleCount)
@@ -99,7 +108,7 @@ fun RecentSearchesCard(
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(CircleShape)
-                                .clickable { collapsed = true },
+                                .clickable { onToggleCollapsed() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -116,7 +125,7 @@ fun RecentSearchesCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                            .clickable { collapsed = false }
+                            .clickable { onToggleCollapsed() }
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

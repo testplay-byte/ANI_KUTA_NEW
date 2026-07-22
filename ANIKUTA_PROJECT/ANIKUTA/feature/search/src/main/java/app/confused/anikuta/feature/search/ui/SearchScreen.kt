@@ -13,13 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,31 +36,25 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.feature.search.data.RecentSearchesStore
+import app.confused.anikuta.feature.search.data.SearchUiPreferences
 import app.confused.anikuta.feature.search.viewmodel.SearchResult
 import app.confused.anikuta.feature.search.viewmodel.SearchSource
-import app.confused.anikuta.feature.search.viewmodel.SearchViewModel
 import app.confused.anikuta.feature.search.viewmodel.SearchUiState
+import app.confused.anikuta.feature.search.viewmodel.SearchViewModel
 
 /**
  * The Search screen — a dual-source search experience.
  *
  * Top bar (collapsing): title + AniList/Extension source toggle + search bar.
  * Below: quick row (Filters + Sort), then scrollable content:
- *   - AniList: RecentSearchesCard (when no query) + ResultsCard (results grid).
- *   - Extension: ExtensionResultsView (Popular + Latest rows) when no query,
+ *   - Recent searches (per-source; AniList and Extension have separate lists).
+ *   - AniList: ResultsCard (results grid, paginated on scroll-to-bottom).
+ *   - Extension: ExtensionResultsView (Popular + Latest rows) when blank query,
  *     or ResultsCard (search results grid) when a query is typed.
  *
  * Tapping an AniList result → [onOpenAnime] (opens the existing detail page).
  * Tapping an Extension result → [onOpenExtensionResult] (starts the linking
- * flow — see ExtensionLinkingSheet, added in Phase D).
- *
- * @param anilistApi the AniList GraphQL client.
- * @param extensionManager provides installed + trusted sources.
- * @param sourceMatcher searches extension sources by query.
- * @param recentsStore persists recent search strings.
- * @param onOpenAnime called with an AniList anime ID when an AniList result is tapped.
- * @param onOpenExtensionResult called when an extension result is tapped —
- *   the caller (MainActivity) shows the linking sheet.
+ * flow — see ExtensionLinkingSheet).
  */
 @Composable
 fun SearchScreen(
@@ -68,6 +62,7 @@ fun SearchScreen(
     extensionManager: AnimeExtensionManager,
     sourceMatcher: SourceMatcher,
     recentsStore: RecentSearchesStore,
+    uiPreferences: SearchUiPreferences,
     onOpenAnime: (Int) -> Unit,
     onOpenExtensionResult: (SearchResult.Extension) -> Unit,
 ) {
@@ -80,6 +75,7 @@ fun SearchScreen(
                 extensionManager = extensionManager,
                 sourceMatcher = sourceMatcher,
                 recentsStore = recentsStore,
+                uiPreferences = uiPreferences,
             ) as T
         },
     )
@@ -100,12 +96,14 @@ fun SearchScreen(
         onPickRecent = vm::onPickRecent,
         onRemoveRecent = vm::onRemoveRecent,
         onClearRecents = vm::onClearRecents,
+        onToggleRecentsCollapsed = vm::onToggleRecentsCollapsed,
         onResultTap = { result ->
             when (result) {
                 is SearchResult.AniList -> onOpenAnime(result.id)
                 is SearchResult.Extension -> onOpenExtensionResult(result)
             }
         },
+        onLoadMore = vm::onLoadMore,
         showSourcePicker = showSourcePicker,
         onPickExtensionSource = { id ->
             vm.onPickExtensionSource(id)
@@ -114,17 +112,33 @@ fun SearchScreen(
         onDismissSourcePicker = { showSourcePicker = false },
     )
 
-    // Filter sheet
+    // Filter sheet — edits a PENDING copy; only "Apply" syncs + re-fetches.
     FilterSheet(
         show = showFilterSheet,
-        filters = state.filters,
-        sort = state.sort,
-        onFiltersChange = vm::onFiltersChange,
-        onSortChange = vm::onSortChange,
+        pendingFilters = vm.getPendingFilters(),
+        appliedSort = state.sort,
+        onPendingFiltersChange = vm::onPendingFiltersChange,
+        onSortChange = vm::onSortChange, // sort is applied live (single-select, instant)
         onClearAll = vm::onClearFilters,
-        onApply = { showFilterSheet = false },
+        onApply = {
+            vm.applyFilters()
+            showFilterSheet = false
+        },
         onDismiss = { showFilterSheet = false },
     )
+
+    // Extension source picker — a styled bottom sheet (no drag handle).
+    if (showSourcePicker) {
+        ExtensionSourcePickerSheet(
+            sources = state.availableExtensionSources,
+            selectedId = state.selectedExtensionSourceId,
+            onPick = { id ->
+                vm.onPickExtensionSource(id)
+                showSourcePicker = false
+            },
+            onDismiss = { showSourcePicker = false },
+        )
+    }
 }
 
 @Composable
@@ -140,13 +154,21 @@ private fun SearchContent(
     onPickRecent: (String) -> Unit,
     onRemoveRecent: (String) -> Unit,
     onClearRecents: () -> Unit,
+    onToggleRecentsCollapsed: () -> Unit,
     onResultTap: (SearchResult) -> Unit,
+    onLoadMore: () -> Unit,
     showSourcePicker: Boolean,
     onPickExtensionSource: (Long) -> Unit,
     onDismissSourcePicker: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
     val collapsed = scrollState.value > 20
+
+    // Infinite-scroll detection — when the user is within ~600dp of the bottom,
+    // ask the ViewModel to load the next page (AniList only).
+    LaunchedEffect(scrollState, scrollState.maxValue) {
+        snapshotFlowAtBottom(scrollState) { onLoadMore() }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchTopBar(
@@ -164,21 +186,12 @@ private fun SearchContent(
             onSortChange = onSortChange,
         )
 
-        // Extension source picker (shown when the user re-taps the Extension toggle)
-        ExtensionSourcePicker(
-            expanded = showSourcePicker,
-            sources = state.availableExtensionSources,
-            selectedId = state.selectedExtensionSourceId,
-            onPick = onPickExtensionSource,
-            onDismiss = onDismissSourcePicker,
-        )
-
-        // Scrollable content
+        // Scrollable content — tight top padding (reduced from the earlier gap).
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(bottom = 110.dp), // floating nav clearance
+                .padding(top = 4.dp, bottom = 110.dp), // floating nav clearance
         ) {
             val sectionLabel = when {
                 state.query.isNotBlank() && state.source == SearchSource.ANILIST ->
@@ -189,14 +202,17 @@ private fun SearchContent(
                 else -> "Popular anime"
             }
 
-            // Recent searches (only when AniList, blank query, no filters, recents exist)
-            val showRecent = state.source == SearchSource.ANILIST &&
-                state.query.isBlank() &&
-                state.filters.activeCount == 0 &&
+            // Recent searches — per source, shown when query is blank, no
+            // applied filters, and recents exist. Both AniList AND Extension
+            // show their own (separate) recents list.
+            val showRecent = state.query.isBlank() &&
+                state.filters.isEmpty &&
                 state.recents.isNotEmpty()
             if (showRecent) {
                 RecentSearchesCard(
                     recents = state.recents,
+                    collapsed = state.recentsCollapsed,
+                    onToggleCollapsed = onToggleRecentsCollapsed,
                     onPick = onPickRecent,
                     onRemove = onRemoveRecent,
                     onClear = onClearRecents,
@@ -204,7 +220,6 @@ private fun SearchContent(
             }
 
             if (state.source == SearchSource.EXTENSION && state.query.isBlank()) {
-                // Extension default view: Popular + Latest rows.
                 ExtensionResultsView(
                     loading = state.loading,
                     error = state.error,
@@ -212,10 +227,10 @@ private fun SearchContent(
                     onResultTap = onResultTap,
                 )
             } else {
-                // Results grid (AniList search OR extension search).
                 ResultsCard(
                     sectionLabel = sectionLabel,
                     loading = state.loading,
+                    isLoadingMore = state.isLoadingMore,
                     error = state.error,
                     hasSearched = state.hasSearched,
                     query = state.query,
@@ -227,68 +242,24 @@ private fun SearchContent(
     }
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 /**
- * The extension source picker — a `DropdownMenu` anchored to the top-right,
- * listing all trusted extension sources. Shown when the user re-taps the
- * Extension toggle (per Q2: "tap Extension while selected → menu").
+ * Emits [onBottom] whenever the scroll position is near the bottom of the
+ * scrollable content. Used to trigger AniList pagination.
  *
- * Not a ModalBottomSheet because it's a quick inline picker, not a modal flow.
- * The design language's "no drag handle" rule applies to ModalBottomSheets;
- * this dropdown is a different component and follows M3 DropdownMenu styling.
+ * Uses `derivedStateOf` so the comparison only re-runs when the scroll value
+ * actually crosses the threshold — not on every pixel of scroll.
  */
 @Composable
-private fun ExtensionSourcePicker(
-    expanded: Boolean,
-    sources: List<SourceMatcher.SourceInfo>,
-    selectedId: Long?,
-    onPick: (Long) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-    ) {
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = onDismiss,
-        ) {
-            if (sources.isEmpty()) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = "No trusted extensions installed.\nInstall one from More → Settings → Extensions.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = onDismiss,
-                )
-            } else {
-                sources.forEach { source ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = source.name,
-                                fontFamily = RobotoFamily,
-                                fontSize = 14.sp,
-                                fontWeight = if (source.id == selectedId) FontWeight.ExtraBold
-                                else FontWeight.Normal,
-                            )
-                        },
-                        leadingIcon = if (source.id == selectedId) {
-                            {
-                                Text(
-                                    text = "●",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.ExtraBold,
-                                )
-                            }
-                        } else null,
-                        onClick = { onPick(source.id) },
-                    )
-                }
-            }
+private fun snapshotFlowAtBottom(scrollState: androidx.compose.foundation.ScrollState, onBottom: () -> Unit) {
+    val nearBottom by remember {
+        derivedStateOf {
+            val max = scrollState.maxValue
+            max > 0 && scrollState.value >= max - 600 // within ~600px of the end
         }
+    }
+    LaunchedEffect(nearBottom) {
+        if (nearBottom) onBottom()
     }
 }

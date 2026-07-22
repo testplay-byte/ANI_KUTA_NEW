@@ -3,6 +3,7 @@
 package app.confused.anikuta.feature.search.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -122,25 +123,35 @@ private enum class AccordionSection { GENRES, RELEASE, TYPE, SCORE, SORT }
  * - Partial height (principle #3) — content scrolls, sheet never full-screen.
  * - All accent colors from `MaterialTheme.colorScheme` (#B1F256 lime green).
  *
- * Filter state is hoisted to the caller (the ViewModel holds [SearchFilters] +
- * sort). The sheet only owns view-mode UI state (which accordion section is
- * open, which flat tab is selected).
+ * **Buffered filters (per owner request):** the sheet edits a PENDING copy of
+ * the filters ([pendingFilters] via [onPendingFiltersChange]). The ViewModel
+ * does NOT re-fetch on every toggle — only when the user taps "Apply filters"
+ * ([onApply] → the VM syncs pending → applied + re-searches). This fixes the
+ * owner's report: "it was processing the results even before I clicked the
+ * apply button."
+ *
+ * Sort is applied live (single-select, instant) — the owner didn't ask for
+ * sort to be buffered, and the sort chips are clearly the final choice.
+ *
+ * The Flat view's content panel uses `Modifier.animateContentSize()` so the
+ * sheet height transitions smoothly when switching tabs (per owner request:
+ * "its height should smoothly move up and down... it suddenly jumps").
  *
  * @param show whether the sheet is visible.
- * @param filters the current filter state (genres/year/season/format/status/minScore).
- * @param sort the current sort enum value.
- * @param onFiltersChange called when any filter changes (live — no Apply needed).
- * @param onSortChange called when the sort changes.
- * @param onClearAll called when "Clear all" is tapped.
- * @param onApply called when "Apply filters" is tapped (closes the sheet).
+ * @param pendingFilters the in-progress filters (edited live, applied on Apply).
+ * @param appliedSort the current sort (applied live).
+ * @param onPendingFiltersChange called on every filter toggle (updates pending only).
+ * @param onSortChange called when the sort changes (applied live).
+ * @param onClearAll called when "Clear all" is tapped (clears pending + applied + re-fetches).
+ * @param onApply called when "Apply filters" is tapped (syncs pending → applied + closes).
  * @param onDismiss called when the sheet is dismissed (scrim tap / back).
  */
 @Composable
 fun FilterSheet(
     show: Boolean,
-    filters: SearchFilters,
-    sort: String,
-    onFiltersChange: (SearchFilters) -> Unit,
+    pendingFilters: SearchFilters,
+    appliedSort: String,
+    onPendingFiltersChange: (SearchFilters) -> Unit,
     onSortChange: (String) -> Unit,
     onClearAll: () -> Unit,
     onApply: () -> Unit,
@@ -187,18 +198,18 @@ fun FilterSheet(
                         onToggle = { id ->
                             openAccordionId = if (openAccordionId == id) null else id
                         },
-                        filters = filters,
-                        onFiltersChange = onFiltersChange,
-                        sort = sort,
+                        filters = pendingFilters,
+                        onFiltersChange = onPendingFiltersChange,
+                        sort = appliedSort,
                         onSortChange = onSortChange,
                     )
                 } else {
                     FlatView(
                         flatCategory = flatCategory,
                         onCategoryChange = { flatCategory = it },
-                        filters = filters,
-                        onFiltersChange = onFiltersChange,
-                        sort = sort,
+                        filters = pendingFilters,
+                        onFiltersChange = onPendingFiltersChange,
+                        sort = appliedSort,
                         onSortChange = onSortChange,
                     )
                 }
@@ -495,7 +506,12 @@ private fun FlatView(
                 }
             }
         }
-        Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp, bottom = 4.dp)
+                .animateContentSize(),
+        ) {
             when (flatCategory) {
                 FlatCategory.GENRE -> GenresContent(
                     selected = filters.genres,

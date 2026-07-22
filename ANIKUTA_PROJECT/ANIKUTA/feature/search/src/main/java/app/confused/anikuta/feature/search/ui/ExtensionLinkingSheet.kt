@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -63,6 +65,14 @@ import coil3.compose.AsyncImage
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import kotlinx.coroutines.launch
+
+/**
+ * Minimum time the auto-link has to take before the linking sheet is shown.
+ * If the link resolves (cache hit or fast auto-search) in less than this, the
+ * sheet is skipped entirely — the user goes straight to the detail page.
+ * Eliminates the "split-second sheet flash" the owner reported.
+ */
+private const val MIN_SHEET_DELAY_MS = 400L
 
 /**
  * The extension→AniList linking sheet — shown when the auto-link fails.
@@ -93,7 +103,7 @@ fun ExtensionLinkingSheet(
     sAnime: SAnime,
     anilistApi: AniListApi,
     linkStore: ExtensionLinkStore,
-    onLinked: (Int) -> Unit,
+    onLinked: (anilistId: Int, wasCached: Boolean) -> Unit,
     onGoWithoutLinking: (AnimeCatalogueSource, SAnime) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -112,17 +122,39 @@ fun ExtensionLinkingSheet(
 
     val state by vm.state.collectAsState()
 
-    // Auto-route on terminal states — close the sheet + dispatch to the caller.
+    // ── Delayed sheet rendering (per owner request: smoother UX) ──
+    // The sheet should NOT flash for fast resolves. We render the sheet only
+    // when (a) the state is NeedsManualLink (manual intervention needed), OR
+    // (b) the state has been Loading for >400ms (slow network — show a spinner).
+    // If the auto-link resolves in <400ms, the sheet never appears — the user
+    // goes straight to the detail page. This eliminates the "split-second"
+    // sheet flash the owner reported.
+    var showSheet by remember { mutableStateOf(false) }
     LaunchedEffect(state) {
-        when (val s = state) {
-            is ExtensionLinkingState.Linked -> onLinked(s.anilistId)
-            is ExtensionLinkingState.GoWithoutLinking -> onGoWithoutLinking(s.source, s.sAnime)
-            else -> { /* Loading or NeedsManualLink — show the sheet */ }
+        when (state) {
+            is ExtensionLinkingState.NeedsManualLink -> showSheet = true
+            is ExtensionLinkingState.Loading -> {
+                delay(MIN_SHEET_DELAY_MS)
+                // Only show if STILL loading after the delay.
+                if (vm.state.value is ExtensionLinkingState.Loading) showSheet = true
+            }
+            else -> { /* Linked / GoWithoutLinking — handled below, no sheet */ }
         }
     }
 
-    // Don't render the sheet on terminal states (it's closing).
-    if (state is ExtensionLinkingState.Linked || state is ExtensionLinkingState.GoWithoutLinking) {
+    // Auto-route on terminal states — close the sheet + dispatch to the caller.
+    LaunchedEffect(state) {
+        when (val s = state) {
+            is ExtensionLinkingState.Linked -> onLinked(s.anilistId, s.wasCached)
+            is ExtensionLinkingState.GoWithoutLinking -> onGoWithoutLinking(s.source, s.sAnime)
+            else -> { /* Loading or NeedsManualLink — show/hide the sheet per above */ }
+        }
+    }
+
+    // Don't render the sheet on terminal states (it's closing) or before the
+    // delay has elapsed (fast resolves skip the sheet entirely).
+    if (!showSheet || state is ExtensionLinkingState.Linked ||
+        state is ExtensionLinkingState.GoWithoutLinking) {
         return
     }
 
@@ -276,13 +308,23 @@ fun ExtensionLinkingSheet(
                                 )
                             }
                         } else if (s.results.isEmpty()) {
-                            Text(
-                                text = "No matches on AniList. Try a different title, or go without linking.",
-                                fontFamily = RobotoFamily,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                            )
+                            // Centered vertically + horizontally in the body
+                            // (per owner request: "show it a bit down, somewhat
+                            // in the middle, so that it is proper").
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "No matches on AniList.\nTry a different title, or go without linking.",
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                            }
                         } else {
                             LazyColumn(
                                 contentPadding = PaddingValues(bottom = 8.dp),

@@ -123,29 +123,16 @@ private fun ExtensionRowCard(
         Column(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
         ) {
-            // Section header — kind label (Popular / Latest) + source name + count
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = row.kind.label,
-                    fontFamily = RobotoFamily,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f),
-                )
-                if (row.error == null && row.animes.isNotEmpty()) {
-                    Text(
-                        text = "${row.animes.size} · ${row.sourceName}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            // Section header — kind label only (Popular / Latest).
+            // The count + extension name was removed per owner request:
+            // "remove this. It is unnecessary."
+            Text(
+                text = row.kind.label,
+                fontFamily = RobotoFamily,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
             Spacer(Modifier.height(12.dp))
 
             if (row.error != null) {
@@ -170,7 +157,7 @@ private fun ExtensionRowCard(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(row.animes, key = { it.url }) { sAnime ->
-                        ExtensionRowCard(sAnime = sAnime, sourceName = row.sourceName) {
+                        ExtensionRowCard(sAnime = sAnime) {
                             onResultTap(
                                 SearchResult.Extension(
                                     source = row.source,
@@ -193,7 +180,6 @@ private fun ExtensionRowCard(
 @Composable
 private fun ExtensionRowCard(
     sAnime: SAnime,
-    sourceName: String,
     onClick: () -> Unit,
 ) {
     Column(
@@ -217,24 +203,19 @@ private fun ExtensionRowCard(
             )
         }
         Spacer(Modifier.height(6.dp))
+        // Title — single line (per owner request: "only takes up one line").
         Text(
             text = sAnime.title,
             fontFamily = RobotoFamily,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 16.sp,
-        )
-        Text(
-            text = sourceName,
-            fontFamily = RobotoFamily,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        // NOTE: the extension source name is intentionally NOT shown here
+        // (per owner request: "don't show the extension name on any of the
+        // covers or below the covers"). The selected source is conveyed by the
+        // source toggle at the top.
     }
 }

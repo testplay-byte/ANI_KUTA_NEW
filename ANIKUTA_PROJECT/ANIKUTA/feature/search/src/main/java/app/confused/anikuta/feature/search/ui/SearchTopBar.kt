@@ -116,7 +116,7 @@ fun SearchTopBar(
         label = "sourceAlpha",
     )
     val sourceWidth by animateDpAsState(
-        targetValue = if (collapsed) 0.dp else 180.dp,
+        targetValue = if (collapsed) 0.dp else 200.dp,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "sourceWidth",
     )
@@ -282,30 +282,37 @@ fun SearchTopBar(
                         DropdownMenu(
                             expanded = showSortDropdown,
                             onDismissRequest = { showSortDropdown = false },
+                            // Styled container — rounded, elevated, matches the app's pill aesthetic.
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = MaterialTheme.colorScheme.surface,
                         ) {
                             SORT_OPTIONS.forEach { (value, label) ->
+                                val isSelected = value == sort
                                 DropdownMenuItem(
                                     text = {
                                         Text(
-                                            label,
+                                            text = label,
+                                            fontFamily = RobotoFamily,
                                             fontSize = 14.sp,
-                                            fontWeight = if (value == sort) FontWeight.ExtraBold
-                                            else FontWeight.Normal,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     },
+                                    trailingIcon = if (isSelected) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    } else null,
                                     onClick = {
                                         onSortChange(value)
                                         showSortDropdown = false
                                     },
-                                    leadingIcon = if (value == sort) {
-                                        {
-                                            Icon(
-                                                androidx.compose.material.icons.Icons.Filled.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
-                                            )
-                                        }
-                                    } else null,
                                 )
                             }
                         }
@@ -313,7 +320,7 @@ fun SearchTopBar(
                 }
             }
 
-            Spacer(Modifier.padding(top = 4.dp))
+            Spacer(Modifier.padding(top = 2.dp))
         }
     }
 }

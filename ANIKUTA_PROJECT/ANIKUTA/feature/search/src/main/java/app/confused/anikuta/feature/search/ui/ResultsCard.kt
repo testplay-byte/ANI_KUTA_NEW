@@ -34,8 +34,13 @@ import app.confused.anikuta.feature.search.viewmodel.SearchResult
  *   `weight(1f)`, with `Spacer.weight(1f)` padding so 3 columns stay aligned.
  *   Row spacing: 12dp. (Prototype fidelity — NOT LazyVerticalGrid.)
  *
+ * Pagination: when [isLoadingMore] is true, a small "Loading more…" footer
+ * appears below the grid (the SearchScreen's scroll-listener calls the VM's
+ * `onLoadMore` when the user nears the bottom — AniList only).
+ *
  * @param sectionLabel e.g. "Popular anime", "Results for \"query\"".
- * @param loading shows "Loading…" instead of the grid.
+ * @param loading shows "Loading…" instead of the grid (initial load).
+ * @param isLoadingMore shows a "Loading more…" footer (pagination).
  * @param error shows the error message in `error` color.
  * @param hasSearched affects the empty-state copy ("No results found for …").
  * @param query used in the empty-state copy.
@@ -46,6 +51,7 @@ import app.confused.anikuta.feature.search.viewmodel.SearchResult
 fun ResultsCard(
     sectionLabel: String,
     loading: Boolean,
+    isLoadingMore: Boolean,
     error: String?,
     hasSearched: Boolean,
     query: String,
@@ -138,6 +144,29 @@ fun ResultsCard(
                             }
                         }
                         Spacer(Modifier.height(12.dp))
+                    }
+                    // Pagination footer — shown while the next page is loading.
+                    if (isLoadingMore) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.padding(8.dp))
+                            Text(
+                                text = "Loading more…",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
