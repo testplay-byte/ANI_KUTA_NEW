@@ -1,5 +1,8 @@
+// :core:episode-metadata
+// Uses the Compose-enabled library convention plugin so MetadataSettingsSheet
+// (androidx.compose.material3 + designsystem components) resolves.
 plugins {
-    id("anikuta.library")
+    id("anikuta.library.compose")
     kotlin("plugin.serialization")
 }
 
@@ -10,13 +13,15 @@ android {
 dependencies {
     implementation(projects.core.common)
     implementation(projects.core.preferences)
+    // Design system — CustomToggle + RobotoFamily used by MetadataSettingsSheet
+    implementation(projects.core.designsystem)
 
-    // OkHttp for HTTP
+    // OkHttp for HTTP (metadata sources)
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
-    // kotlinx-serialization
+    // kotlinx-serialization (metadata source JSON)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+    // Coroutines (version provided by the kotlinx-coroutines-bom from anikuta.library)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
     // Koin for DI
     implementation("io.insert-koin:koin-android:4.0.0")
 
