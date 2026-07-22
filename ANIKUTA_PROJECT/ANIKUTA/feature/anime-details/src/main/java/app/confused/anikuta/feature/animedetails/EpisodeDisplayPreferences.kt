@@ -68,9 +68,9 @@ class EpisodeDisplayPreferences(
     fun thumbnailSize(): Preference<String> =
         store.getString("pref_ep_thumb_size", "medium")
 
-    /** Max lines for episode title: 1, 2, or 3. */
+    /** Max lines for episode title: 1 (default, per user request — "force single line") or 2. */
     fun titleMaxLines(): Preference<Int> =
-        store.getInt("pref_ep_title_lines", 2)
+        store.getInt("pref_ep_title_lines", 1)
 
     /** Max lines for episode synopsis: 1, 2, 3, or 0 (expandable). */
     fun synopsisMaxLines(): Preference<Int> =

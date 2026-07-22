@@ -1,8 +1,9 @@
 // :core:episode-metadata
-// Uses the Compose-enabled library convention plugin so MetadataSettingsSheet
-// (androidx.compose.material3 + designsystem components) resolves.
+// Pure data module: metadata sources, repository, preferences, model.
+// NO Compose UI in this module — the MetadataSettingsScreen lives in
+// :feature:episode-settings (which depends on this module for the prefs).
 plugins {
-    id("anikuta.library.compose")
+    id("anikuta.library")
     kotlin("plugin.serialization")
 }
 
@@ -13,8 +14,6 @@ android {
 dependencies {
     implementation(projects.core.common)
     implementation(projects.core.preferences)
-    // Design system — CustomToggle + RobotoFamily used by MetadataSettingsSheet
-    implementation(projects.core.designsystem)
 
     // OkHttp for HTTP (metadata sources)
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")

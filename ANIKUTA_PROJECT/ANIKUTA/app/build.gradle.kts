@@ -64,6 +64,8 @@ dependencies {
     implementation(projects.feature.videoResolver)
     implementation(projects.feature.watch)
     implementation(projects.feature.player)
+    // Episode settings screens (Hub / Display / Layout / Metadata) — full pages
+    implementation(projects.feature.episodeSettings)
 
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)

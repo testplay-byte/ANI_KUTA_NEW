@@ -106,6 +106,11 @@ private fun AnikutaApp() {
     var showRepoSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     var watchTarget by remember { mutableStateOf<WatchRequest?>(null) }
+    // Episode settings sub-page (Hub / Display / Layout / Metadata). Null = not in the flow.
+    // The app uses a hand-rolled state-machine for navigation (NOT Voyager / Compose Nav).
+    var episodeSettingsPage by remember {
+        mutableStateOf<app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage?>(null)
+    }
     val anilistApi = remember { AniListApi() }
     val extensionManager: AnimeExtensionManager = koinInject()
     val sourceMatcher: SourceMatcher = koinInject()
@@ -133,12 +138,18 @@ private fun AnikutaApp() {
         mutableStateOf<Pair<AnimeCatalogueSource, SAnime>?>(null)
     }
 
-    // Handle back gesture for sub-screens + resolver sheet + linking sheet
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null) {
+    // Handle back gesture for sub-screens + resolver sheet + linking sheet + episode-settings sub-pages
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || episodeSettingsPage != null) {
         when {
             watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
             linkingTarget != null -> linkingTarget = null
+            episodeSettingsPage != null -> {
+                // Pop sub-page → Hub; Hub → exit the flow entirely.
+                episodeSettingsPage =
+                    if (episodeSettingsPage == app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub) null
+                    else app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub
+            }
             detailAnimeId != null -> {
                 detailAnimeId = null
                 resolverState = VideoResolverState.Hidden
@@ -224,10 +235,39 @@ private fun AnikutaApp() {
                     onOpenRepoSettings = { showRepoSettings = true },
                 )
             }
+            // Episode settings sub-page (full screen — Hub / Display / Layout / Metadata)
+            episodeSettingsPage != null -> {
+                when (val page = episodeSettingsPage!!) {
+                    app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub -> {
+                        app.confused.anikuta.feature.episodesettings.EpisodeSettingsHubScreen(
+                            onBack = { episodeSettingsPage = null },
+                            onOpenDisplay = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Display },
+                            onOpenLayout = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Layout },
+                            onOpenMetadata = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Metadata },
+                        )
+                    }
+                    app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Display -> {
+                        app.confused.anikuta.feature.episodesettings.EpisodeDisplaySettingsScreen(
+                            onBack = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
+                        )
+                    }
+                    app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Layout -> {
+                        app.confused.anikuta.feature.episodesettings.EpisodeLayoutSettingsScreen(
+                            onBack = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
+                        )
+                    }
+                    app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Metadata -> {
+                        app.confused.anikuta.feature.episodesettings.EpisodeMetadataSettingsScreen(
+                            onBack = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
+                        )
+                    }
+                }
+            }
             // Settings sub-screen (from More)
             showSettings -> {
                 SettingsScreen(
                     onOpenExtensions = { showExtensions = true },
+                    onOpenEpisodeSettings = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
                     onBack = { showSettings = false },
                 )
             }
@@ -397,19 +437,19 @@ private fun MoreScreen(
 
 /**
  * Settings screen — a sub-screen from More.
+ *
+ * Per user requirement: the episode settings are reached via a SINGLE "Episode
+ * settings" row that navigates to a full-page hub (NOT a bottom sheet). The hub
+ * then links to Display / Layout / Metadata sub-pages. See
+ * `:feature:episode-settings` for the screens.
  */
 @Composable
 private fun SettingsScreen(
     onOpenExtensions: () -> Unit,
+    onOpenEpisodeSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
-    var showEpisodeListSettings by remember { mutableStateOf(false) }
-    var showMetadataSettings by remember { mutableStateOf(false) }
-
-    // Inject preferences
-    val episodeDisplayPrefs: app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences = org.koin.core.context.GlobalContext.get().get()
-    val metadataPrefs: app.confused.anikuta.core.episodemetadata.EpisodeMetadataPreferences = org.koin.core.context.GlobalContext.get().get()
 
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "Settings", scrollState = scrollState)
@@ -430,34 +470,12 @@ private fun SettingsScreen(
                 SettingsSectionLabel("Episode List")
                 MoreRow(
                     icon = Icons.Filled.Tune,
-                    title = "Episode Display",
-                    subtitle = "Customize how episodes appear (thumbnail, title, summary)",
-                    onClick = { showEpisodeListSettings = true },
-                )
-                MoreRow(
-                    icon = Icons.Filled.AutoAwesome,
-                    title = "Episode Metadata",
-                    subtitle = "Configure metadata fetching (titles, descriptions, thumbnails)",
-                    onClick = { showMetadataSettings = true },
+                    title = "Episode settings",
+                    subtitle = "Display, layout, and metadata fetching for the episode list",
+                    onClick = onOpenEpisodeSettings,
                 )
             }
         }
-    }
-
-    // Episode list settings sheet
-    if (showEpisodeListSettings) {
-        app.confused.anikuta.feature.animedetails.EpisodeListSettingsSheet(
-            prefs = episodeDisplayPrefs,
-            onDismiss = { showEpisodeListSettings = false },
-        )
-    }
-
-    // Metadata settings sheet
-    if (showMetadataSettings) {
-        app.confused.anikuta.core.episodemetadata.MetadataSettingsSheet(
-            prefs = metadataPrefs,
-            onDismiss = { showMetadataSettings = false },
-        )
     }
 }
 
