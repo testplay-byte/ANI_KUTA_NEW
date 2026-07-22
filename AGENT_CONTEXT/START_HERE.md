@@ -37,49 +37,68 @@ It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 
 ## Current phase
 
-**Phase 0b (Design & Planning) is COMPLETE.** All decisions recorded (ADRs 001–030).
-`ARCHITECTURE.md` is finalized. Ready for **Phase 1** (scaffold the Gradle project)
-pending the owner's go-ahead.
+**Phase 7+ (Implementation) is IN PROGRESS.** The app builds, ships debug APKs via
+CI, and has working: browse, search, anime details, watch (MPV), library,
+extensions, and the episode-settings subsystem. See
+[`../PLANNING/PHASED_PLAN.md`](../PLANNING/PHASED_PLAN.md) for the full plan.
 
-See [`../PLANNING/PHASED_PLAN.md`](../PLANNING/PHASED_PLAN.md) for the full
-10-phase implementation plan.
+See [`../DOCS/05-roadmap.md`](../DOCS/05-roadmap.md) for the current phase's exit
+criteria.
 
 ## What's been done so far
 
 - ✅ Repo structured: `ANIYOMI_REFRENCE/` (reference + 68-doc analysis),
-  `OLD_ANIKUTA/` (prior attempt + screen analysis), `ANIKUTA_PROJECT/` (skeleton).
+  `OLD_ANIKUTA/` (prior attempt + screen analysis), `ANIKUTA_PROJECT/` (live code).
 - ✅ Rules established (`RULES/ai-agent-rules.md` — 14 sections).
 - ✅ Aniyomi reference fully documented (`ANIYOMI_REFRENCE/DOCUMENTATION/`).
-- ✅ Vision clarified → 14 ADRs (009–022) in `DOCS/04`.
+- ✅ Vision clarified → 30 ADRs in `DOCS/04`.
 - ✅ Design language docs complete (`DESIGN_LANGUAGE/` — 12 principles, 9 components,
   themes, 10 per-screen specs).
 - ✅ Old ANIKUTA key screens analyzed (`OLD_ANIKUTA/ANALYSIS/` — 4 files).
-- ✅ Episode metadata module spec (`PLANNING/01-feature-specs/episode-metadata-module.md`).
-- ✅ Module architecture draft (`PLANNING/04-module-architecture/`).
-- ✅ **All open decisions resolved** → ADRs 023–030 (Koin, SQLDelight, Compose-first,
-  SDK 26/36, Moko English-only, gzipped protobuf backup, Aniyomi extension compat,
-  raw HTTP AniList client).
-- ✅ `ARCHITECTURE.md` **finalized** — the single source of truth.
-- ✅ Phased implementation plan (`PLANNING/PHASED_PLAN.md` — 10 phases).
-- ✅ Agent onboarding (`AGENT_CONTEXT/START_HERE.md` + `PROJECT_STARTUP.md`).
+- ✅ `ARCHITECTURE.md` finalized — the single source of truth.
+- ✅ Gradle project scaffolded under `ANIKUTA_PROJECT/ANIKUTA/` — multi-module
+  (core/*/feature/*/data/*/app), Compose-first, Koin DI, convention plugins in
+  `buildSrc/` (`anikuta.library` + `anikuta.library.compose`).
+- ✅ Browse + AniList API + extension system (Aniyomi-compat via Injekt).
+- ✅ Search (dual-source AniList + extensions, manual link flow).
+- ✅ Anime details (3-stage load: AniList → source match → episodes + metadata).
+- ✅ Watch screen + MPV player (YouTube-style, gestures, PiP, episode switching).
+- ✅ Library (grid/list, categories, selection mode).
+- ✅ Episode metadata enrichment (Jikan/MAL + Anikage.cc + AniList Streaming;
+  `:core:episode-metadata` module; per-field fetch toggles).
+- ✅ **Episode settings subsystem** (`:feature:episode-settings` module — see
+  [`../DOCS/episode-settings-architecture.md`](../DOCS/episode-settings-architecture.md)):
+  - 4 full-page screens (Hub → Display / Layout / Metadata) with sticky live previews.
+  - Episode row rebuilt to match OLD ANIKUTA design (black 70% pill badge,
+    outlineVariant date/audio pills, plain-text title).
+  - `EpisodeDisplayPreferences` is now correctly wired to `EpisodeRow` via
+    `koinInject` + reactive `Preference.changes` (previously disconnected — a
+    critical bug where settings only affected the preview, not the list).
 
 ## What's NOT done yet
 
-- ❌ Any actual ANIKUTA app code (Phase 1 starts the scaffolding).
-- ❌ The Gradle project under `ANIKUTA_PROJECT/ANIKUTA/` (still a placeholder README).
-- ❌ All Phase 1–10 implementation.
+- ❌ Trackers (AniList/MAL tracking sync beyond display).
+- ❌ Manga reader (anime-first; manga comes later).
+- ❌ Downloads / offline playback.
+- ❌ Notifications (dual-mode episode notifications).
+- ❌ Backups.
+- ❌ Release (Play Store / signed APK) build flavor.
 
 ## Where things live (cheat sheet)
 
 | You want to... | Go here |
 |---|---|
-| Understand the vision | `DOCS/04-design-decisions.md` (ADRs 009–022) |
+| Understand the vision | `DOCS/04-design-decisions.md` (ADRs 009–030) |
 | Understand the design language | `DESIGN_LANGUAGE/` |
 | Read the Aniyomi reference analysis | `ANIYOMI_REFRENCE/DOCUMENTATION/` |
 | Read the old ANIKUTA screen analysis | `OLD_ANIKUTA/ANALYSIS/` |
 | Find planning specs | `PLANNING/` |
 | Find the rules | `RULES/` |
-| Write new code | `ANIKUTA_PROJECT/ANIKUTA/` (Phase 1) |
+| **Write/edit app code** | `ANIKUTA_PROJECT/ANIKUTA/` (live multi-module project) |
+| Episode settings screens | `ANIKUTA_PROJECT/ANIKUTA/feature/episode-settings/` |
+| Episode row + display prefs | `ANIKUTA_PROJECT/ANIKUTA/feature/anime-details/.../EpisodesSection.kt` + `EpisodeDisplayPreferences.kt` |
+| Episode metadata (sources/repo/prefs) | `ANIKUTA_PROJECT/ANIKUTA/core/episode-metadata/` |
+| Convention plugins (build) | `ANIKUTA_PROJECT/ANIKUTA/buildSrc/src/main/kotlin/` |
 | Leave a note for the next agent | `RULES/sessions/` |
 
 ## Hard rules (don't violate)
@@ -93,10 +112,18 @@ See [`../PLANNING/PHASED_PLAN.md`](../PLANNING/PHASED_PLAN.md) for the full
 
 ## What to do next (if you're resuming)
 
-1. Read the newest session note in `RULES/sessions/`.
+1. Read the newest session note in `RULES/sessions/` (or the worklog at
+   `/home/z/my-project/worklog.md` if you're in the build sandbox).
 2. Check `DOCS/05-roadmap.md` for the current phase's exit criteria.
-3. If architecture isn't finalized → work on `ARCHITECTURE.md` + `PLANNING/04`.
-4. If architecture is finalized → start Phase 1 (scaffold the Gradle project).
+3. The Gradle project is live at `ANIKUTA_PROJECT/ANIKUTA/`. To build, push to
+   a feature branch and trigger the `CI` workflow via `workflow_dispatch`
+   (feature branches do NOT auto-build on push — only `main` does). Do NOT
+   build APKs locally (ADR-003, CI-only).
+4. The episode settings subsystem lives in `:feature:episode-settings`. Its
+   architecture is documented in `DOCS/episode-settings-architecture.md`.
+5. The app uses a **hand-rolled state-machine for navigation** in `MainActivity.kt`
+   (NOT Voyager, NOT Compose Nav) — state flags like `detailAnimeId`, `showSettings`,
+   `episodeSettingsPage` drive a `when` block. Follow this pattern for new screens.
 
 ---
 
