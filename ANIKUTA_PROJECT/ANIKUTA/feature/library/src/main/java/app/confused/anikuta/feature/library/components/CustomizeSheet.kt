@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +75,7 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
  * Toggles use proper Material3 Switch (not CustomToggle). Per user: "properly
  * add the toggles."
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomizeSheet(
     displayMode: LibraryDisplayMode,
