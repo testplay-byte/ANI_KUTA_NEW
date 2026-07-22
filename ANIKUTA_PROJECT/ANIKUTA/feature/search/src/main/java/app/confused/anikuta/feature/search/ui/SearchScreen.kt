@@ -164,11 +164,12 @@ private fun SearchContent(
     val scrollState = rememberScrollState()
     val collapsed = scrollState.value > 20
 
-    // Infinite-scroll detection — when the user is within ~600dp of the bottom,
-    // ask the ViewModel to load the next page (AniList only).
-    LaunchedEffect(scrollState, scrollState.maxValue) {
-        snapshotFlowAtBottom(scrollState) { onLoadMore() }
-    }
+    // Infinite-scroll detection — when the user is within ~600px of the bottom,
+    // ask the ViewModel to load the next page (AniList only). The helper is a
+    // @Composable that internally uses derivedStateOf + LaunchedEffect, so it
+    // must be called directly in the composable body (not inside another
+    // LaunchedEffect).
+    ObserveScrollNearBottom(scrollState) { onLoadMore() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SearchTopBar(
@@ -252,7 +253,10 @@ private fun SearchContent(
  * actually crosses the threshold — not on every pixel of scroll.
  */
 @Composable
-private fun snapshotFlowAtBottom(scrollState: androidx.compose.foundation.ScrollState, onBottom: () -> Unit) {
+private fun ObserveScrollNearBottom(
+    scrollState: androidx.compose.foundation.ScrollState,
+    onBottom: () -> Unit,
+) {
     val nearBottom by remember {
         derivedStateOf {
             val max = scrollState.maxValue
