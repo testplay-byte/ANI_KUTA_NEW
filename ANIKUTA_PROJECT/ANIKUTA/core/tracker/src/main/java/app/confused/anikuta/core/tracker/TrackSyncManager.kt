@@ -60,8 +60,9 @@ class TrackSyncManager(
 
             for ((anilistId, progress) in latestByAnime) {
                 if (anilistId <= 0) continue
+                val p = progress ?: continue
                 try {
-                    syncAnimeProgress(anilistId, progress)
+                    syncAnimeProgress(anilistId, p)
                 } catch (e: Exception) {
                     Log.e(TAG, "Sync failed for anilistId=$anilistId", e)
                 }

@@ -73,7 +73,7 @@ class AniListTracker(
 
             tokenPref.set(token)
             usernamePref.set(viewer.name)
-            avatarPref.set(viewer.avatar ?: "")
+            avatarPref.set(viewer.avatarUrl ?: "")
             userIdPref.set(viewer.id)
             Log.i(TAG, "AniList login successful: ${viewer.name} (id=${viewer.id})")
             true
