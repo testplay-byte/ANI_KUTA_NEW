@@ -363,8 +363,11 @@ private fun DayCell(
 @Composable
 private fun DayDotsIndicator(entries: List<ScheduleEntry>) {
     val count = entries.size
-    val colors = remember(entries) {
-        entries.map { it.coverColor?.toColorOrNull() ?: MaterialTheme.colorScheme.primary }
+    // Hoist the primary color OUT of the remember lambda — MaterialTheme access
+    // is @Composable and can't happen inside the (non-composable) remember block.
+    val primary = MaterialTheme.colorScheme.primary
+    val colors = remember(entries, primary) {
+        entries.map { it.coverColor?.toColorOrNull() ?: primary }
     }
     when {
         count <= 4 -> DotsRow(colors = colors)
