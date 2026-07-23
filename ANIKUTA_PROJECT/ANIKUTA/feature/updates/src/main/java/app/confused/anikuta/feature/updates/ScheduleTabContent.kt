@@ -19,15 +19,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,9 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.common.util.calendarDayKey
-import app.confused.anikuta.core.common.util.formatTimeUntil
+import app.confused.anikuta.core.common.util.formatDetailedCountdown
 import app.confused.anikuta.core.designsystem.component.EmptyState
-import app.confused.anikuta.core.designsystem.component.ListSectionHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 import java.util.Calendar
@@ -62,12 +62,15 @@ fun ScheduleTabContent(
     onJumpToToday: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // View-mode toggle row (List / Calendar) + a context-aware action button.
-        // Per user feedback: the right-side button was an ambiguous calendar icon
-        // that did nothing useful. Now it's:
-        //  - Calendar view → "Jump to today" (CalendarToday icon) — resets the
-        //    displayed month to the current month.
-        //  - List view → "Refresh schedule" (Refresh icon) — re-fetches airing data.
+        // View-mode toggle row. Per user feedback (round 2):
+        //  - List view → the List/Calendar toggle expands to FULL WIDTH (no
+        //    right-side button). The list has its own per-row content; the
+        //    refresh is reachable via pull-to-refresh on the list.
+        //  - Calendar view → the toggle shrinks to leave room for a highlighted
+        //    "today date" button on the right (shows today's day number + a
+        //    CalendarToday icon). Tapping it jumps the calendar to the current
+        //    month.
+        val isCalendar = state.scheduleViewMode == ScheduleViewMode.CALENDAR
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -80,22 +83,36 @@ fun ScheduleTabContent(
                 onSetMode = onSetViewMode,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(
-                onClick = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) onJumpToToday else onRefresh,
-            ) {
-                Icon(
-                    imageVector = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) {
-                        Icons.Filled.CalendarToday
-                    } else {
-                        Icons.Filled.Refresh
-                    },
-                    contentDescription = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) {
-                        "Jump to today"
-                    } else {
-                        "Refresh schedule"
-                    },
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
+            if (isCalendar) {
+                // Highlighted "today" button — primary-tinted, shows today's day number.
+                val todayDay = remember {
+                    Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.clickable(onClick = onJumpToToday),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CalendarToday,
+                            contentDescription = "Jump to today",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = todayDay,
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
 
@@ -203,7 +220,16 @@ private fun ScheduleViewModeToggle(
 
 /**
  * The list view — upcoming episodes grouped by calendar day, each row showing
- * cover + title + "Episode N" + relative air time.
+ * cover + title + an "Episode N" pill + a countdown.
+ *
+ * Per user feedback (round 2):
+ *  - Day headers (Today / Tomorrow / date) are theme-colored with a small
+ *    themed vertical bar on the left (see [ScheduleDayHeader]).
+ *  - Anime title is 16sp Bold (up from 14sp).
+ *  - "Episode N" sits in a primary-tinted pill.
+ *  - The countdown is detailed for Today/Tomorrow ("Episode 16 in 14h 36m 24s",
+ *    ticking live every second) and a full-date-with-highlighted-time for
+ *    beyond ("Episode 4 · Mar 5 at 09:00").
  */
 @Composable
 private fun ScheduleList(
@@ -224,7 +250,7 @@ private fun ScheduleList(
     ) {
         dayLabels.forEach { (dayKey, label) ->
             item(key = "header_$dayKey") {
-                ListSectionHeader(text = label)
+                ScheduleDayHeader(label = label)
             }
             val entries = grouped[dayKey].orEmpty()
             items(count = entries.size, key = { idx ->
@@ -233,6 +259,7 @@ private fun ScheduleList(
                 val entry = entries[idx]
                 ScheduleRow(
                     entry = entry,
+                    dayKey = dayKey,
                     onClick = { onOpenAnime(entry.anilistId) },
                 )
             }
@@ -241,13 +268,62 @@ private fun ScheduleList(
 }
 
 /**
- * One schedule row — cover, title, "Episode N", air-time countdown.
+ * A schedule day header — a small primary-colored vertical bar on the left +
+ * the day label in primary color. Per user feedback: "highlight the release
+ * date in the theme color … on the left side show a small themed colored
+ * portrait bar."
+ */
+@Composable
+private fun ScheduleDayHeader(label: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Themed vertical bar (3dp × 18dp, primary, rounded).
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .size(width = 3.dp, height = 18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        Spacer(modifier = Modifier.size(10.dp))
+        Text(
+            text = label,
+            fontFamily = RobotoFamily,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/**
+ * One schedule row — cover, title, an "Episode N" pill, and a countdown.
+ *
+ * The countdown is detailed + live for Today/Tomorrow, and a full-date-with-
+ * highlighted-time for beyond.
  */
 @Composable
 private fun ScheduleRow(
     entry: ScheduleEntry,
+    dayKey: String,
     onClick: () -> Unit,
 ) {
+    val isTodayOrTomorrow = isTodayOrTomorrowKey(dayKey)
+
+    // Live-ticking "now" for Today/Tomorrow so the countdown updates each second.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    if (isTodayOrTomorrow) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            while (true) {
+                now = System.currentTimeMillis()
+                kotlinx.coroutines.delay(1000L)
+            }
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
@@ -283,30 +359,88 @@ private fun ScheduleRow(
                 Text(
                     text = entry.animeTitle,
                     fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Episode ${entry.episodeNumber}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = formatTimeUntil(entry.airingAtMillis),
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Spacer(modifier = Modifier.height(6.dp))
+                // "Episode N" in a primary-tinted pill.
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text(
+                        text = "Episode ${entry.episodeNumber}",
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                // Countdown: detailed + live for Today/Tomorrow; full date with
+                // highlighted time for beyond.
+                if (isTodayOrTomorrow) {
+                    val countdown = formatDetailedCountdown(entry.airingAtMillis, now)
+                    Text(
+                        text = "in $countdown",
+                        fontFamily = RobotoFamily,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    val fmt = java.text.SimpleDateFormat("MMM d 'at'", java.util.Locale.getDefault())
+                    val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    val datePart = fmt.format(java.util.Date(entry.airingAtMillis))
+                    val timePart = timeFmt.format(java.util.Date(entry.airingAtMillis))
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "$datePart ",
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = timePart,
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
     }
+}
+
+/**
+ * Returns true if [dayKey] ("yyyy-MM-dd") is today or tomorrow (calendar-day
+ * based, not 24h delta). Drives whether the row shows the live detailed
+ * countdown vs. the full-date layout.
+ */
+private fun isTodayOrTomorrowKey(dayKey: String): Boolean {
+    val parts = dayKey.split("-")
+    if (parts.size != 3) return false
+    val cal = Calendar.getInstance().apply {
+        clear()
+        set(parts[0].toInt(), parts[1].toInt() - 1, parts[2].toInt())
+    }
+    val now = Calendar.getInstance()
+    val dayDiff = now.get(Calendar.DAY_OF_YEAR) -
+        cal.get(Calendar.DAY_OF_YEAR) +
+        (now.get(Calendar.YEAR) - cal.get(Calendar.YEAR)) * 366
+    // dayDiff < 0 means the day is in the future; 0 = today, -1 = tomorrow.
+    return dayDiff == 0 || dayDiff == -1
 }
 
 /**

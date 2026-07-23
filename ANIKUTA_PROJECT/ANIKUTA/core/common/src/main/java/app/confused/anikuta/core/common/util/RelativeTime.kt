@@ -79,6 +79,63 @@ fun formatTimeUntil(epochMs: Long, nowMs: Long = System.currentTimeMillis()): St
 }
 
 /**
+ * Formats a pair of (positionSeconds, durationSeconds) as a playback
+ * timestamp "M:SS / M:SS" (or "H:MM:SS / H:MM:SS" for content over an hour).
+ *
+ * Used by the History screen to show how far the user watched — e.g.
+ * "12:34 / 24:00". Zero duration → "—".
+ *
+ * Examples:
+ *  - (754, 1440)  → "12:34 / 24:00"
+ *  - (30, 1440)   → "0:30 / 24:00"
+ *  - (3725, 5400) → "1:02:05 / 1:30:00"
+ */
+fun formatPlaybackTimestamp(positionSeconds: Int, durationSeconds: Int): String {
+    if (durationSeconds <= 0) return "—"
+    return "${formatDuration(positionSeconds)} / ${formatDuration(durationSeconds)}"
+}
+
+/** Formats a single duration in seconds as "M:SS" or "H:MM:SS". */
+private fun formatDuration(totalSeconds: Int): String {
+    if (totalSeconds < 0) return "0:00"
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
+}
+
+/**
+ * Formats a future epoch-millis timestamp as a detailed live countdown string.
+ *
+ * Used by the Schedule list for Today/Tomorrow entries, where the user wants
+ * a precise ticking countdown. Returns one of:
+ *  - "Xh Ym Zs" (>= 1 hour remaining) — e.g. "14h 36m 24s"
+ *  - "Ym Zs"    (< 1 hour, >= 1 min)  — e.g. "36m 24s"
+ *  - "Zs"       (< 1 min)             — e.g. "24s"
+ *  - "now"      (<= 0)
+ *
+ * The caller pairs this with the episode number: "Episode 16 in 14h 36m 24s".
+ * Ticking is driven by the UI recomposing every second (LaunchedEffect).
+ */
+fun formatDetailedCountdown(epochMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    val delta = epochMs - nowMs
+    if (delta <= 0L) return "now"
+    val totalSecs = (delta / 1000L).toInt()
+    val hours = totalSecs / 3600
+    val minutes = (totalSecs % 3600) / 60
+    val seconds = totalSecs % 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m ${seconds}s"
+        minutes > 0 -> "${minutes}m ${seconds}s"
+        else -> "${seconds}s"
+    }
+}
+
+/**
  * Returns the calendar day key for an epoch-millis timestamp, as "yyyy-MM-dd"
  * in the device's default timezone. Used by the History screen's day-bucket
  * grouping (Today / Yesterday / This Week / Earlier) and by the Schedule

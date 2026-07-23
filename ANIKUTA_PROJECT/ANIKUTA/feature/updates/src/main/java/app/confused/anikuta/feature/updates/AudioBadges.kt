@@ -48,7 +48,7 @@ fun AudioBadges(
         modifier = modifier,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
@@ -65,8 +65,8 @@ fun AudioBadges(
                 Text(
                     text = label,
                     fontFamily = RobotoFamily,
-                    fontSize = 9.sp,
-                    lineHeight = 11.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

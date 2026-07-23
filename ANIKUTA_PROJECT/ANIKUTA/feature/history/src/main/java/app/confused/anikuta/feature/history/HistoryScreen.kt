@@ -35,10 +35,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.confused.anikuta.core.common.util.formatPlaybackTimestamp
 import app.confused.anikuta.core.common.util.formatTimeAgo
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.EmptyState
@@ -188,25 +190,39 @@ fun HistoryScreen(
 }
 
 /**
- * One history row — cover thumbnail, title, an episode+watched-time pill, and
- * a progress bar at the very bottom of the row.
+ * One history row — cover thumbnail, title, an episode+watched-time pill, a
+ * playback timestamp, and a progress bar at the very bottom of the row.
  *
- * Per user feedback:
+ * Per user feedback (round 2):
  *  - Background is `surfaceVariant.copy(alpha = 0.4f)` — matches the More
- *    entries (Settings/History/Updates rows) so it no longer blends into the
- *    screen background.
- *  - Title is 16sp Bold (up from 14sp) for better readability.
+ *    entries so it no longer blends into the screen background.
+ *  - Title is 16sp Bold for readability.
  *  - Episode + watched-time are combined into a single pill below the title:
- *    "Episode 10 · watched 45m ago" — clearer than two separate text lines.
- *  - The progress bar is a 3dp strip along the very bottom edge of the row
- *    (full-width), so it reads as a "resumability" affordance without
- *    competing with the title for the same space.
+ *    "Episode 10 · watched 45m ago".
+ *  - A playback timestamp "12:34 / 24:00" shows how far the user watched.
+ *    When progress is very small (< 5%), the bar would be too short to sit a
+ *    timestamp above cleanly — so the timestamp renders to the RIGHT of the
+ *    cover (under the title area) instead of above the bar, avoiding a cramped
+ *    sliver above a near-empty bar. When progress >= 5%, the timestamp sits
+ *    just above the bottom progress bar (full-width, right-aligned).
+ *  - The progress bar is a 5dp strip along the very bottom edge (thicker than
+ *    the old 3dp for a better feel), full-width, with rounded ends.
  */
 @Composable
 private fun HistoryRow(
     entry: HistoryEntry,
     onClick: () -> Unit,
 ) {
+    val fraction = entry.progressFraction
+    // When the bar is a near-empty sliver (< 5%), the timestamp above it would
+    // look cramped. Instead, show the timestamp to the right (in the text
+    // column) so it has room. Otherwise, show it just above the bottom bar.
+    val showTimestampAboveBar = fraction >= 0.05f
+    val timestamp = formatPlaybackTimestamp(
+        entry.progress.positionSeconds,
+        entry.progress.durationSeconds,
+    )
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
@@ -269,14 +285,43 @@ private fun HistoryRow(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         )
                     }
+                    // When the bar is a sliver, show the timestamp here (right
+                    // of cover, under the pill) so it isn't cramped above the bar.
+                    if (!showTimestampAboveBar && entry.progress.durationSeconds > 0) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = timestamp,
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-            // Progress bar — 3dp strip along the very bottom edge of the row.
+            // When the bar is meaningfully filled, show the timestamp just
+            // above the bottom progress bar (right-aligned).
+            if (showTimestampAboveBar) {
+                Text(
+                    text = timestamp,
+                    fontFamily = RobotoFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                )
+            }
+            // Progress bar — 5dp strip along the very bottom edge (thicker for
+            // a better feel), full-width, with rounded ends via clip.
             LinearProgressIndicator(
-                progress = { entry.progressFraction },
+                progress = { fraction },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(3.dp),
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp)),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             )

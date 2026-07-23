@@ -1,6 +1,7 @@
 package app.confused.anikuta.feature.updates
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,7 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,13 +31,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,18 +50,36 @@ import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.common.util.calendarDayKey
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.launch
 import java.util.Calendar
+
+/**
+ * A soft "lime blue" — a blue that harmonizes with the lime-green primary
+ * (#B1F256) rather than a stark material blue. Used to highlight the CURRENT
+ * date in the calendar (per user feedback: "highlight the current date … using
+ * the blue color. Use the similar kind of blue color based on the R theme …
+ * not the direct outright definition of the lime blue but the one which is
+ * similar to the R theme color").
+ */
+private val LimeBlue = Color(0xFF6EC6E6)
+private val LimeBlueFg = Color(0xFF0A2A33)
 
 /**
  * The monthly calendar view for the Schedule tab.
  *
- * A 7-column grid (weeks as rows). Days with scheduled episodes get a
- * `primary`-colored dot under the day number and a subtle `primary` 15%-alpha
- * background tint. Tapping a day calls [onSelectDay] with the "yyyy-MM-dd" key,
- * which the parent turns into a [ModalBottomSheet] listing that day's episodes.
- *
- * Month navigation: left/right arrows in the header. No external calendar
- * library — the grid is built with plain Compose (Row of weighted day cells).
+ * Per user feedback (round 2):
+ *  - The calendar sits in a dedicated card/section so it reads as a clean unit.
+ *  - Date cells have padding between them + subtle borders; leading empty cells
+ *    (before the 1st) are NOT rendered as bordered blocks — they're invisible
+ *    spacers so the 1st lands in the correct weekday column without showing
+ *    empty "blocks".
+ *  - The current date is highlighted in a soft lime-blue (see [LimeBlue]).
+ *  - The month/year header + prev/next buttons live in a dedicated section that
+ *    supports swipe-left/right to switch months (HorizontalPager) with smooth
+ *    animated transitions.
+ *  - Days with scheduled episodes show a multi-dot indicator (see
+ *    [DayDotsIndicator]) colored by each anime's AniList cover color, with a
+ *    rainbow gradient bar for 9+ anime.
  *
  * Per `DESIGN_LANGUAGE/01-principles/core-principles.md` #2, the day-detail
  * bottom sheet uses `dragHandle = null`.
@@ -75,65 +99,68 @@ fun ScheduleCalendar(
         entries.groupBy { calendarDayKey(it.airingAtMillis) }
     }
 
-    // Currently-displayed month. Using `remember` (not rememberSaveable) because
-    // Calendar isn't auto-saveable; a config change resets to the current month,
-    // which is acceptable. The `by` delegate makes reassignment recompose.
-    var displayedMonth by remember {
-        mutableStateOf(
-            Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) },
-        )
+    // The "base" month — the pager shows a window of months around it. We use a
+    // large page range centered at 0 (current month) so the user can swipe far
+    // back/forward. The pager state drives which month is displayed.
+    val pageCount = 1001 // odd, so page 500 = "current month"
+    val initialPage = 500
+    val pagerState = rememberPagerState(initialPage = initialPage) { pageCount }
+    val scope = rememberCoroutineScope()
+
+    // Convert a pager page index to a Calendar (page 500 = current month).
+    fun pageToMonth(page: Int): Calendar {
+        val offset = page - initialPage
+        return Calendar.getInstance().apply {
+            add(Calendar.MONTH, offset)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
     }
 
-    // "Jump to today" — when the signal counter changes, reset the displayed
-    // month to the current month. LaunchedEffect avoids resetting on initial
-    // composition (signal starts at 0).
-    androidx.compose.runtime.LaunchedEffect(jumpToTodaySignal) {
+    // "Jump to today" — when the signal counter changes, animate the pager back
+    // to the current-month page.
+    LaunchedEffect(jumpToTodaySignal) {
         if (jumpToTodaySignal > 0) {
-            displayedMonth = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+            pagerState.animateScrollToPage(initialPage)
         }
     }
 
-    Column(modifier = modifier) {
-        CalendarHeader(
-            month = displayedMonth,
-            onPrev = {
-                displayedMonth = (displayedMonth.clone() as Calendar).apply {
-                    add(Calendar.MONTH, -1)
-                }
-            },
-            onNext = {
-                displayedMonth = (displayedMonth.clone() as Calendar).apply {
-                    add(Calendar.MONTH, 1)
-                }
-            },
-        )
+    // The month currently in view (driven by the pager's currentPage).
+    val displayedMonth = pageToMonth(pagerState.currentPage)
 
-        WeekdayHeader()
+    // Put the whole calendar in a dedicated card so it reads as one clean unit.
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            CalendarHeader(
+                month = displayedMonth,
+                onPrev = {
+                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                },
+                onNext = {
+                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                },
+            )
 
-        // Build the grid weeks.
-        val weeks = remember(displayedMonth, byDay) {
-            buildMonthWeeks(displayedMonth)
-        }
-        weeks.forEach { week ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                week.forEach { dayInfo ->
-                    DayCell(
-                        dayInfo = dayInfo,
-                        hasEpisodes = dayInfo != null && byDay.containsKey(dayInfo.key),
-                        isSelected = dayInfo != null && dayInfo.key == selectedDay,
-                        onTap = {
-                            if (dayInfo != null) {
-                                onSelectDay(dayInfo.key)
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            WeekdayHeader()
+
+            // HorizontalPager — swipe left/right to change months, with the
+            // default page-slide animation. Each page renders one month's grid.
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+            ) { page ->
+                val month = pageToMonth(page)
+                MonthGrid(
+                    month = month,
+                    byDay = byDay,
+                    selectedDay = selectedDay,
+                    onSelectDay = onSelectDay,
+                )
             }
         }
     }
@@ -150,7 +177,7 @@ fun ScheduleCalendar(
     }
 }
 
-/** Header: ‹  Month Year  › */
+/** Header: ‹  Month Year  › — inside the calendar card. */
 @Composable
 private fun CalendarHeader(
     month: Calendar,
@@ -161,7 +188,7 @@ private fun CalendarHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onPrev) {
@@ -193,14 +220,12 @@ private fun CalendarHeader(
 /** Single-letter weekday header row (S M T W T F S). */
 @Composable
 private fun WeekdayHeader() {
-    val letters = remember {
-        listOf("S", "M", "T", "W", "T", "F", "S")
-    }
+    val letters = remember { listOf("S", "M", "T", "W", "T", "F", "S") }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         letters.forEach {
             Text(
@@ -216,52 +241,281 @@ private fun WeekdayHeader() {
     }
 }
 
-/** One day cell. Null = empty cell (padding day outside the month). */
+/** Renders one month's 7-column grid of day cells (with leading spacers). */
 @Composable
-private fun DayCell(
-    dayInfo: DayInfo?,
-    hasEpisodes: Boolean,
-    isSelected: Boolean,
-    onTap: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun MonthGrid(
+    month: Calendar,
+    byDay: Map<String, List<ScheduleEntry>>,
+    selectedDay: String?,
+    onSelectDay: (String?) -> Unit,
 ) {
-    Surface(
-        color = when {
-            isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-            hasEpisodes -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-            else -> MaterialTheme.colorScheme.surface
-        },
-        shape = RoundedCornerShape(8.dp),
-        modifier = modifier
-            .aspectRatio(1f)
-            .clickable(enabled = dayInfo != null, onClick = onTap),
-    ) {
-        if (dayInfo != null) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+    val weeks = remember(month) { buildMonthWeeks(month) }
+    val todayKey = remember {
+        val cal = Calendar.getInstance()
+        "%04d-%02d-%02d".format(
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH) + 1,
+            cal.get(Calendar.DAY_OF_MONTH),
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        weeks.forEach { week ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = dayInfo.dayOfMonth.toString(),
-                    fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = if (hasEpisodes) FontWeight.ExtraBold else FontWeight.Normal,
-                    color = if (hasEpisodes) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
-                )
-                if (hasEpisodes) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
+                week.forEach { dayInfo ->
+                    if (dayInfo == null) {
+                        // Leading/trailing spacer — invisible (no bordered block),
+                        // per user feedback: "no need to show the empty dates for
+                        // the month which does not have the dates."
+                        Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+                    } else {
+                        val dayEntries = byDay[dayInfo.key].orEmpty()
+                        DayCell(
+                            dayInfo = dayInfo,
+                            entries = dayEntries,
+                            isToday = dayInfo.key == todayKey,
+                            isSelected = dayInfo.key == selectedDay,
+                            onTap = { onSelectDay(dayInfo.key) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/**
+ * One day cell — the day number + a multi-dot indicator (see
+ * [DayDotsIndicator]) colored by each anime's AniList cover color. The current
+ * date is highlighted in soft lime-blue; the selected date in primary; days
+ * with episodes get a subtle primary tint.
+ */
+@Composable
+private fun DayCell(
+    dayInfo: DayInfo,
+    entries: List<ScheduleEntry>,
+    isToday: Boolean,
+    isSelected: Boolean,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val hasEpisodes = entries.isNotEmpty()
+    val cellColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        isToday -> LimeBlue.copy(alpha = 0.22f)
+        hasEpisodes -> MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
+    }
+    val borderColor = when {
+        isToday -> LimeBlue.copy(alpha = 0.7f)
+        isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+        hasEpisodes -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    }
+    Surface(
+        color = cellColor,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier
+            .aspectRatio(1f)
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .clickable(onClick = onTap),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = dayInfo.dayOfMonth.toString(),
+                fontFamily = RobotoFamily,
+                fontSize = 14.sp,
+                fontWeight = if (hasEpisodes || isToday) FontWeight.ExtraBold else FontWeight.Normal,
+                color = when {
+                    isToday -> LimeBlueFg
+                    hasEpisodes -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
+            )
+            if (hasEpisodes) {
+                Spacer(modifier = Modifier.height(3.dp))
+                DayDotsIndicator(entries = entries)
+            }
+        }
+    }
+}
+
+/**
+ * The multi-dot indicator for a calendar day, per the user's spec:
+ *  - 1–4 anime → that many dots below the number.
+ *  - 5 anime → 3 below + 1 left + 1 right of the number.
+ *  - 6 anime → 3 below + 1 left + 1 right + 1 top.
+ *  - 7 anime → 3 below + 1 left + 1 right + 1 top-left + 1 top-right (no top).
+ *  - 8 anime → 8 dots in all compass positions around the number.
+ *  - 9+ anime → a soft rainbow gradient bar below the number (green/blue/red/
+ *    yellow, themed-soft — no dark colors), no dots at the top.
+ *
+ * Each dot is colored by its anime's AniList `coverColor` (parsed hex). If the
+ * cover color is missing, falls back to the theme primary.
+ */
+@Composable
+private fun DayDotsIndicator(entries: List<ScheduleEntry>) {
+    val count = entries.size
+    val colors = remember(entries) {
+        entries.map { it.coverColor?.toColorOrNull() ?: MaterialTheme.colorScheme.primary }
+    }
+    when {
+        count <= 4 -> DotsRow(colors = colors)
+        count == 5 -> DotsAround(colors = colors, below = 3, left = true, right = true)
+        count == 6 -> DotsAround(colors = colors, below = 3, left = true, right = true, top = true)
+        count == 7 -> DotsAround(
+            colors = colors, below = 3, left = true, right = true,
+            topLeft = true, topRight = true,
+        )
+        count == 8 -> DotsCompass(colors = colors)
+        else -> RainbowBar()
+    }
+}
+
+/** A simple centered row of [colors.size] dots (up to 4). */
+@Composable
+private fun DotsRow(colors: List<Color>) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        colors.take(4).forEach { color ->
+            Box(
+                Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(color),
+            )
+        }
+    }
+}
+
+/**
+ * Dots positioned around the day number — [below] dots in a row beneath,
+ * plus optional left/right/top/topLeft/topRight dots flanking the number.
+ * Used for counts 5–7.
+ *
+ * NOTE: this composable renders ONLY the surrounding dots (left/right/top/
+ * corners). The "below" dots are rendered by this composable too, in a row
+ * under the number. The caller ([DayCell]) renders the number itself above
+ * this indicator, so "top" / "topLeft" / "topRight" here are actually rendered
+ * ABOVE the below-row (i.e. between the number and the below-row) — which reads
+ * as flanking the number from the user's perspective.
+ */
+@Composable
+private fun DotsAround(
+    colors: List<Color>,
+    below: Int,
+    left: Boolean = false,
+    right: Boolean = false,
+    top: Boolean = false,
+    topLeft: Boolean = false,
+    topRight: Boolean = false,
+) {
+    // We render a 3-column row: left dot | (top/topLeft-topRight) | right dot,
+    // then the below-row underneath. This keeps the layout compact inside the
+    // day cell.
+    val sideColor = colors.getOrNull(below)
+    val topColor = colors.getOrNull(below + 1)
+    val tlColor = colors.getOrNull(below + 2)
+    val trColor = colors.getOrNull(below + 3)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        // Top / corner row (only if any top-side dot is needed).
+        if (top || topLeft || topRight) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (topLeft && tlColor != null) Dot(tlColor) else Spacer(Modifier.size(4.dp))
+                if (top && topColor != null) Dot(topColor) else Spacer(Modifier.size(4.dp))
+                if (topRight && trColor != null) Dot(trColor) else Spacer(Modifier.size(4.dp))
+            }
+        }
+        // Side row: left dot | gap | right dot.
+        if (left || right) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (left && sideColor != null) Dot(sideColor) else Spacer(Modifier.size(4.dp))
+                Spacer(Modifier.width(8.dp))
+                if (right && sideColor != null) Dot(sideColor) else Spacer(Modifier.size(4.dp))
+            }
+        }
+        // Below row.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            colors.take(below).forEach { Dot(it) }
+        }
+    }
+}
+
+/** 8 dots in all compass positions around the number (for exactly 8 anime). */
+@Composable
+private fun DotsCompass(colors: List<Color>) {
+    // 3x3 grid with the center empty (the number sits there in the caller).
+    // Positions: TL, T, TR / L, _, R / BL, B, BR — 8 dots.
+    val rows = listOf(
+        listOf(colors[0], colors[1], colors[2]),
+        listOf(colors[3], null, colors[4]),
+        listOf(colors[5], colors[6], colors[7]),
+    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        rows.forEach { row ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                row.forEach { c ->
+                    if (c != null) Dot(c) else Spacer(Modifier.size(4.dp))
+                }
+            }
+        }
+    }
+}
+
+/** A soft rainbow gradient bar (green/blue/red/yellow) — for 9+ anime. */
+@Composable
+private fun RainbowBar() {
+    // Soft, theme-harmonized colors (no bright/dark variants).
+    val barColors = listOf(
+        MaterialTheme.colorScheme.primary, // green (lime)
+        Color(0xFF6EC6E6), // soft blue
+        Color(0xFFEF9A9A), // soft coral red
+        Color(0xFFFFE082), // soft amber yellow
+    )
+    Box(
+        Modifier
+            .width(22.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(Brush.horizontalGradient(barColors)),
+    )
+}
+
+@Composable
+private fun Dot(color: Color) {
+    Box(
+        Modifier
+            .size(4.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
 }
 
 /**
@@ -379,8 +633,8 @@ private fun formatAirTime(epochMs: Long): String {
 /**
  * Builds the weeks for [month]: a list of 7-element rows. Each element is a
  * [DayInfo] (or null for padding cells before the 1st / after the last day).
- * The grid always starts on Sunday and is padded so the 1st lands on the
- * correct weekday.
+ * The grid always starts on Sunday; null cells are rendered as invisible
+ * spacers (no bordered block) by [MonthGrid].
  */
 private fun buildMonthWeeks(month: Calendar): List<List<DayInfo?>> {
     val cal = (month.clone() as Calendar).apply {
@@ -390,13 +644,10 @@ private fun buildMonthWeeks(month: Calendar): List<List<DayInfo?>> {
     val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 
     val cells = mutableListOf<DayInfo?>()
-    // Leading padding.
+    // Leading padding (rendered as invisible spacers, not bordered blocks).
     repeat(firstDayOfWeek) { cells.add(null) }
     // Days.
     for (day in 1..daysInMonth) {
-        val dayCal = (month.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, day)
-        }
         cells.add(
             DayInfo(
                 dayOfMonth = day,
@@ -418,3 +669,13 @@ private data class DayInfo(
     val dayOfMonth: Int,
     val key: String, // "yyyy-MM-dd"
 )
+
+/** Parses a "#RRGGBB" / "RRGGBB" hex string to a Color, or null. */
+private fun String.toColorOrNull(): Color? {
+    return try {
+        val hex = removePrefix("#")
+        Color(hex.toLong(16).or(0xFF000000))
+    } catch (e: Exception) {
+        null
+    }
+}

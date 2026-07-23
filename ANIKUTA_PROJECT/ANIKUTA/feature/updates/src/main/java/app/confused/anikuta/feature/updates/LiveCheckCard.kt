@@ -245,13 +245,18 @@ private fun CompletedContent(progress: CheckProgressUi.Completed) {
     }
 }
 
-/** A subtle "new" dot rendered at the start of a row for freshly-found updates. */
+/**
+ * A vertical "new" bar rendered at the leading edge of a freshly-found update
+ * row — as tall as the cover thumbnail (80dp), 3dp wide, primary-colored,
+ * rounded. Replaces the old 6dp dot (per user feedback: "make the dot into a
+ * portrait line as tall as the height of the cover thumbnail images").
+ */
 @Composable
-fun NewBadgeDot(modifier: Modifier = Modifier) {
+fun NewBadgeBar(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .size(6.dp)
-            .clip(RoundedCornerShape(3.dp))
+            .size(width = 3.dp, height = 80.dp)
+            .clip(RoundedCornerShape(2.dp))
             .background(MaterialTheme.colorScheme.primary),
     )
 }

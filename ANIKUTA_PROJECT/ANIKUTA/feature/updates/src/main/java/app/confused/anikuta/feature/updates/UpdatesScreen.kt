@@ -276,9 +276,11 @@ private fun UpdateRow(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // "New" dot for freshly-found updates.
+            // "New" vertical bar for freshly-found updates — as tall as the
+            // cover thumbnail. Per user feedback: "make the dot into a portrait
+            // line as tall as the height of the cover thumbnail images".
             if (result.isNew) {
-                NewBadgeDot(modifier = Modifier.padding(end = 8.dp))
+                NewBadgeBar(modifier = Modifier.padding(end = 8.dp))
             }
             // Cover thumbnail (56×80dp portrait, 8dp rounded).
             Box(
@@ -303,21 +305,21 @@ private fun UpdateRow(
                 Text(
                     text = result.anime.title,
                     fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${result.newEpisodeCount} new episode${if (result.newEpisodeCount == 1) "" else "s"}",
                     fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -328,7 +330,7 @@ private fun UpdateRow(
                     Text(
                         text = "Checked ${formatTimeAgo(result.checkedAt)}",
                         fontFamily = RobotoFamily,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
