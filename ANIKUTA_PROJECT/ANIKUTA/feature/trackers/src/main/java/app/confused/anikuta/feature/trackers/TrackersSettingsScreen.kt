@@ -22,7 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.feature.trackers.components.TrackerCard
-import org.koin.compose.koinViewModel
+import org.koin.androidx.compose.koinViewModel
 
 /**
  * Trackers settings screen — list of tracker cards (AniList, MAL).

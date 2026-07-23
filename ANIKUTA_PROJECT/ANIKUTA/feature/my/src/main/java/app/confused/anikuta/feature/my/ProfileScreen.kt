@@ -30,7 +30,7 @@ import app.confused.anikuta.feature.my.components.ProfileHeader
 import app.confused.anikuta.feature.my.components.QuickStatsRow
 import app.confused.anikuta.feature.my.components.RecentlyWatchedSection
 import app.confused.anikuta.feature.my.components.ResetStatsDialog
-import org.koin.compose.koinViewModel
+import org.koin.androidx.compose.koinViewModel
 
 /**
  * My Profile screen — 10 sections (scrollable page).
