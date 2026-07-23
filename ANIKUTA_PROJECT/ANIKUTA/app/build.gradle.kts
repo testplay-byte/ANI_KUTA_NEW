@@ -66,6 +66,10 @@ dependencies {
     implementation(projects.feature.player)
     // Episode settings screens (Hub / Display / Layout / Metadata) — full pages
     implementation(projects.feature.episodeSettings)
+    // ── Agent 2: Profile + Trackers ──
+    implementation(projects.feature.my)
+    implementation(projects.feature.trackers)
+    implementation(projects.core.tracker)
 
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)

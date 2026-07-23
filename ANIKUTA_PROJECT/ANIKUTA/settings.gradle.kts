@@ -43,6 +43,7 @@ include(":core:network")
 include(":core:database")
 include(":core:preferences")
 include(":core:anilist")
+include(":core:tracker")           // Agent 2: Profile + Trackers
 include(":core:episode-metadata")
 include(":core:source-api")
 include(":core:source-local")

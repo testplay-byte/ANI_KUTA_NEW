@@ -1,0 +1,138 @@
+package app.confused.anikuta.feature.my.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import coil3.compose.AsyncImage
+
+/**
+ * Section 1: Profile Header.
+ *
+ * Shows the user's avatar (AniList avatar if linked, else a placeholder),
+ * username (AniList or "Local User"), and either a "Link AniList" button
+ * (if not linked) or a settings icon.
+ */
+@Composable
+fun ProfileHeader(
+    username: String?,
+    avatarUrl: String?,
+    isAniListLinked: Boolean,
+    onLinkAniList: () -> Unit,
+    onOpenCustomization: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Avatar (80dp circle)
+        if (avatarUrl != null) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Profile avatar",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape),
+            )
+        } else {
+            // Default placeholder: Person icon in a surfaceVariant circle
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(80.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "Default avatar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.size(16.dp))
+
+        // Username + link button
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = username ?: "Local User",
+                fontFamily = RobotoFamily,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            Text(
+                text = if (isAniListLinked) "AniList connected" else "Not connected",
+                fontFamily = RobotoFamily,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // Settings icon (top-right)
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier
+                .size(40.dp)
+                .clickable(onClick = onOpenCustomization),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Profile settings",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+
+    // Link AniList button (if not linked)
+    if (!isAniListLinked) {
+        OutlinedButton(
+            onClick = onLinkAniList,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary,
+            ),
+        ) {
+            Text("Link AniList", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
+        }
+    }
+}

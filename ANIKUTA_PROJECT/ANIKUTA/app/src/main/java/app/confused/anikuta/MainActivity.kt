@@ -86,6 +86,26 @@ class MainActivity : ComponentActivity() {
                 AnikutaApp()
             }
         }
+        // ── Agent 2: Handle OAuth callback intent (initial launch via redirect) ──
+        handleOAuthIntent(intent)
+    }
+
+    // ── Agent 2: Handle OAuth callback when app is already running (singleTask) ──
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleOAuthIntent(intent)
+    }
+
+    private fun handleOAuthIntent(intent: android.content.Intent?) {
+        if (intent?.action == android.content.Intent.ACTION_VIEW) {
+            val data = intent.data?.toString() ?: return
+            pendingOAuthCallback.value = data
+        }
+    }
+
+    companion object {
+        // Holds the OAuth callback URL for the composable to process.
+        val pendingOAuthCallback = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     }
 }
 
@@ -106,6 +126,11 @@ private fun AnikutaApp() {
     var showRepoSettings by remember { mutableStateOf(false) }
     var resolverState by remember { mutableStateOf<VideoResolverState>(VideoResolverState.Hidden) }
     var watchTarget by remember { mutableStateOf<WatchRequest?>(null) }
+    // ── Agent 2: Profile + Trackers ──
+    var showProfile by remember { mutableStateOf(false) }
+    var showTrackers by remember { mutableStateOf(false) }
+    // Holds the tracker ID when an OAuth login is in progress (for the callback).
+    var pendingTrackerAuth by remember { mutableStateOf<Int?>(null) }
     // Episode settings sub-page (Hub / Display / Layout / Metadata). Null = not in the flow.
     // The app uses a hand-rolled state-machine for navigation (NOT Voyager / Compose Nav).
     var episodeSettingsPage by remember {
@@ -139,7 +164,7 @@ private fun AnikutaApp() {
     }
 
     // Handle back gesture for sub-screens + resolver sheet + linking sheet + episode-settings sub-pages
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || episodeSettingsPage != null) {
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || episodeSettingsPage != null || showProfile || showTrackers) {
         when {
             watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
@@ -150,6 +175,9 @@ private fun AnikutaApp() {
                     if (episodeSettingsPage == app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub) null
                     else app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub
             }
+            // ── Agent 2: Profile + Trackers ──
+            showTrackers -> showTrackers = false
+            showProfile -> showProfile = false
             detailAnimeId != null -> {
                 detailAnimeId = null
                 resolverState = VideoResolverState.Hidden
@@ -157,6 +185,31 @@ private fun AnikutaApp() {
             showRepoSettings -> showRepoSettings = false
             showExtensions -> showExtensions = false
             showSettings -> showSettings = false
+        }
+    }
+
+    // ── Agent 2: Process OAuth callback when a redirect is received ──
+    val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        MainActivity.pendingOAuthCallback.collect { callbackUrl ->
+            if (callbackUrl != null && pendingTrackerAuth != null) {
+                val trackerId = pendingTrackerAuth!!
+                val tracker = trackerManager.getTracker(trackerId)
+                if (tracker != null) {
+                    scope.launch {
+                        val success = tracker.handleAuthCallback(callbackUrl)
+                        if (success) {
+                            Toast.makeText(context, "${tracker.name} connected", Toast.LENGTH_SHORT).show()
+                            Log.i("AnikutaTracker", "${tracker.name} login successful")
+                        } else {
+                            Toast.makeText(context, "${tracker.name} login failed", Toast.LENGTH_SHORT).show()
+                            Log.e("AnikutaTracker", "${tracker.name} login failed")
+                        }
+                        pendingTrackerAuth = null
+                        MainActivity.pendingOAuthCallback.value = null
+                    }
+                }
+            }
         }
     }
 
@@ -277,6 +330,41 @@ private fun AnikutaApp() {
                     onBack = { showSettings = false },
                 )
             }
+            // ── Agent 2: Profile + Trackers — full-screen pages ──
+            showProfile -> {
+                app.confused.anikuta.feature.my.ProfileScreen(
+                    onBack = { showProfile = false },
+                    onOpenAnime = { id -> detailAnimeId = id },
+                    onLinkAniList = {
+                        pendingTrackerAuth = app.confused.anikuta.core.tracker.Tracker.ANILIST_ID
+                        val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
+                        val authUrl = trackerManager.anilist.getAuthUrl()
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(authUrl))
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    },
+                    onOpenTrackers = {
+                        showProfile = false
+                        showTrackers = true
+                    },
+                )
+            }
+            showTrackers -> {
+                app.confused.anikuta.feature.trackers.TrackersSettingsScreen(
+                    onBack = { showTrackers = false },
+                    onLoginTracker = { trackerId ->
+                        pendingTrackerAuth = trackerId
+                        val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
+                        val tracker = trackerManager.getTracker(trackerId)
+                        val authUrl = tracker?.getAuthUrl()
+                        if (authUrl != null) {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(authUrl))
+                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        }
+                    },
+                )
+            }
             // Tab content
             else -> {
                 when (currentRoute) {
@@ -305,6 +393,8 @@ private fun AnikutaApp() {
                     )
                     "more" -> MoreScreen(
                         onOpenSettings = { showSettings = true },
+                        onOpenProfile = { showProfile = true },
+                        onOpenTrackers = { showTrackers = true },
                     )
                     else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
                 }
@@ -420,6 +510,8 @@ private fun AnikutaApp() {
 @Composable
 private fun MoreScreen(
     onOpenSettings: () -> Unit,
+    onOpenProfile: () -> Unit = {},
+    onOpenTrackers: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize()) {
@@ -428,6 +520,13 @@ private fun MoreScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
         ) {
+            // ── Agent 2: Profile + Trackers entries (at top, per design) ──
+            item {
+                app.confused.anikuta.feature.my.ProfileTrackersMoreEntries(
+                    onOpenProfile = onOpenProfile,
+                    onOpenTrackers = onOpenTrackers,
+                )
+            }
             item {
                 SettingsSectionLabel("General")
                 MoreRow(

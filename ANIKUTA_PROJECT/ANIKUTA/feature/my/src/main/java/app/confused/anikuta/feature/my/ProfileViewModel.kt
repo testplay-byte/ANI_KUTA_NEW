@@ -1,0 +1,111 @@
+package app.confused.anikuta.feature.my
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import app.confused.anikuta.core.player.WatchProgressStore
+import app.confused.anikuta.core.tracker.StatsCalculator
+import app.confused.anikuta.core.tracker.TrackerManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
+import android.util.Log
+
+/**
+ * ViewModel for the My Profile page.
+ *
+ * Observes [StatsCalculator.observeStats] for local stats and, when AniList
+ * is linked, fetches enriched [TrackerUserStats] periodically.
+ *
+ * Per RULES §3: calls Repository/StatsCalculator only — never APIs directly.
+ */
+class ProfileViewModel(
+    private val statsCalculator: StatsCalculator,
+    private val trackerManager: TrackerManager,
+    private val watchProgressStore: WatchProgressStore,
+) : ViewModel() {
+
+    private val _state = MutableStateFlow(ProfileState(isLoading = true))
+    val state: StateFlow<ProfileState> = _state.asStateFlow()
+
+    init {
+        observeLocalStats()
+        observeAniListState()
+    }
+
+    /** Observe local stats (library + watch progress). Always active. */
+    private fun observeLocalStats() {
+        viewModelScope.launch {
+            statsCalculator.observeStats().collectLatest { stats ->
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    localStats = stats,
+                )
+            }
+        }
+    }
+
+    /** Observe AniList login state + fetch enriched stats when linked. */
+    private fun observeAniListState() {
+        viewModelScope.launch {
+            trackerManager.anilist.username.collectLatest { username ->
+                val linked = username != null
+                _state.value = _state.value.copy(
+                    isAniListLinked = linked,
+                    anilistUsername = username,
+                )
+                if (linked) {
+                    fetchAniListAvatar()
+                    fetchAniListStats()
+                } else {
+                    _state.value = _state.value.copy(
+                        anilistAvatarUrl = null,
+                        anilistStats = null,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Fetch the AniList avatar URL. */
+    private fun fetchAniListAvatar() {
+        viewModelScope.launch {
+            statsCalculator.observeAniListAvatar().collectLatest { avatar ->
+                _state.value = _state.value.copy(anilistAvatarUrl = avatar)
+            }
+        }
+    }
+
+    /** Fetch enriched AniList stats (one-shot; re-fetched on refresh). */
+    fun fetchAniListStats() {
+        viewModelScope.launch {
+            try {
+                val stats = statsCalculator.fetchAniListStats()
+                _state.value = _state.value.copy(anilistStats = stats)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch AniList stats", e)
+            }
+        }
+    }
+
+    /** Refresh all stats (pull-to-refresh or manual trigger). */
+    fun refresh() {
+        if (trackerManager.anilist.isLoggedIn) {
+            fetchAniListStats()
+        }
+    }
+
+    /** Reset watch progress data (called by the reset-stats dialog). */
+    fun resetWatchHistory() {
+        viewModelScope.launch {
+            watchProgressStore.deleteAll()
+            Log.i(TAG, "Watch history reset")
+        }
+    }
+
+    companion object {
+        private const val TAG = "AnikutaProfileVM"
+    }
+}
