@@ -965,8 +965,8 @@ private fun WatchScreenContent(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(16.dp),
+                            .padding(horizontal = 0.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(0.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
                         tonalElevation = 1.dp,
                     ) {
@@ -982,7 +982,7 @@ private fun WatchScreenContent(
                             hasSub = hasSub,
                             hasDub = hasDub,
                             hasHsub = hasHsub,
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                         )
                     }
                 }
@@ -992,8 +992,8 @@ private fun WatchScreenContent(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(16.dp),
+                            .padding(horizontal = 0.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(0.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerLow,
                         tonalElevation = 1.dp,
                     ) {
@@ -1002,7 +1002,7 @@ private fun WatchScreenContent(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
@@ -1250,15 +1250,15 @@ private fun WatchTopBar(title: String, onBack: () -> Unit) {
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -1285,6 +1285,7 @@ private fun WatchTopBar(title: String, onBack: () -> Unit) {
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -1330,26 +1331,20 @@ private fun EpisodeDescriptionSection(
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
-        // Episode number badge — accent-colored pill
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primary,
-            ) {
-                Text(
-                    text = "EP ${episodeNumber.toInt()}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(10.dp))
+        // "Currently playing episode N" — themed text, no background.
+        // Per user: "remove it. And instead of it I want you to show a single
+        // line saying 'Currently playing episode' and then the episode number.
+        // This text will be in the themed color and it will not have any
+        // background or anything like that."
+        Text(
+            text = "Currently playing episode ${episodeNumber.toInt()}",
+            fontFamily = RobotoFamily,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         // Episode title — large, ExtraBold
         Text(
             text = episodeTitle,
@@ -1402,7 +1397,7 @@ private fun EpisodeDescriptionSection(
                 lineHeight = 16.sp,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
                 overflow = if (expanded) TextOverflow.Visible else TextOverflow.Ellipsis,
                 modifier = Modifier.clickable { expanded = !expanded },
             )
@@ -1526,9 +1521,12 @@ private fun EpisodeRow(
         else -> 120.dp to 68.dp
     }
 
-    // Card color — current episode gets highlighted; no alternating zebra-stripe
+    // Card color — current episode gets a lime green tint + highlighting;
+    // no alternating zebra-stripe. Per user: "add a themed color tint on top
+    // of it. Currently our theme is a lime green kind of thing so maybe
+    // implement a tint of lime green on top of it."
     val cardColor = if (isCurrent) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
     } else {
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
     }
@@ -1545,7 +1543,7 @@ private fun EpisodeRow(
         shadowElevation = if (isCurrent) 2.dp else 0.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .clickable(onClick = onClick),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -1614,29 +1612,13 @@ private fun EpisodeRow(
                             .height(IntrinsicSize.Min),
                         verticalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        // Title (with optional background) + "Now Playing" indicator
+                        // Title (with optional background)
+                        // Per user: "there is no need to show the now playing
+                        // status inside the episodes list. Don't show the now
+                        // playing text instead. Just do highlighting of the
+                        // episode like how it is being currently done and also
+                        // add a themed color tint on top of it."
                         if (displayPrefs.showTitles) {
-                            if (isCurrent) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "Now playing",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Text(
-                                        text = "Now Playing",
-                                        fontFamily = RobotoFamily,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                                Spacer(Modifier.size(2.dp))
-                            }
                             if (displayPrefs.showTitleBackground) {
                                 Surface(
                                     color = MaterialTheme.colorScheme.surfaceContainerHigh,

@@ -74,16 +74,18 @@ fun ResultAnimeCard(
                 contentScale = ContentScale.Crop,
             )
             // Score badge (AniList only — extensions don't provide scores).
-            // Redesigned: dark translucent pill with a lime star + white score —
-            // high contrast on any cover, reads as a "rating" at a glance.
+            // Dark translucent pill with a lime star + white score.
+            // Size-matched to the library badge style: tight lineHeight, 9sp font,
+            // 6dp corners, 4dp outer offset. Per user: "the size of the badges
+            // needs to be adjusted... just like how it is now on the library page."
             val score = result.scoreBadge()
             if (score != null) {
                 Surface(
                     color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(6.dp),
+                        .padding(4.dp),
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -91,7 +93,8 @@ fun ResultAnimeCard(
                     ) {
                         Text(
                             text = "★",
-                            fontSize = 11.sp,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.primary,
                             fontFamily = RobotoFamily,
@@ -99,7 +102,8 @@ fun ResultAnimeCard(
                         Spacer(Modifier.padding(horizontal = 2.dp))
                         Text(
                             text = score,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = androidx.compose.ui.graphics.Color.White,
                             fontFamily = RobotoFamily,
