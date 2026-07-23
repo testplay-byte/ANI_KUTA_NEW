@@ -69,6 +69,8 @@ fun ProfileScreen(
     // CollapsingHeader collapses when the user scrolls down.
     val isCollapsed = lazyListState.firstVisibleItemIndex > 0 || lazyListState.firstVisibleItemScrollOffset > 20
 
+    val stats = state.displayStats
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             CollapsingHeader(
@@ -102,7 +104,6 @@ fun ProfileScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
-                val stats = state.displayStats
                 if (stats != null) {
                     LazyColumn(
                         state = lazyListState,
