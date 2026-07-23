@@ -1,6 +1,8 @@
 package app.confused.anikuta.core.anilist.api
 
 import app.confused.anikuta.core.anilist.model.AniListAnime
+import app.confused.anikuta.core.anilist.model.AniListAiringSchedule
+import app.confused.anikuta.core.anilist.model.AiringScheduleInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -13,6 +15,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -38,6 +41,10 @@ class AniListApi(
     // In-memory cache for list queries (trending/popular) — stale-while-revalidate.
     // Key: query type + page. Value: (timestamp, results).
     private val listCache = mutableMapOf<String, Pair<Long, List<AniListAnime>>>()
+
+    // In-memory cache for airing-schedule queries (Updates > Schedule tab).
+    // Key: sorted-ID tuple. Value: (timestamp, results).
+    private val airingCache = mutableMapOf<String, Pair<Long, List<AiringScheduleInfo>>>()
 
     /** Fetch trending anime (with stale-while-revalidate caching). */
     suspend fun fetchTrending(page: Int = 1, perPage: Int = 20): List<AniListAnime> {
@@ -217,6 +224,120 @@ class AniListApi(
         }
     }
 
+    /**
+     * Fetches airing-schedule data for a batch of library anime (by AniList ID).
+     *
+     * Used by the Updates > Schedule tab to show upcoming episodes. Returns one
+     * [AiringScheduleInfo] per ID that AniList has data for, including the
+     * `nextAiringEpisode` and the full list of not-yet-aired `airingSchedule`
+     * entries.
+     *
+     * **Threading:** runs on `Dispatchers.IO`.
+     *
+     * **Caching:** results are cached in-memory for [AIRING_CACHE_TTL_MS] (5 min)
+     * keyed by the sorted-ID tuple. The Schedule tab changes slowly (episodes
+     * air daily, not per-minute), so a 5-min cache is plenty.
+     *
+     * @param ids AniList anime IDs. AniList's `id_in` accepts up to ~50 per
+     *   request; callers should chunk larger libraries. Empty list → empty result.
+     */
+    suspend fun fetchAiringSchedule(ids: List<Int>): List<AiringScheduleInfo> {
+        if (ids.isEmpty()) return emptyList()
+
+        val cacheKey = ids.sorted().joinToString(",")
+        val cached = airingCache[cacheKey]
+        if (cached != null && System.currentTimeMillis() - cached.first < AIRING_CACHE_TTL_MS) {
+            return cached.second
+        }
+
+        val fresh = fetchAiringScheduleFromNetwork(ids)
+        airingCache[cacheKey] = System.currentTimeMillis() to fresh
+        return fresh
+    }
+
+    private suspend fun fetchAiringScheduleFromNetwork(ids: List<Int>): List<AiringScheduleInfo> =
+        withContext(Dispatchers.IO) {
+            val variables = buildJsonObject {
+                put("ids", JsonArray(ids.map { JsonPrimitive(it) }))
+            }
+
+            val body = buildJsonObject {
+                put("query", AIRING_SCHEDULE_QUERY)
+                put("variables", variables)
+            }
+
+            val request = Request.Builder()
+                .url(API_URL)
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+                .addHeader("Content-Type", "application/json")
+                .addHeader("Accept", "application/json")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+                ?: return@withContext emptyList()
+
+            if (!response.isSuccessful) return@withContext emptyList()
+
+            parseAiringSchedule(responseBody)
+        }
+
+    /** Parses the airing-schedule GraphQL response into [AiringScheduleInfo] list. */
+    private fun parseAiringSchedule(json: String): List<AiringScheduleInfo> {
+        val root = Json.parseToJsonElement(json).jsonObject
+        val data = root["data"]?.jsonObject ?: return emptyList()
+        val page = data["Page"]?.jsonObject ?: return emptyList()
+        val media = page["media"]?.jsonArray ?: return emptyList()
+
+        return media.mapNotNull { element ->
+            try {
+                val obj = element.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: return@mapNotNull null
+                val titleObj = obj["title"]?.jsonObject
+                val romaji = titleObj?.get("romaji")?.jsonPrimitive?.contentOrNull
+                val english = titleObj?.get("english")?.jsonPrimitive?.contentOrNull
+                val native = titleObj?.get("native")?.jsonPrimitive?.contentOrNull
+                val displayTitle = english ?: romaji ?: native ?: "Unknown"
+
+                val coverObj = obj["coverImage"]?.jsonObject
+                val coverUrl = coverObj?.get("large")?.jsonPrimitive?.contentOrNull
+                val coverColor = coverObj?.get("color")?.jsonPrimitive?.contentOrNull
+
+                val nextAiring = obj["nextAiringEpisode"]?.jsonObject?.let { na ->
+                    AniListAiringSchedule(
+                        id = na["id"]?.jsonPrimitive?.intOrNull,
+                        airingAt = na["airingAt"]?.jsonPrimitive?.intOrNull,
+                        timeUntilAiring = na["timeUntilAiring"]?.jsonPrimitive?.intOrNull,
+                        episode = na["episode"]?.jsonPrimitive?.intOrNull,
+                    )
+                }
+
+                val upcoming = obj["airingSchedule"]?.jsonArray?.mapNotNull { sch ->
+                    val s = sch.jsonObject
+                    val airingAt = s["airingAt"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                    val episode = s["episode"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                    AniListAiringSchedule(
+                        id = s["id"]?.jsonPrimitive?.intOrNull,
+                        airingAt = airingAt,
+                        timeUntilAiring = null,
+                        episode = episode,
+                    )
+                } ?: emptyList()
+
+                AiringScheduleInfo(
+                    anilistId = id,
+                    title = displayTitle,
+                    coverUrl = coverUrl,
+                    coverColor = coverColor,
+                    nextAiringEpisode = nextAiring,
+                    upcomingEpisodes = upcoming,
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     /** Fetch a single anime by its AniList ID (with 5-min in-memory cache). */
     suspend fun fetchById(id: Int): AniListAnime? {
         // Check cache
@@ -320,6 +441,9 @@ class AniListApi(
         private const val API_URL = "https://graphql.anilist.co"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
+        /** TTL for the airing-schedule cache (5 min). */
+        private const val AIRING_CACHE_TTL_MS = 5 * 60 * 1000L
+
         private fun defaultClient() = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -388,6 +512,31 @@ class AniListApi(
             query (${'$'}id: Int) {
               Media(id: ${'$'}id, type: ANIME) {
                 $ANIME_FIELDS
+              }
+            }
+        """
+
+        /**
+         * Airing-schedule query for the Updates > Schedule tab.
+         *
+         * Fetches, for a batch of AniList IDs (`$ids`), the `nextAiringEpisode`
+         * (single upcoming) + the full `airingSchedule(notYetAired: true)` list.
+         * `notYetAired: true` filters to future episodes only.
+         *
+         * Note: we fetch only the minimal fields needed for the Schedule UI
+         * (id, title, cover, schedule) — NOT the full `ANIME_FIELDS` set — to
+         * keep the response small for large libraries.
+         */
+        private const val AIRING_SCHEDULE_QUERY = """
+            query (${'$'}ids: [Int]) {
+              Page(perPage: 50) {
+                media(id_in: ${'$'}ids, type: ANIME) {
+                  id
+                  title { romaji english native }
+                  coverImage { large color }
+                  nextAiringEpisode { id airingAt timeUntilAiring episode }
+                  airingSchedule(notYetAired: true) { id episode airingAt }
+                }
               }
             }
         """

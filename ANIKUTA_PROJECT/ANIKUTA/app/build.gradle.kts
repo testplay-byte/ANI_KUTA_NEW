@@ -47,6 +47,8 @@ dependencies {
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
     implementation(projects.core.player)
+    // ── Agent 1: History + Updates ──
+    implementation(projects.core.updateChecker)
     // source-api — for ExtensionAppHolder.init() in App.kt (ADR-029)
     implementation(projects.core.sourceApi)
 
@@ -66,6 +68,9 @@ dependencies {
     implementation(projects.feature.player)
     // Episode settings screens (Hub / Display / Layout / Metadata) — full pages
     implementation(projects.feature.episodeSettings)
+    // ── Agent 1: History + Updates ──
+    implementation(projects.feature.history)
+    implementation(projects.feature.updates)
 
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)

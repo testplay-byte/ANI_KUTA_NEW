@@ -57,10 +57,12 @@ import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
+import app.confused.anikuta.feature.history.HistoryScreen
 import app.confused.anikuta.feature.library.LibraryScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionRepoSettingsScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
 import app.confused.anikuta.feature.search.data.RecentSearchesStore
+import app.confused.anikuta.feature.updates.UpdatesScreen
 import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
 import app.confused.anikuta.feature.search.ui.SearchScreen
 import app.confused.anikuta.feature.search.viewmodel.SearchResult
@@ -111,6 +113,10 @@ private fun AnikutaApp() {
     var episodeSettingsPage by remember {
         mutableStateOf<app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage?>(null)
     }
+    // ── Agent 1: History + Updates ──
+    // History + Updates full-screen sub-pages, reached from the More screen.
+    var showHistory by remember { mutableStateOf(false) }
+    var showUpdates by remember { mutableStateOf(false) }
     val anilistApi = remember { AniListApi() }
     val extensionManager: AnimeExtensionManager = koinInject()
     val sourceMatcher: SourceMatcher = koinInject()
@@ -139,7 +145,8 @@ private fun AnikutaApp() {
     }
 
     // Handle back gesture for sub-screens + resolver sheet + linking sheet + episode-settings sub-pages
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || episodeSettingsPage != null) {
+    // ── Agent 1: History + Updates ── added showHistory || showUpdates to the enabled condition.
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || episodeSettingsPage != null || showHistory || showUpdates) {
         when {
             watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
@@ -150,6 +157,9 @@ private fun AnikutaApp() {
                     if (episodeSettingsPage == app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub) null
                     else app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub
             }
+            // ── Agent 1: History + Updates ──
+            showHistory -> showHistory = false
+            showUpdates -> showUpdates = false
             detailAnimeId != null -> {
                 detailAnimeId = null
                 resolverState = VideoResolverState.Hidden
@@ -275,6 +285,25 @@ private fun AnikutaApp() {
                     onOpenExtensions = { showExtensions = true },
                     onOpenEpisodeSettings = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
                     onBack = { showSettings = false },
+                )
+            }
+            // ── Agent 1: History + Updates ── (full-screen sub-pages from More)
+            showHistory -> {
+                HistoryScreen(
+                    onBack = { showHistory = false },
+                    onOpenAnime = { anilistId ->
+                        showHistory = false
+                        detailAnimeId = anilistId
+                    },
+                )
+            }
+            showUpdates -> {
+                UpdatesScreen(
+                    onBack = { showUpdates = false },
+                    onOpenAnime = { anilistId ->
+                        showUpdates = false
+                        detailAnimeId = anilistId
+                    },
                 )
             }
             // Tab content

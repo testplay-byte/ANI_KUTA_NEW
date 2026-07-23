@@ -1,6 +1,7 @@
 package app.confused.anikuta.di
 
 import android.content.Context
+import app.confused.anikuta.core.updatechecker.EpisodeFetchGateway
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.api.AnimeExtensionApi
 import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
@@ -11,6 +12,7 @@ import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.data.extension.repo.defaultRepoOkHttpClient
 import app.confused.anikuta.data.extension.trust.TrustExtension
+import app.confused.anikuta.data.extension.updatechecker.EpisodeFetchGatewayImpl
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import org.koin.core.module.Module
@@ -67,4 +69,11 @@ val extensionModule: Module = module {
     // Depends on PreferenceStore (provided by preferenceModule). Shared between
     // :feature:search (linking sheet) and the future extension-only detail page.
     single { ExtensionLinkStore(get()) }
+
+    // ── Agent 1: EpisodeFetchGateway ──
+    // Binds the :core:update-checker interface to the :data:extension impl.
+    // Consumed by UpdateChecker (registered in updateCheckerModule). Kept here
+    // (not in updateCheckerModule) because the impl lives in :data:extension
+    // and :core:update-checker cannot depend on :data:extension (ARCHITECTURE §3).
+    single<EpisodeFetchGateway> { EpisodeFetchGatewayImpl(get()) }
 }

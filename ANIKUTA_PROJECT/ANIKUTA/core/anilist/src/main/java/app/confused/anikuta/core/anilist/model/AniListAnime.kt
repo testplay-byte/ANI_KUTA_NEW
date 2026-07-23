@@ -97,6 +97,32 @@ data class AniListAiringSchedule(
     val episode: Int? = null,
 )
 
+/**
+ * Airing-schedule info for one anime — the payload of `AniListApi.fetchAiringSchedule`.
+ *
+ * Used by the Updates > Schedule tab. Parsed manually (not via `@Serializable`)
+ * in `AniListApi.parseAiringSchedule` because the query selects only a subset
+ * of fields and we don't want to add nullable list fields to the
+ * `@Serializable AniListAnime` model used by every other query.
+ *
+ * @property anilistId The AniList media ID.
+ * @property title Display title (English > Romaji > Native > "Unknown").
+ * @property coverUrl The `coverImage.large` URL (or null).
+ * @property coverColor Hex color string from AniList (e.g. "#FF5722"), or null.
+ * @property nextAiringEpisode The single next airing episode, or null if the
+ *   anime has finished / no scheduled episode.
+ * @property upcomingEpisodes All not-yet-aired episodes from AniList's
+ *   `airingSchedule(notYetAired: true)`. May be empty.
+ */
+data class AiringScheduleInfo(
+    val anilistId: Int,
+    val title: String,
+    val coverUrl: String?,
+    val coverColor: String?,
+    val nextAiringEpisode: AniListAiringSchedule?,
+    val upcomingEpisodes: List<AniListAiringSchedule>,
+)
+
 // ── Extension helpers ────────────────────────────────────────────────────────
 
 /** The display title for an [AniListAnime]. */
