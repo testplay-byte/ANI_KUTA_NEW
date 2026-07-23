@@ -337,7 +337,6 @@ private fun AnikutaApp() {
                     onOpenAnime = { id -> detailAnimeId = id },
                     onLinkAniList = {
                         pendingTrackerAuth = app.confused.anikuta.core.tracker.Tracker.ANILIST_ID
-                        val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
                         val authUrl = trackerManager.anilist.getAuthUrl()
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(authUrl))
                         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -354,7 +353,6 @@ private fun AnikutaApp() {
                     onBack = { showTrackers = false },
                     onLoginTracker = { trackerId ->
                         pendingTrackerAuth = trackerId
-                        val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
                         val tracker = trackerManager.getTracker(trackerId)
                         val authUrl = tracker?.getAuthUrl()
                         if (authUrl != null) {
