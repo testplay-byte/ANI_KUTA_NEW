@@ -1,5 +1,6 @@
 package app.confused.anikuta.core.anilist.api
 
+import android.util.Log
 import app.confused.anikuta.core.anilist.model.AniListAnime
 import app.confused.anikuta.core.anilist.model.AniListAiringSchedule
 import app.confused.anikuta.core.anilist.model.AiringScheduleInfo
@@ -277,9 +278,14 @@ class AniListApi(
             val responseBody = response.body?.string()
                 ?: return@withContext emptyList()
 
-            if (!response.isSuccessful) return@withContext emptyList()
+            if (!response.isSuccessful) {
+                Log.w(TAG, "fetchAiringSchedule HTTP ${response.code} for ids=$ids body=${responseBody.take(300)}")
+                return@withContext emptyList()
+            }
 
-            parseAiringSchedule(responseBody)
+            val parsed = parseAiringSchedule(responseBody)
+            Log.i(TAG, "fetchAiringSchedule: ids=${ids.size} -> ${parsed.size} anime with schedule data")
+            parsed
         }
 
     /** Parses the airing-schedule GraphQL response into [AiringScheduleInfo] list. */
@@ -312,7 +318,10 @@ class AniListApi(
                     )
                 }
 
-                val upcoming = obj["airingSchedule"]?.jsonArray?.mapNotNull { sch ->
+                // `airingSchedule` is an AiringScheduleConnection — the entries
+                // are under its `nodes` array (NOT a flat array on airingSchedule
+                // itself). Querying without `nodes` returns a 400 from AniList.
+                val upcoming = obj["airingSchedule"]?.jsonObject?.get("nodes")?.jsonArray?.mapNotNull { sch ->
                     val s = sch.jsonObject
                     val airingAt = s["airingAt"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
                     val episode = s["episode"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
@@ -438,6 +447,7 @@ class AniListApi(
     }
 
     companion object {
+        private const val TAG = "AniListApi"
         private const val API_URL = "https://graphql.anilist.co"
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
 
@@ -523,19 +533,26 @@ class AniListApi(
          * (single upcoming) + the full `airingSchedule(notYetAired: true)` list.
          * `notYetAired: true` filters to future episodes only.
          *
+         * **IMPORTANT:** `airingSchedule` returns an `AiringScheduleConnection`
+         * (a paginated connection), NOT a flat array. The actual schedule
+         * entries are under `nodes`. Querying `airingSchedule { id episode airingAt }`
+         * directly (without `nodes`) makes AniList return a 400 Bad Request,
+         * which silently empties the Schedule page. This was the root cause of
+         * the "No upcoming episodes" bug reported in testing.
+         *
          * Note: we fetch only the minimal fields needed for the Schedule UI
          * (id, title, cover, schedule) — NOT the full `ANIME_FIELDS` set — to
          * keep the response small for large libraries.
          */
         private const val AIRING_SCHEDULE_QUERY = """
             query (${'$'}ids: [Int]) {
-              Page(perPage: 50) {
+              Page(page: 1, perPage: 50) {
                 media(id_in: ${'$'}ids, type: ANIME) {
                   id
                   title { romaji english native }
                   coverImage { large color }
                   nextAiringEpisode { id airingAt timeUntilAiring episode }
-                  airingSchedule(notYetAired: true) { id episode airingAt }
+                  airingSchedule(notYetAired: true) { nodes { id episode airingAt } }
                 }
               }
             }

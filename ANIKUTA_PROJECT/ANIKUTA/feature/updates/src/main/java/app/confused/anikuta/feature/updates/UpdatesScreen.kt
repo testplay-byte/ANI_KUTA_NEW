@@ -87,6 +87,7 @@ fun UpdatesScreen(
                 onSelectDay = { viewModel.selectCalendarDay(it) },
                 onDismissDaySheet = { viewModel.selectCalendarDay(null) },
                 onSetViewMode = { viewModel.setScheduleViewMode(it) },
+                onJumpToToday = { viewModel.jumpToToday() },
             )
         }
     }
@@ -151,8 +152,15 @@ private fun UpdatesTabStrip(
 }
 
 /**
- * The Updates tab — pull-to-refresh + last-checked timestamp + list of
- * [UpdateResult] rows (or empty state).
+ * The Updates tab — pull-to-refresh + live "Currently checking" card +
+ * last-checked timestamp + list of [UpdateResult] rows (or empty state).
+ *
+ * During a check, the [LiveCheckCard] sits at the top showing the anime
+ * currently being searched (poster + title + index/total) with smooth
+ * crossfade transitions. Results appear incrementally below as they're found —
+ * freshly-found ones (`isNew = true`) get a primary dot + accent-tinted
+ * background; older ones render normally. The list is persistent across
+ * navigation (old results are never cleared).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,8 +177,12 @@ private fun UpdatesTabContent(
         state = pullState,
         modifier = Modifier.fillMaxSize(),
     ) {
+        val showEmpty = state.updates.isEmpty() &&
+            state.checkProgress is CheckProgressUi.Idle &&
+            !state.isChecking
+
         when {
-            state.updates.isEmpty() && !state.isChecking -> {
+            showEmpty -> {
                 EmptyState(
                     title = "No new episodes",
                     description = if (state.lastCheckedAt > 0) {
@@ -189,8 +201,12 @@ private fun UpdatesTabContent(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 110.dp),
                 ) {
+                    // Live "Currently checking" card (animated in/out).
+                    item(key = "live_card") {
+                        LiveCheckCard(progress = state.checkProgress)
+                    }
                     // Last-checked timestamp header.
-                    item {
+                    item(key = "last_checked") {
                         Text(
                             text = if (state.lastCheckedAt > 0) {
                                 "Last checked ${formatTimeAgo(state.lastCheckedAt)}"
@@ -204,7 +220,12 @@ private fun UpdatesTabContent(
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                         )
                     }
-                    item { ListSectionHeader(text = "New episodes") }
+                    if (state.updates.any { it.isNew }) {
+                        item(key = "header_new") { ListSectionHeader(text = "New") }
+                    }
+                    if (state.updates.any { !it.isNew }) {
+                        item(key = "header_older") { ListSectionHeader(text = "Earlier") }
+                    }
                     items(
                         count = state.updates.size,
                         key = { idx -> state.updates[idx].anime.id },
@@ -225,14 +246,24 @@ private fun UpdatesTabContent(
 
 /**
  * One Updates row — cover, title, "N new episodes", SUB/DUB badges, "checked Xh ago".
+ *
+ * Freshly-found results (`isNew = true`) get a primary dot at the leading edge
+ * + a subtle primary-tinted background so they stand out. Older results render
+ * with the standard `surfaceVariant` 0.4f background (matching the More
+ * entries) and no dot.
  */
 @Composable
 private fun UpdateRow(
     result: UpdateResult,
     onClick: () -> Unit,
 ) {
+    val rowBg = if (result.isNew) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    }
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = rowBg,
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -245,6 +276,10 @@ private fun UpdateRow(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // "New" dot for freshly-found updates.
+            if (result.isNew) {
+                NewBadgeDot(modifier = Modifier.padding(end = 8.dp))
+            }
             // Cover thumbnail (56×80dp portrait, 8dp rounded).
             Box(
                 modifier = Modifier

@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.model.AiringScheduleInfo
 import app.confused.anikuta.core.common.repository.AnimeRepository
+import app.confused.anikuta.core.updatechecker.UpdateCheckProgress
 import app.confused.anikuta.core.updatechecker.UpdateChecker
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
@@ -47,7 +49,7 @@ class UpdatesViewModel(
     val state = _state.asStateFlow()
 
     init {
-        // Collect cached update results reactively.
+        // Collect cached update results reactively (merged list — old + new).
         viewModelScope.launch {
             updateChecker.getLastResults().collect { results ->
                 _state.update { it.copy(updates = results, isLoading = false) }
@@ -57,6 +59,33 @@ class UpdatesViewModel(
         viewModelScope.launch {
             updateChecker.getLastCheckTimestamp().collect { ts ->
                 _state.update { it.copy(lastCheckedAt = ts) }
+            }
+        }
+        // Collect the live check-progress stream + map to the UI type. When a
+        // check completes, briefly show Completed then fall back to Idle so the
+        // "Currently checking" card animates out.
+        viewModelScope.launch {
+            updateChecker.getCheckProgress().collect { progress ->
+                val ui = when (progress) {
+                    is UpdateCheckProgress.Idle -> CheckProgressUi.Idle
+                    is UpdateCheckProgress.Checking -> CheckProgressUi.Checking(
+                        currentAnime = progress.currentAnime,
+                        currentIndex = progress.currentIndex,
+                        totalCount = progress.totalCount,
+                        foundSoFar = progress.foundSoFar,
+                    )
+                    is UpdateCheckProgress.Completed -> CheckProgressUi.Completed(
+                        foundCount = progress.foundCount,
+                        totalChecked = progress.totalChecked,
+                    )
+                }
+                _state.update { it.copy(checkProgress = ui) }
+                // If completed, hold the Completed state briefly so the user
+                // sees "Found N new", then reset to Idle.
+                if (progress is UpdateCheckProgress.Completed) {
+                    delay(1500)
+                    _state.update { it.copy(checkProgress = CheckProgressUi.Idle) }
+                }
             }
         }
         // Fetch the schedule once on first open.
@@ -105,6 +134,11 @@ class UpdatesViewModel(
             try {
                 val library = animeRepository.observeFavorites().first()
                 val ids = library.mapNotNull { it.anilistId }
+                Log.i(
+                    TAG,
+                    "fetchSchedule: library=${library.size} anime, ${ids.size} with anilistId" +
+                        if (ids.size < library.size) " (${library.size - ids.size} skipped — null anilistId)" else "",
+                )
                 if (ids.isEmpty()) {
                     _state.update { it.copy(schedule = emptyList(), isLoading = false) }
                     return@launch
@@ -162,6 +196,7 @@ class UpdatesViewModel(
                 }
 
                 val sorted = entries.sortedBy { it.airingAtMillis }
+                Log.i(TAG, "fetchSchedule: built ${sorted.size} schedule entries from ${ids.size} library ids")
                 _state.update {
                     it.copy(schedule = sorted, isLoading = false, scheduleError = null)
                 }
@@ -180,6 +215,15 @@ class UpdatesViewModel(
     /** Opens/closes the calendar day-detail sheet for [dayKey] ("yyyy-MM-dd"). */
     fun selectCalendarDay(dayKey: String?) {
         _state.update { it.copy(selectedCalendarDay = dayKey) }
+    }
+
+    /**
+     * Bumps [UpdatesState.calendarJumpSignal] so the [ScheduleCalendar] resets
+     * its displayed month to the current month. Called by the "Jump to today"
+     * button in the Schedule tab's calendar view.
+     */
+    fun jumpToToday() {
+        _state.update { it.copy(calendarJumpSignal = it.calendarJumpSignal + 1) }
     }
 
     companion object {

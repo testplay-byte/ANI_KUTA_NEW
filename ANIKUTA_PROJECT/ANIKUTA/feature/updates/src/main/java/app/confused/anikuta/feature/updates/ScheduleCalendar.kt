@@ -67,6 +67,7 @@ fun ScheduleCalendar(
     onSelectDay: (String?) -> Unit,
     onOpenAnime: (Int) -> Unit,
     onDismissSheet: () -> Unit,
+    jumpToTodaySignal: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     // Index entries by "yyyy-MM-dd" for O(1) day-cell lookup.
@@ -81,6 +82,15 @@ fun ScheduleCalendar(
         mutableStateOf(
             Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) },
         )
+    }
+
+    // "Jump to today" — when the signal counter changes, reset the displayed
+    // month to the current month. LaunchedEffect avoids resetting on initial
+    // composition (signal starts at 0).
+    androidx.compose.runtime.LaunchedEffect(jumpToTodaySignal) {
+        if (jumpToTodaySignal > 0) {
+            displayedMonth = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+        }
     }
 
     Column(modifier = modifier) {

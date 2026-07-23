@@ -22,6 +22,10 @@ import app.confused.anikuta.core.common.model.Anime
  * @property sourceName The extension source name the episodes came from, or
  *   null if no source matched (in which case `newEpisodes` is empty and the
  *   result exists only to surface an AniList airing cross-reference).
+ * @property isNew True if this result was found in the MOST RECENT check run.
+ *   False for results carried over from previous checks. The Updates page uses
+ *   this to highlight freshly-found updates (accent treatment) while showing
+ *   older ones normally. Set by [UpdateChecker] when merging results.
  */
 data class UpdateResult(
     val anime: Anime,
@@ -31,7 +35,37 @@ data class UpdateResult(
     val hasSub: Boolean,
     val hasDub: Boolean,
     val sourceName: String?,
+    val isNew: Boolean = false,
 )
+
+/**
+ * Live progress of an in-flight update check. Emitted by
+ * [UpdateChecker.getCheckProgress] as the check iterates library anime.
+ *
+ * The Updates page renders a "Currently checking" card from [Checking] so the
+ * user sees exactly which anime is being searched (poster + title + index/total)
+ * with smooth transitions between anime — instead of an opaque spinner that
+ * only resolves when the whole check finishes.
+ *
+ * - [Idle] — no check in flight (the default).
+ * - [Checking] — a check is running; [currentAnime] is being fetched right now,
+ *   [currentIndex]/[totalCount] is its position in the library, and [foundSoFar]
+ *   is the running list of results (grows incrementally as each anime resolves).
+ * - [Completed] — the check finished; [foundCount] anime had new episodes.
+ */
+sealed interface UpdateCheckProgress {
+    data object Idle : UpdateCheckProgress
+    data class Checking(
+        val currentAnime: Anime,
+        val currentIndex: Int,
+        val totalCount: Int,
+        val foundSoFar: Int,
+    ) : UpdateCheckProgress
+    data class Completed(
+        val foundCount: Int,
+        val totalChecked: Int,
+    ) : UpdateCheckProgress
+}
 
 /**
  * A single episode discovered during an update check.

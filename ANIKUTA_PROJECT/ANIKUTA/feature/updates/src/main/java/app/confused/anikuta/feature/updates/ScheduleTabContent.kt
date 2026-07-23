@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,9 +59,15 @@ fun ScheduleTabContent(
     onSelectDay: (String?) -> Unit,
     onDismissDaySheet: () -> Unit,
     onSetViewMode: (ScheduleViewMode) -> Unit,
+    onJumpToToday: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        // View-mode toggle row (List / Calendar) + refresh button.
+        // View-mode toggle row (List / Calendar) + a context-aware action button.
+        // Per user feedback: the right-side button was an ambiguous calendar icon
+        // that did nothing useful. Now it's:
+        //  - Calendar view → "Jump to today" (CalendarToday icon) — resets the
+        //    displayed month to the current month.
+        //  - List view → "Refresh schedule" (Refresh icon) — re-fetches airing data.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -72,10 +80,20 @@ fun ScheduleTabContent(
                 onSetMode = onSetViewMode,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onRefresh) {
+            IconButton(
+                onClick = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) onJumpToToday else onRefresh,
+            ) {
                 Icon(
-                    imageVector = Icons.Filled.CalendarMonth,
-                    contentDescription = "Refresh schedule",
+                    imageVector = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) {
+                        Icons.Filled.CalendarToday
+                    } else {
+                        Icons.Filled.Refresh
+                    },
+                    contentDescription = if (state.scheduleViewMode == ScheduleViewMode.CALENDAR) {
+                        "Jump to today"
+                    } else {
+                        "Refresh schedule"
+                    },
                     tint = MaterialTheme.colorScheme.onBackground,
                 )
             }
@@ -113,6 +131,7 @@ fun ScheduleTabContent(
                         onOpenAnime(anilistId)
                     },
                     onDismissSheet = onDismissDaySheet,
+                    jumpToTodaySignal = state.calendarJumpSignal,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -230,7 +249,7 @@ private fun ScheduleRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()

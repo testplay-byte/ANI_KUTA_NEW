@@ -146,6 +146,9 @@ fun HistoryScreen(
     }
 
     // ── Clear-all confirmation dialog ──
+    // Per user request: the Delete button is red + has a button feel (filled
+    // Button, not a bare TextButton) so the destructive action is visually
+    // distinct from Cancel.
     if (state.showClearConfirm) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissClearConfirm() },
@@ -164,7 +167,14 @@ fun HistoryScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.clearAllHistory() }) {
+                androidx.compose.material3.Button(
+                    onClick = { viewModel.clearAllHistory() },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = androidx.compose.ui.graphics.Color(0xFFE53935),
+                        contentColor = androidx.compose.ui.graphics.Color.White,
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
                     Text("Delete", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
                 }
             },
@@ -178,9 +188,19 @@ fun HistoryScreen(
 }
 
 /**
- * One history row — cover thumbnail, title, episode label, progress bar,
- * relative time. Background is `surfaceVariant.copy(alpha = 0.2f)` (no zebra
- * stripe — all rows use the same background, per the design spec).
+ * One history row — cover thumbnail, title, an episode+watched-time pill, and
+ * a progress bar at the very bottom of the row.
+ *
+ * Per user feedback:
+ *  - Background is `surfaceVariant.copy(alpha = 0.4f)` — matches the More
+ *    entries (Settings/History/Updates rows) so it no longer blends into the
+ *    screen background.
+ *  - Title is 16sp Bold (up from 14sp) for better readability.
+ *  - Episode + watched-time are combined into a single pill below the title:
+ *    "Episode 10 · watched 45m ago" — clearer than two separate text lines.
+ *  - The progress bar is a 3dp strip along the very bottom edge of the row
+ *    (full-width), so it reads as a "resumability" affordance without
+ *    competing with the title for the same space.
  */
 @Composable
 private fun HistoryRow(
@@ -188,78 +208,78 @@ private fun HistoryRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable(onClick = onClick),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Cover thumbnail (56×80dp portrait, 8dp rounded).
-            Box(
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
-                    .size(width = 56.dp, height = 80.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                val cover = entry.progress.coverUrl
-                if (!cover.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = cover,
-                        contentDescription = entry.displayTitle,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
+                // Cover thumbnail (56×80dp portrait, 8dp rounded).
+                Box(
+                    modifier = Modifier
+                        .size(width = 56.dp, height = 80.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    val cover = entry.progress.coverUrl
+                    if (!cover.isNullOrEmpty()) {
+                        AsyncImage(
+                            model = cover,
+                            contentDescription = entry.displayTitle,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.size(12.dp))
+
+                // Text stack: title + episode/watched-time pill.
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = entry.displayTitle,
+                        fontFamily = RobotoFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // Combined pill: "Episode 10 · watched 45m ago".
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = "${entry.episodeLabel} · watched ${formatTimeAgo(entry.progress.updatedAt)}",
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.size(12.dp))
-
-            // Text stack + progress bar.
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.displayTitle,
-                    fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = entry.episodeLabel,
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { entry.progressFraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Watched ${formatTimeAgo(entry.progress.updatedAt)}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            // Progress bar — 3dp strip along the very bottom edge of the row.
+            LinearProgressIndicator(
+                progress = { entry.progressFraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            )
         }
     }
 }

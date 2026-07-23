@@ -92,12 +92,23 @@ class UpdateChecker(
 
     private val _results = MutableStateFlow<List<UpdateResult>>(emptyList())
     private val _lastCheckTimestamp = MutableStateFlow(0L)
+    private val _checkProgress = MutableStateFlow<UpdateCheckProgress>(UpdateCheckProgress.Idle)
 
-    /** Reactive stream of the last check's results. Read by the Updates page. */
+    /** Reactive stream of the merged results list (old + new). Read by the Updates page. */
     fun getLastResults(): StateFlow<List<UpdateResult>> = _results.asStateFlow()
 
     /** Reactive stream of when the last check ran (epoch ms). 0 = never. */
     fun getLastCheckTimestamp(): StateFlow<Long> = _lastCheckTimestamp.asStateFlow()
+
+    /**
+     * Reactive stream of the live check progress. The Updates page renders a
+     * "Currently checking" card from [UpdateCheckProgress.Checking] — showing
+     * the anime currently being searched (poster + title + index/total) with
+     * smooth transitions between anime. Emits [UpdateCheckProgress.Idle] when
+     * no check is in flight, and [UpdateCheckProgress.Completed] briefly when
+     * a check finishes.
+     */
+    fun getCheckProgress(): StateFlow<UpdateCheckProgress> = _checkProgress.asStateFlow()
 
     init {
         // Seed the timestamp from prefs so the UI shows the real "last checked"
@@ -108,16 +119,20 @@ class UpdateChecker(
     /**
      * Manually checks ALL library anime for new episodes.
      *
-     * Returns the list of [UpdateResult]s — one per anime that has new
-     * episodes (i.e. `newEpisodeCount > 0`). Also updates [getLastResults]
-     * + [getLastCheckTimestamp] reactively.
+     * Emits live progress via [getCheckProgress] (per-anime: which anime is
+     * being searched, its index/total, and the running found-count) so the
+     * Updates page can render a "Currently checking" card. Results are MERGED
+     * into the existing [getLastResults] list (not replaced) — anime already in
+     * the list from a previous check are kept and marked `isNew = false`;
+     * anime with new episodes in THIS check are added/updated with `isNew = true`.
+     * This means navigating away and back preserves the full history of found
+     * updates, and the UI can highlight the freshly-found ones.
      *
      * Safe to call from any coroutine scope (e.g. `viewModelScope` on
      * pull-to-refresh, or a future `WorkManager` worker). All network/source
      * work happens on `Dispatchers.IO`.
      *
-     * @return the new-update results (empty list if nothing new or the library
-     *   is empty).
+     * @return the full merged results list after this check.
      */
     suspend fun checkForUpdates(): List<UpdateResult> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -126,24 +141,46 @@ class UpdateChecker(
             animeRepository.observeFavorites().first()
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to read library favorites", e)
-            return@withContext emptyList()
+            _checkProgress.value = UpdateCheckProgress.Idle
+            return@withContext _results.value
         }
 
         if (library.isEmpty()) {
             Log.i(TAG, "checkForUpdates: library empty, nothing to check")
             preferences.lastCheckTimestamp().set(now)
             _lastCheckTimestamp.value = now
+            _checkProgress.value = UpdateCheckProgress.Completed(0, 0)
             _results.value = emptyList()
             return@withContext emptyList()
         }
 
         Log.i(TAG, "checkForUpdates: checking ${library.size} library anime")
-        val results = mutableListOf<UpdateResult>()
-        for (anime in library) {
+
+        // Start from the existing results — mark ALL as old (isNew = false).
+        // New/updated results from this check will be marked isNew = true.
+        val merged = _results.value.associateBy { it.anime.id }
+            .mapValues { it.value.copy(isNew = false) }
+            .toMutableMap()
+        var foundThisCheck = 0
+
+        library.forEachIndexed { index, anime ->
+            // Emit live progress BEFORE the fetch so the UI shows which anime
+            // is being searched right now.
+            _checkProgress.value = UpdateCheckProgress.Checking(
+                currentAnime = anime,
+                currentIndex = index + 1,
+                totalCount = library.size,
+                foundSoFar = foundThisCheck,
+            )
             try {
                 val result = checkAnimeInternal(anime, now)
                 if (result != null && result.newEpisodeCount > 0) {
-                    results.add(result)
+                    // Merge: add or replace this anime's entry, marked new.
+                    merged[anime.id] = result.copy(isNew = true)
+                    foundThisCheck++
+                    // Emit incremental results so the UI list grows as we go.
+                    _results.value = merged.values
+                        .sortedWith(compareByDescending<UpdateResult> { it.isNew }.thenByDescending { it.newEpisodeCount })
                 }
             } catch (t: Throwable) {
                 // Isolate failures — one broken anime/extension must not abort
@@ -152,16 +189,15 @@ class UpdateChecker(
             }
         }
 
-        // Sort newest-check-first isn't meaningful here; sort by new-episode-count
-        // descending so the most-updated anime surface at the top.
-        results.sortByDescending { it.newEpisodeCount }
-
+        val finalResults = merged.values
+            .sortedWith(compareByDescending<UpdateResult> { it.isNew }.thenByDescending { it.newEpisodeCount })
         preferences.lastCheckTimestamp().set(now)
         _lastCheckTimestamp.value = now
-        _results.value = results
+        _results.value = finalResults
+        _checkProgress.value = UpdateCheckProgress.Completed(foundThisCheck, library.size)
 
-        Log.i(TAG, "checkForUpdates: done — ${results.size} anime with new episodes")
-        results
+        Log.i(TAG, "checkForUpdates: done — $foundThisCheck new this check, ${finalResults.size} total in merged list")
+        finalResults
     }
 
     /**
@@ -264,6 +300,7 @@ class UpdateChecker(
             hasSub = hasSub,
             hasDub = hasDub,
             sourceName = sourceName,
+            isNew = true,
         )
     }
 
