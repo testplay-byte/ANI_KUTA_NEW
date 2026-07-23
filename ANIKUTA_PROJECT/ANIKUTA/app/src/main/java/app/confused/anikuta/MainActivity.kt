@@ -58,6 +58,7 @@ import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
 import app.confused.anikuta.feature.browse.BrowseScreen
 import app.confused.anikuta.feature.history.HistoryScreen
+import app.confused.anikuta.feature.history.HistoryUpdatesMoreEntries
 import app.confused.anikuta.feature.library.LibraryScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionRepoSettingsScreen
 import app.confused.anikuta.feature.extensionssettings.ExtensionsSettingsScreen
@@ -334,6 +335,8 @@ private fun AnikutaApp() {
                     )
                     "more" -> MoreScreen(
                         onOpenSettings = { showSettings = true },
+                        onOpenHistory = { showHistory = true },
+                        onOpenUpdates = { showUpdates = true },
                     )
                     else -> PlaceholderScreen(title = currentRoute.replaceFirstChar { it.uppercase() })
                 }
@@ -445,10 +448,17 @@ private fun AnikutaApp() {
 
 /**
  * More screen — a list with Settings and other options.
+ *
+ * ── Agent 1: History + Updates ──
+ * The "Activity" section (History + Updates rows) is contributed by
+ * [HistoryUpdatesMoreEntries] from :feature:history, so this file doesn't
+ * need to import the History/Updates icons or rows directly.
  */
 @Composable
 private fun MoreScreen(
     onOpenSettings: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenUpdates: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
     Column(modifier = Modifier.fillMaxSize()) {
@@ -464,6 +474,13 @@ private fun MoreScreen(
                     title = "Settings",
                     subtitle = "Theme, display, data management",
                     onClick = onOpenSettings,
+                )
+            }
+            // ── Agent 1: History + Updates ──
+            item {
+                HistoryUpdatesMoreEntries(
+                    onOpenHistory = onOpenHistory,
+                    onOpenUpdates = onOpenUpdates,
                 )
             }
         }
