@@ -17,11 +17,12 @@ data class ProfileStats(
     val meanScore: Double?,
     val genreDistribution: Map<String, Int>,
     val formatDistribution: Map<String, Int>,
-    val statusDistribution: Map<TrackStatus, Int>,
+    val statusDistribution: Map<String, Int>,
     val scoreDistribution: Map<Int, Int>,
     val countryDistribution: Map<String, Int>,
     val behindAnime: List<BehindAnime>,
     val recentlyWatched: List<WatchProgressStore.Progress>,
+    val libraryAnime: List<Anime>,
 )
 
 /** An anime the user is behind on (watched < released episodes). */

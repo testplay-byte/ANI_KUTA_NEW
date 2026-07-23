@@ -1,6 +1,6 @@
 package app.confused.anikuta.feature.my.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,10 +27,12 @@ import coil3.compose.AsyncImage
 import java.util.concurrent.TimeUnit
 
 /**
- * Section 9: Recently Watched — mini list of last 5 watched episodes.
+ * Section: Recently Watched — mini list of last 3 watched episodes.
  *
- * Compact: cover + title + episode + time. "See all" is a placeholder (History
- * page is Agent 1's domain).
+ * Compact: cover + title + episode + time. Shows only the 3 most recent.
+ *
+ * Design: matches More page entry cards (surfaceVariant alpha 0.4f,
+ * RoundedCornerShape 12dp).
  */
 @Composable
 fun RecentlyWatchedSection(
@@ -39,18 +42,13 @@ fun RecentlyWatchedSection(
 ) {
     if (recentlyWatched.isEmpty()) return
 
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "RECENTLY WATCHED",
-            fontFamily = RobotoFamily,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.06.sp,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
-        )
+    // Show only the 3 most recent
+    val display = recentlyWatched.take(3)
 
-        recentlyWatched.forEach { progress ->
+    Column(modifier = modifier.fillMaxWidth()) {
+        SectionHeader("Recently Watched")
+
+        display.forEach { progress ->
             RecentlyWatchedRow(progress, onOpenAnime)
         }
     }
@@ -61,18 +59,15 @@ private fun RecentlyWatchedRow(
     progress: WatchProgressStore.Progress,
     onOpenAnime: (Int) -> Unit,
 ) {
-    // Extract anilistId from the progress key (not available directly; use the
-    // animeTitle + coverUrl for display). The onOpenAnime callback needs the
-    // anilistId, but Progress doesn't carry it. We pass 0 if unavailable —
-    // the caller (ProfileScreen) will handle this gracefully.
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 3.dp),
     ) {
         Row(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Cover image (if available)
@@ -83,13 +78,14 @@ private fun RecentlyWatchedRow(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(40.dp, 56.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp)),
+                        .clip(RoundedCornerShape(6.dp)),
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(40.dp, 56.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp)),
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 )
             }
 
@@ -100,7 +96,7 @@ private fun RecentlyWatchedRow(
                     text = progress.animeTitle ?: progress.title,
                     fontFamily = RobotoFamily,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                 )

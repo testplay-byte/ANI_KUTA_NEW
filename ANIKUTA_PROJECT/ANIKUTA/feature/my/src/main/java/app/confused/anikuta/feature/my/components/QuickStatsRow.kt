@@ -5,14 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
@@ -20,7 +21,11 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 /**
  * Section 2: Quick Stats — a horizontal row of 4 stat cards.
  *
- * Shows: Total Anime, Total Episodes Watched, Total Watch Time, Mean Score.
+ * Shows: Total Anime, Total Episodes, Watch Time, Mean Score.
+ *
+ * Design: label on TOP (bold, onSurface/white), value BELOW (primary color,
+ * ExtraBold). Matches the More page entry card style (surfaceVariant alpha
+ * 0.4f, RoundedCornerShape 12dp). Labels use short text to avoid wrapping.
  */
 @Composable
 fun QuickStatsRow(
@@ -33,7 +38,7 @@ fun QuickStatsRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatCard(
@@ -47,12 +52,12 @@ fun QuickStatsRow(
             modifier = Modifier.weight(1f),
         )
         StatCard(
-            label = "Watch Time",
+            label = "Time",
             value = formatWatchTime(totalWatchTimeMinutes),
             modifier = Modifier.weight(1f),
         )
         StatCard(
-            label = "Mean Score",
+            label = "Score",
             value = meanScore?.let { "%.1f".format(it) } ?: "—",
             modifier = Modifier.weight(1f),
         )
@@ -66,26 +71,33 @@ private fun StatCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
         modifier = modifier,
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = value,
-                fontFamily = RobotoFamily,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            // Label on top — bold, onSurface (white in dark theme)
             Text(
                 text = label,
                 fontFamily = RobotoFamily,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+            // Value below — primary color, ExtraBold
+            Text(
+                text = value,
+                fontFamily = RobotoFamily,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
             )
         }
     }

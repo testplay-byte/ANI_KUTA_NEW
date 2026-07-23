@@ -2,6 +2,7 @@ package app.confused.anikuta.core.tracker
 
 import android.util.Log
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.AnimeStatus
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.player.WatchProgressStore
 import kotlinx.coroutines.Dispatchers
@@ -88,14 +89,19 @@ class StatsCalculator(
         // in local mode. When AniList is linked, the enriched stats provide it.
         val formatDist = emptyMap<String, Int>()
 
-        // Status distribution: from local anime status (ongoing/completed/etc).
-        // Map to TrackStatus approximately — local mode doesn't have tracker
-        // statuses, so we use the anime's own status.
-        val statusDist = mutableMapOf<TrackStatus, Int>()
+        // Status distribution: shows the anime's release status (Finished,
+        // Releasing, Not Yet Released, Cancelled, On Hiatus) — NOT tracker
+        // status. Based on AnimeStatus constants from the Anime model.
+        val statusDist = mutableMapOf<String, Int>()
         for (anime in libraryAnime) {
             val status = when (anime.status) {
-                2 -> TrackStatus.COMPLETED // AnimeStatus.COMPLETED
-                else -> TrackStatus.WATCHING // ongoing/unknown → watching
+                AnimeStatus.COMPLETED -> "Finished"
+                AnimeStatus.ONGOING -> "Releasing"
+                AnimeStatus.CANCELLED -> "Cancelled"
+                AnimeStatus.ON_HIATUS -> "On Hiatus"
+                AnimeStatus.LICENSED -> "Licensed"
+                AnimeStatus.PUBLISHING_FINISHED -> "Publishing Finished"
+                else -> "Not Yet Released"
             }
             statusDist[status] = (statusDist[status] ?: 0) + 1
         }
@@ -120,10 +126,10 @@ class StatsCalculator(
         // Behind anime: library anime where watched < released episodes.
         val behindAnime = computeBehindAnime(libraryAnime, progressMap)
 
-        // Recently watched: last 5 by updatedAt.
+        // Recently watched: last 3 by updatedAt.
         val recentlyWatched = progressMap.values
             .sortedByDescending { it.updatedAt }
-            .take(5)
+            .take(3)
 
         return ProfileStats(
             totalAnime = totalAnime,
@@ -137,6 +143,7 @@ class StatsCalculator(
             countryDistribution = countryDist,
             behindAnime = behindAnime,
             recentlyWatched = recentlyWatched,
+            libraryAnime = libraryAnime,
         )
     }
 

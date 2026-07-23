@@ -192,9 +192,17 @@ private fun AnikutaApp() {
     val trackerManager: app.confused.anikuta.core.tracker.TrackerManager = koinInject()
     androidx.compose.runtime.LaunchedEffect(Unit) {
         MainActivity.pendingOAuthCallback.collect { callbackUrl ->
-            if (callbackUrl != null && pendingTrackerAuth != null) {
-                val trackerId = pendingTrackerAuth!!
-                val tracker = trackerManager.getTracker(trackerId)
+            if (callbackUrl != null) {
+                // Determine which tracker to use based on the callback URL host.
+                // AniList redirects to aniyomi://anilist-auth#access_token=...
+                // MAL redirects to aniyomi://myanimelist-auth?code=...
+                val uri = android.net.Uri.parse(callbackUrl)
+                val trackerId = when (uri.host) {
+                    "anilist-auth" -> app.confused.anikuta.core.tracker.Tracker.ANILIST_ID
+                    "myanimelist-auth" -> app.confused.anikuta.core.tracker.Tracker.MAL_ID
+                    else -> pendingTrackerAuth // fallback to the pending tracker
+                }
+                val tracker = trackerId?.let { trackerManager.getTracker(it) }
                 if (tracker != null) {
                     scope.launch {
                         val success = tracker.handleAuthCallback(callbackUrl)
@@ -208,6 +216,9 @@ private fun AnikutaApp() {
                         pendingTrackerAuth = null
                         MainActivity.pendingOAuthCallback.value = null
                     }
+                } else {
+                    pendingTrackerAuth = null
+                    MainActivity.pendingOAuthCallback.value = null
                 }
             }
         }
@@ -333,7 +344,6 @@ private fun AnikutaApp() {
             // ── Agent 2: Profile + Trackers — full-screen pages ──
             showProfile -> {
                 app.confused.anikuta.feature.my.ProfileScreen(
-                    onBack = { showProfile = false },
                     onOpenAnime = { id -> detailAnimeId = id },
                     onLinkAniList = {
                         pendingTrackerAuth = app.confused.anikuta.core.tracker.Tracker.ANILIST_ID

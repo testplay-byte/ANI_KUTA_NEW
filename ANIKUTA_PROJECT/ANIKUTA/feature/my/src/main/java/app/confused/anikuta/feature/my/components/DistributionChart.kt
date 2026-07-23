@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,11 +24,15 @@ import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
- * A horizontal bar chart showing a distribution (genre, format, status, etc.).
+ * A horizontal bar chart showing a distribution (format, country, etc.).
  *
  * Uses Compose Canvas (no external charting library — per design language rules).
  * Each entry: label on the left, bar (primary-colored) in the middle, count on
  * the right. Bars are proportional to the max count.
+ *
+ * Note: For genres, use [GenreChipsSection] instead (clickable chips).
+ * For status, use [StatusDistributionSection] instead (cards).
+ * For scores, use [ScoreDistributionSection] instead (vertical bars).
  */
 @Composable
 fun DistributionChart(
@@ -42,24 +48,28 @@ fun DistributionChart(
     val maxCount = sorted.maxOf { it.second }.coerceAtLeast(1)
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // Section header (principle #6: accent, left-aligned, uppercase)
-        Text(
-            text = title.uppercase(),
-            fontFamily = RobotoFamily,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 0.06.sp,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
-        )
+        SectionHeader(title)
 
-        sorted.forEach { (label, count) ->
-            BarRow(
-                label = label,
-                count = count,
-                maxCount = maxCount,
-                barColor = barColor,
-            )
+        // Wrap all bars in a single card for a cleaner look
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+            ) {
+                sorted.forEach { (label, count) ->
+                    BarRow(
+                        label = label,
+                        count = count,
+                        maxCount = maxCount,
+                        barColor = barColor,
+                    )
+                }
+            }
         }
     }
 }
@@ -74,7 +84,7 @@ private fun BarRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 3.dp),
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Label (fixed width, left-aligned)
@@ -82,7 +92,7 @@ private fun BarRow(
             text = label,
             fontFamily = RobotoFamily,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.width(80.dp),
         )
@@ -93,7 +103,7 @@ private fun BarRow(
         Canvas(
             modifier = Modifier
                 .weight(1f)
-                .height(20.dp),
+                .height(16.dp),
         ) {
             val barWidth = (size.width * (count.toFloat() / maxCount)).coerceAtLeast(4f)
             drawRoundRect(
@@ -110,7 +120,7 @@ private fun BarRow(
             text = count.toString(),
             fontFamily = RobotoFamily,
             fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.ExtraBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(32.dp),
         )
