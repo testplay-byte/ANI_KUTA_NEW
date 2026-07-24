@@ -65,8 +65,21 @@ fun UpdatesScreen(
 
     BackHandler(onBack = onBack)
 
+    // Per-tab LazyListStates so the header can collapse when either tab scrolls.
+    // Per user feedback (round 3): "the updates text at the very top does not
+    // minimize when I scroll. When I scroll, its size should become smaller and
+    // the whole top section should move up a little bit."
+    val updatesListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scheduleListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val collapsed = when (state.activeTab) {
+        UpdatesTab.UPDATES -> updatesListState.firstVisibleItemScrollOffset > 20 ||
+            updatesListState.firstVisibleItemIndex > 0
+        UpdatesTab.SCHEDULE -> scheduleListState.firstVisibleItemScrollOffset > 20 ||
+            scheduleListState.firstVisibleItemIndex > 0
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        CollapsingHeader(title = "Updates", collapsed = false)
+        CollapsingHeader(title = "Updates", collapsed = collapsed)
 
         // ── Tab strip (Updates / Schedule) — centered-pill style ──
         UpdatesTabStrip(
@@ -77,11 +90,19 @@ fun UpdatesScreen(
         when (state.activeTab) {
             UpdatesTab.UPDATES -> UpdatesTabContent(
                 state = state,
+                listState = updatesListState,
                 onCheck = { viewModel.checkForUpdates() },
-                onOpenAnime = onOpenAnime,
+                onOpenAnime = { anilistId, animeId ->
+                    // Acknowledge the update (clears the "new" highlight) BEFORE
+                    // navigating to the detail page, so when the user returns
+                    // the row is no longer marked new.
+                    viewModel.acknowledgeUpdate(animeId)
+                    onOpenAnime(anilistId)
+                },
             )
             UpdatesTab.SCHEDULE -> ScheduleTabContent(
                 state = state,
+                listState = scheduleListState,
                 onRefresh = { viewModel.fetchSchedule() },
                 onOpenAnime = onOpenAnime,
                 onSelectDay = { viewModel.selectCalendarDay(it) },
@@ -166,8 +187,9 @@ private fun UpdatesTabStrip(
 @Composable
 private fun UpdatesTabContent(
     state: UpdatesState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onCheck: () -> Unit,
-    onOpenAnime: (Int) -> Unit,
+    onOpenAnime: (anilistId: Int, animeId: Long) -> Unit,
 ) {
     val pullState = rememberPullToRefreshState()
 
@@ -198,6 +220,7 @@ private fun UpdatesTabContent(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 110.dp),
                 ) {
@@ -234,7 +257,9 @@ private fun UpdatesTabContent(
                         UpdateRow(
                             result = result,
                             onClick = {
-                                result.anime.anilistId?.let { onOpenAnime(it) }
+                                result.anime.anilistId?.let { anilistId ->
+                                    onOpenAnime(anilistId, result.anime.id)
+                                }
                             },
                         )
                     }

@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -190,23 +189,23 @@ fun HistoryScreen(
 }
 
 /**
- * One history row — cover thumbnail, title, an episode+watched-time pill, a
- * playback timestamp, and a progress bar at the very bottom of the row.
+ * One history row — cover thumbnail, title, an episode+watched-time pill, and
+ * a progress bar at the very bottom of the row with the watched-time floating
+ * ON TOP of it.
  *
- * Per user feedback (round 2):
- *  - Background is `surfaceVariant.copy(alpha = 0.4f)` — matches the More
- *    entries so it no longer blends into the screen background.
- *  - Title is 16sp Bold for readability.
- *  - Episode + watched-time are combined into a single pill below the title:
- *    "Episode 10 · watched 45m ago".
- *  - A playback timestamp "12:34 / 24:00" shows how far the user watched.
- *    When progress is very small (< 5%), the bar would be too short to sit a
- *    timestamp above cleanly — so the timestamp renders to the RIGHT of the
- *    cover (under the title area) instead of above the bar, avoiding a cramped
- *    sliver above a near-empty bar. When progress >= 5%, the timestamp sits
- *    just above the bottom progress bar (full-width, right-aligned).
- *  - The progress bar is a 5dp strip along the very bottom edge (thicker than
- *    the old 3dp for a better feel), full-width, with rounded ends.
+ * Per user feedback (round 3):
+ *  - The cover thumbnail has NO content below it — it's a clean 56×80 box.
+ *  - The playback timestamp "12:34 / 24:00" FLOATS ON TOP of the progress bar
+ *    (overlaid as a small surface-backed badge, centered) so the user sees how
+ *    far they watched right where the progress is.
+ *  - When progress is very small (< 5%), the bar is effectively under the
+ *    cover area and the floating badge would be cramped — so the timestamp
+ *    moves to the RIGHT of the cover (in the text column, under the pill)
+ *    instead of floating on the bar.
+ *  - The progress bar is a 5dp strip along the very bottom edge, full-width,
+ *    with rounded ends.
+ *  - Title is 16sp Bold. Episode + watched-time are in a single pill below
+ *    the title: "Episode 10 · watched 45m ago".
  */
 @Composable
 private fun HistoryRow(
@@ -214,14 +213,15 @@ private fun HistoryRow(
     onClick: () -> Unit,
 ) {
     val fraction = entry.progressFraction
-    // When the bar is a near-empty sliver (< 5%), the timestamp above it would
-    // look cramped. Instead, show the timestamp to the right (in the text
-    // column) so it has room. Otherwise, show it just above the bottom bar.
-    val showTimestampAboveBar = fraction >= 0.05f
+    // When the bar is a near-empty sliver (< 5%), the floating timestamp
+    // would sit over a near-empty bar (cramped). Instead, show the timestamp
+    // to the right (in the text column, under the pill) and don't overlay it.
+    val floatTimestampOnBar = fraction >= 0.05f
     val timestamp = formatPlaybackTimestamp(
         entry.progress.positionSeconds,
         entry.progress.durationSeconds,
     )
+    val hasDuration = entry.progress.durationSeconds > 0
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -238,7 +238,8 @@ private fun HistoryRow(
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Cover thumbnail (56×80dp portrait, 8dp rounded).
+                // Cover thumbnail (56×80dp portrait, 8dp rounded). NOTHING
+                // stacks below it — the cover is a self-contained box.
                 Box(
                     modifier = Modifier
                         .size(width = 56.dp, height = 80.dp)
@@ -257,7 +258,8 @@ private fun HistoryRow(
                 }
                 Spacer(modifier = Modifier.size(12.dp))
 
-                // Text stack: title + episode/watched-time pill.
+                // Text stack: title + episode/watched-time pill (+ timestamp
+                // when it's not floating on the bar).
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = entry.displayTitle,
@@ -285,9 +287,9 @@ private fun HistoryRow(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         )
                     }
-                    // When the bar is a sliver, show the timestamp here (right
-                    // of cover, under the pill) so it isn't cramped above the bar.
-                    if (!showTimestampAboveBar && entry.progress.durationSeconds > 0) {
+                    // When the timestamp isn't floating on the bar (tiny
+                    // progress), show it here — right of cover, under the pill.
+                    if (!floatTimestampOnBar && hasDuration) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = timestamp,
@@ -299,32 +301,52 @@ private fun HistoryRow(
                     }
                 }
             }
-            // When the bar is meaningfully filled, show the timestamp just
-            // above the bottom progress bar (right-aligned).
-            if (showTimestampAboveBar) {
-                Text(
-                    text = timestamp,
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.End,
+            // Progress bar — 5dp strip along the very bottom edge. The watched-
+            // time timestamp floats ON TOP of it (overlaid, centered) when
+            // progress is meaningful; otherwise the bar renders alone.
+            if (floatTimestampOnBar && hasDuration) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                        .height(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
+                    // Floating timestamp badge — surface-backed for legibility
+                    // over the bar. Centered on the bar.
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        shape = RoundedCornerShape(4.dp),
+                    ) {
+                        Text(
+                            text = timestamp,
+                            fontFamily = RobotoFamily,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+            } else {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 )
             }
-            // Progress bar — 5dp strip along the very bottom edge (thicker for
-            // a better feel), full-width, with rounded ends via clip.
-            LinearProgressIndicator(
-                progress = { fraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            )
         }
     }
 }

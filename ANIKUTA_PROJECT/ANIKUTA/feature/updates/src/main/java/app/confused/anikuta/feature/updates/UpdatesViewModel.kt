@@ -226,6 +226,18 @@ class UpdatesViewModel(
         _state.update { it.copy(calendarJumpSignal = it.calendarJumpSignal + 1) }
     }
 
+    /**
+     * Marks the update result for [animeId] as acknowledged (no longer "new").
+     *
+     * Called when the user taps an update row to open the anime detail page —
+     * so the "new" highlight + vertical bar clear for that entry once the user
+     * has looked at it. The state change flows back to the UI via
+     * [UpdateChecker.getLastResults] (which the VM collects).
+     */
+    fun acknowledgeUpdate(animeId: Long) {
+        updateChecker.acknowledgeResult(animeId)
+    }
+
     companion object {
         private const val TAG = "UpdatesViewModel"
     }

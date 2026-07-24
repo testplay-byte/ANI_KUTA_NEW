@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,13 +100,24 @@ fun ScheduleCalendar(
         entries.groupBy { calendarDayKey(it.airingAtMillis) }
     }
 
-    // The "base" month — the pager shows a window of months around it. We use a
-    // large page range centered at 0 (current month) so the user can swipe far
-    // back/forward. The pager state drives which month is displayed.
-    val pageCount = 1001 // odd, so page 500 = "current month"
+    // SWIPE LIMITS (per user feedback, round 3):
+    //  - Back: only 1 month before the current month. Trying to go further back
+    //    shows a red "What are you trying to do?" message.
+    //  - Forward: up to 12 months ahead. Trying to go further shows a red
+    //    "What are you even trying to do? Stop it." message.
+    // The pager uses a large page range (so the swipe gesture feels free), but
+    // a LaunchedEffect snaps the pager back if it settles beyond the bounds,
+    // and the chevrons show the red message when clicked at the bounds.
+    val minPageOffset = -1   // 1 month back
+    val maxPageOffset = 12   // 12 months ahead
+    val pageCount = 1001
     val initialPage = 500
     val pagerState = rememberPagerState(initialPage = initialPage) { pageCount }
     val scope = rememberCoroutineScope()
+
+    // The red limit-message. Null = hidden. Auto-dismisses after ~4s (LaunchedEffect
+    // below) or on any tap (the overlay is clickable to dismiss).
+    var limitMessage by remember { mutableStateOf<String?>(null) }
 
     // Convert a pager page index to a Calendar (page 500 = current month).
     fun pageToMonth(page: Int): Calendar {
@@ -116,6 +128,9 @@ fun ScheduleCalendar(
         }
     }
 
+    fun showBackLimit() { limitMessage = "What are you trying to do?" }
+    fun showForwardLimit() { limitMessage = "What are you even trying to do? Stop it." }
+
     // "Jump to today" — when the signal counter changes, animate the pager back
     // to the current-month page.
     LaunchedEffect(jumpToTodaySignal) {
@@ -124,8 +139,43 @@ fun ScheduleCalendar(
         }
     }
 
+    // Snap-back + message when the user swipes/settles beyond the bounds.
+    // HorizontalPager can't hard-limit scrolling, so we detect out-of-bounds
+    // settlement and animate back + show the message.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage to pagerState.targetPage }
+            .collect { (current, target) ->
+                val offset = current - initialPage
+                if (offset < minPageOffset) {
+                    showBackLimit()
+                    pagerState.animateScrollToPage(initialPage + minPageOffset)
+                } else if (offset > maxPageOffset) {
+                    showForwardLimit()
+                    pagerState.animateScrollToPage(initialPage + maxPageOffset)
+                } else if (target - initialPage < minPageOffset) {
+                    showBackLimit()
+                } else if (target - initialPage > maxPageOffset) {
+                    showForwardLimit()
+                }
+            }
+    }
+
+    // Auto-dismiss the limit message after ~4s.
+    LaunchedEffect(limitMessage) {
+        if (limitMessage != null) {
+            kotlinx.coroutines.delay(4000L)
+            limitMessage = null
+        }
+    }
+
     // The month currently in view (driven by the pager's currentPage).
     val displayedMonth = pageToMonth(pagerState.currentPage)
+
+    // The calendar card's horizontal padding — reduced from 16dp to 8dp so the
+    // calendar is closer to the screen corners and bigger, per user feedback:
+    // "reduce the side padding … make it look much closer to the corner so that
+    // the bottom calendar area would be shown bigger."
+    val cardHorizontalPadding = 8.dp
 
     // Put the whole calendar in a dedicated card so it reads as one clean unit.
     Surface(
@@ -133,16 +183,26 @@ fun ScheduleCalendar(
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = cardHorizontalPadding, vertical = 8.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             CalendarHeader(
                 month = displayedMonth,
                 onPrev = {
-                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                    val offset = pagerState.currentPage - initialPage
+                    if (offset <= minPageOffset) {
+                        showBackLimit()
+                    } else {
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                    }
                 },
                 onNext = {
-                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    val offset = pagerState.currentPage - initialPage
+                    if (offset >= maxPageOffset) {
+                        showForwardLimit()
+                    } else {
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    }
                 },
             )
 
@@ -150,17 +210,74 @@ fun ScheduleCalendar(
 
             // HorizontalPager — swipe left/right to change months, with the
             // default page-slide animation. Each page renders one month's grid.
-            HorizontalPager(
-                state = pagerState,
+            //
+            // HEIGHT FIX: the pager defaults to fillMaxSize, which made the card
+            // background extend far below the last week row (user feedback: "the
+            // background is way too large … even though there is no calendar
+            // showing anything in that area"). We constrain the pager height to
+            // the grid's natural height: 6 rows max (any month spans ≤6 weeks) ×
+            // cellHeight + row spacing. Cell height = (cardWidth / 7) since cells
+            // are aspectRatio(1f) and weighted 1f across 7 columns (minus the
+            // 6×4dp inter-cell spacing, approximated). We use BoxWithConstraints
+            // to read the available width and compute the deterministic height.
+            androidx.compose.foundation.layout.BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth(),
-            ) { page ->
-                val month = pageToMonth(page)
-                MonthGrid(
-                    month = month,
-                    byDay = byDay,
-                    selectedDay = selectedDay,
-                    onSelectDay = onSelectDay,
-                )
+            ) {
+                val cardWidth = maxWidth
+                // 6 inter-cell gaps × 4dp spacing across 7 columns.
+                val totalSpacing = 6 * 4.dp
+                val cellSize = (cardWidth - totalSpacing) / 7
+                // A month spans at most 6 week-rows; 5 inter-row gaps × 4dp.
+                val gridHeight = cellSize * 6 + 5 * 4.dp
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(gridHeight),
+                ) { page ->
+                    val month = pageToMonth(page)
+                    MonthGrid(
+                        month = month,
+                        byDay = byDay,
+                        selectedDay = selectedDay,
+                        onSelectDay = onSelectDay,
+                    )
+                }
+            }
+        }
+    }
+
+    // Red limit-message overlay — shown on top of the calendar (centered). Tapping
+    // anywhere dismisses it instantly (with a fade). Auto-dismisses after 4s.
+    androidx.compose.animation.AnimatedVisibility(
+        visible = limitMessage != null,
+        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(400)),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        val msg = limitMessage
+        if (msg != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { limitMessage = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    color = Color(0xCCFF5252),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = msg,
+                        fontFamily = RobotoFamily,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+                    )
+                }
             }
         }
     }

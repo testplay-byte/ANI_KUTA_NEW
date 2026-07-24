@@ -54,6 +54,7 @@ import java.util.Calendar
 @Composable
 fun ScheduleTabContent(
     state: UpdatesState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onRefresh: () -> Unit,
     onOpenAnime: (Int) -> Unit,
     onSelectDay: (String?) -> Unit,
@@ -71,6 +72,14 @@ fun ScheduleTabContent(
         //    CalendarToday icon). Tapping it jumps the calendar to the current
         //    month.
         val isCalendar = state.scheduleViewMode == ScheduleViewMode.CALENDAR
+        // Animate the toggle's weight: full-width (1f) in list view, shrinks to
+        // leave room for the today-button in calendar view. animateFloatAsState
+        // gives a smooth shrink/slide transition when switching modes.
+        val toggleWeight by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (isCalendar) 0.82f else 1f,
+            animationSpec = androidx.compose.animation.core.tween(300),
+            label = "toggleWeight",
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -81,10 +90,26 @@ fun ScheduleTabContent(
             ScheduleViewModeToggle(
                 mode = state.scheduleViewMode,
                 onSetMode = onSetViewMode,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(toggleWeight),
             )
-            if (isCalendar) {
-                // Highlighted "today" button — primary-tinted, shows today's day number.
+            // Today-button: animated in/out (slide + fade) when switching to/from
+            // calendar view. Shows today's day number INSIDE the calendar icon
+            // (Box overlay) rather than beside it.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isCalendar,
+                enter = androidx.compose.animation.fadeIn(
+                    androidx.compose.animation.core.tween(300),
+                ) + androidx.compose.animation.slideInHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(300),
+                    initialOffsetX = { it / 2 },
+                ),
+                exit = androidx.compose.animation.fadeOut(
+                    androidx.compose.animation.core.tween(200),
+                ) + androidx.compose.animation.slideOutHorizontally(
+                    animationSpec = androidx.compose.animation.core.tween(200),
+                    targetOffsetX = { it / 2 },
+                ),
+            ) {
                 val todayDay = remember {
                     Calendar.getInstance().get(Calendar.DAY_OF_MONTH).toString()
                 }
@@ -93,23 +118,28 @@ fun ScheduleTabContent(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.clickable(onClick = onJumpToToday),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    // The day number sits INSIDE the calendar icon (Box overlay),
+                    // per user feedback: "that number, meaning today's current
+                    // date, should be inside the calendar icon itself".
+                    Box(
+                        modifier = Modifier.size(width = 40.dp, height = 36.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CalendarToday,
                             contentDescription = "Jump to today",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(22.dp),
                         )
+                        // The day number, overlaid in the lower-center of the icon
+                        // (where a calendar's date box sits). Tiny + bold.
                         Text(
                             text = todayDay,
                             fontFamily = RobotoFamily,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 5.dp),
                         )
                     }
                 }
@@ -136,7 +166,7 @@ fun ScheduleTabContent(
                 )
             }
             state.scheduleViewMode == ScheduleViewMode.LIST -> {
-                ScheduleList(state = state, onOpenAnime = onOpenAnime)
+                ScheduleList(state = state, listState = listState, onOpenAnime = onOpenAnime)
             }
             state.scheduleViewMode == ScheduleViewMode.CALENDAR -> {
                 ScheduleCalendar(
@@ -234,6 +264,7 @@ private fun ScheduleViewModeToggle(
 @Composable
 private fun ScheduleList(
     state: UpdatesState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onOpenAnime: (Int) -> Unit,
 ) {
     // Group entries by "yyyy-MM-dd", preserving chronological order.
@@ -245,6 +276,7 @@ private fun ScheduleList(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 110.dp),
     ) {

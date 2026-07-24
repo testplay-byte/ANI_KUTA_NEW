@@ -114,6 +114,33 @@ class UpdateChecker(
         // Seed the timestamp from prefs so the UI shows the real "last checked"
         // even across process restarts.
         _lastCheckTimestamp.value = preferences.lastCheckTimestamp().get()
+        // Load the persisted results list so the Updates page shows the previous
+        // check's results immediately on app open — even after the process was
+        // killed. The user reported the list cleared on app close+reopen; this
+        // is the fix. We rebuild minimal UpdateResults from the StoredResult
+        // DTOs (the full Anime is re-fetched live when the user opens detail).
+        try {
+            val stored = preferences.storedResults().get()
+            if (stored.isNotEmpty()) {
+                _results.value = stored.map { it.toUpdateResult() }
+                Log.i(TAG, "Loaded ${stored.size} persisted update results")
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to load persisted update results (non-fatal)", e)
+        }
+    }
+
+    /**
+     * Persists the current [_results] list to [UpdateCheckerPreferences.storedResults]
+     * so it survives process death. Converts to [StoredResult] DTOs first.
+     * Safe to call from any thread (PreferenceStore is thread-safe).
+     */
+    private fun persistResults(results: List<UpdateResult>) {
+        try {
+            preferences.storedResults().set(results.map { it.toStored() })
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to persist update results (non-fatal)", e)
+        }
     }
 
     /**
@@ -151,6 +178,7 @@ class UpdateChecker(
             _lastCheckTimestamp.value = now
             _checkProgress.value = UpdateCheckProgress.Completed(0, 0)
             _results.value = emptyList()
+            persistResults(emptyList())
             return@withContext emptyList()
         }
 
@@ -179,8 +207,10 @@ class UpdateChecker(
                     merged[anime.id] = result.copy(isNew = true)
                     foundThisCheck++
                     // Emit incremental results so the UI list grows as we go.
-                    _results.value = merged.values
+                    val incremental = merged.values
                         .sortedWith(compareByDescending<UpdateResult> { it.isNew }.thenByDescending { it.newEpisodeCount })
+                    _results.value = incremental
+                    persistResults(incremental)
                 }
             } catch (t: Throwable) {
                 // Isolate failures — one broken anime/extension must not abort
@@ -194,10 +224,36 @@ class UpdateChecker(
         preferences.lastCheckTimestamp().set(now)
         _lastCheckTimestamp.value = now
         _results.value = finalResults
+        persistResults(finalResults)
         _checkProgress.value = UpdateCheckProgress.Completed(foundThisCheck, library.size)
 
         Log.i(TAG, "checkForUpdates: done — $foundThisCheck new this check, ${finalResults.size} total in merged list")
         finalResults
+    }
+
+    /**
+     * Marks the [UpdateResult] for [animeId] as acknowledged (isNew = false).
+     *
+     * Called when the user opens an anime from the Updates list — so the "new"
+     * highlight + bar clears for that entry once the user has looked at it.
+     * Re-emits + re-persists the results list so the state survives navigation
+     * and process death.
+     *
+     * Per user feedback (round 3): "when I clicked on one of the entries there,
+     * it properly opened up their pages too. When I went back to the updates
+     * page, I saw the issue there. The issue was that it was still showing that
+     * one as new."
+     */
+    fun acknowledgeResult(animeId: Long) {
+        val current = _results.value
+        val updated = current.map { result ->
+            if (result.anime.id == animeId) result.copy(isNew = false) else result
+        }
+        if (updated != current) {
+            _results.value = updated
+            persistResults(updated)
+            Log.i(TAG, "acknowledgeResult: marked anime $animeId as not-new")
+        }
     }
 
     /**

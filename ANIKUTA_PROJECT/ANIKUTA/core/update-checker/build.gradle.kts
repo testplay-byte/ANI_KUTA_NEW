@@ -1,5 +1,6 @@
 plugins {
     id("anikuta.library")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -18,6 +19,10 @@ dependencies {
     implementation(projects.core.sourceApi)
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
+
+    // Serialization — for persisting the merged results list (StoredResult DTO)
+    // across process death, so the Updates page survives app close+reopen.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
