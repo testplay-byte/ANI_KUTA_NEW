@@ -87,14 +87,14 @@ fun CollapsingHeader(
         label = "headerFontSize",
     )
 
-    // Animate padding
-    val targetPaddingTop = if (collapsed) 4f else 8f
+    // Animate padding — collapse more aggressively so content moves up
+    val targetPaddingTop = if (collapsed) 2f else 8f
     val paddingTop by animateFloatAsState(
         targetValue = targetPaddingTop,
         animationSpec = tween(Motion.DurationStandard, easing = FastOutSlowInEasing),
         label = "headerPaddingTop",
     )
-    val targetPaddingBottom = if (collapsed) 2f else 4f
+    val targetPaddingBottom = if (collapsed) 0f else 4f
     val paddingBottom by animateFloatAsState(
         targetValue = targetPaddingBottom,
         animationSpec = tween(Motion.DurationStandard, easing = FastOutSlowInEasing),

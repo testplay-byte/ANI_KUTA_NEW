@@ -110,13 +110,21 @@ fun TrackerCard(
                 }
             }
 
-            // Bottom row: status text — username in primary (themed) color when connected
+            // Bottom: status text — "connected as ··" (not themed) on first line,
+            // username on second line in primary (themed) color. Both slightly bold.
             Spacer(modifier = Modifier.size(8.dp))
             if (state.isLoggedIn && state.username != null) {
                 Text(
-                    text = "Connected as @${state.username}",
+                    text = "connected as  ··",
                     fontFamily = RobotoFamily,
                     fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "@${state.username}",
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                 )

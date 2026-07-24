@@ -102,11 +102,11 @@ fun ProfileScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else if (stats != null) {
-                // Tab bar
+                // Tab bar — minimal vertical padding so it moves up with the header
                 ProfileTabBar(
                     selectedTab = selectedTab,
                     onSelectTab = { selectedTab = it },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
                 )
 
                 LazyColumn(
