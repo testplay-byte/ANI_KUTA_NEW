@@ -345,13 +345,6 @@ private fun AnikutaApp() {
             showProfile -> {
                 app.confused.anikuta.feature.my.ProfileScreen(
                     onOpenAnime = { id -> detailAnimeId = id },
-                    onLinkAniList = {
-                        pendingTrackerAuth = app.confused.anikuta.core.tracker.Tracker.ANILIST_ID
-                        val authUrl = trackerManager.anilist.getAuthUrl()
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(authUrl))
-                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    },
                     onOpenTrackers = {
                         showProfile = false
                         showTrackers = true

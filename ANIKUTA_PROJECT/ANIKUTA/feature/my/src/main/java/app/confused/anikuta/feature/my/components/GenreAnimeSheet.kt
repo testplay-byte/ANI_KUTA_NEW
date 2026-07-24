@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -52,6 +53,10 @@ fun GenreAnimeSheet(
     // Randomize the selection each time the sheet is shown.
     val randomAnime = remember(anime) { anime.shuffled() }
 
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp.dp
+    val maxHeight = screenHeight * 0.7f // principle #3: max 70% of viewport
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
@@ -60,6 +65,7 @@ fun GenreAnimeSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = maxHeight)
                 .padding(top = 16.dp, bottom = 32.dp),
         ) {
             // Header

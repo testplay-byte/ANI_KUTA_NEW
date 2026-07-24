@@ -35,8 +35,12 @@ import app.confused.anikuta.feature.trackers.TrackerUiState
 /**
  * A single tracker card in the Trackers settings page.
  *
- * Shows the tracker name, status ("Connected as @username" or "Not connected"),
- * and a Login/Logout button.
+ * Shows the tracker name, a checkmark icon if connected, and a Login/Logout
+ * button. The connected username is shown at the BOTTOM in the primary
+ * (themed) color.
+ *
+ * Design: surfaceVariant background (alpha 0.4f), RoundedCornerShape(12dp) —
+ * matches the More page entries.
  */
 @Composable
 fun TrackerCard(
@@ -48,21 +52,23 @@ fun TrackerCard(
     var showLogoutConfirmation by remember { mutableStateOf(false) }
 
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Tracker info
-            Column(modifier = Modifier.weight(1f)) {
+            // Top row: tracker name + checkmark (left), Login/Logout button (right)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = state.name,
@@ -81,39 +87,46 @@ fun TrackerCard(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.size(4.dp))
+
+                if (state.isLoggedIn) {
+                    OutlinedButton(
+                        onClick = { showLogoutConfirmation = true },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Logout", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = onLogin,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.Black,
+                        ),
+                    ) {
+                        Text("Login", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Bottom row: status text — username in primary (themed) color when connected
+            Spacer(modifier = Modifier.size(8.dp))
+            if (state.isLoggedIn && state.username != null) {
                 Text(
-                    text = if (state.isLoggedIn) {
-                        "Connected as @${state.username}"
-                    } else {
-                        "Not connected"
-                    },
+                    text = "Connected as @${state.username}",
+                    fontFamily = RobotoFamily,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Text(
+                    text = "Not connected",
                     fontFamily = RobotoFamily,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-
-            // Login/Logout button
-            if (state.isLoggedIn) {
-                OutlinedButton(
-                    onClick = { showLogoutConfirmation = true },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text("Logout", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Button(
-                    onClick = onLogin,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.Black,
-                    ),
-                ) {
-                    Text("Login", fontFamily = RobotoFamily, fontWeight = FontWeight.Bold)
-                }
             }
         }
     }

@@ -25,6 +25,7 @@ class ProfileViewModel(
     private val statsCalculator: StatsCalculator,
     private val trackerManager: TrackerManager,
     private val watchProgressStore: WatchProgressStore,
+    private val preferences: ProfilePreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileState(isLoading = true))
@@ -33,6 +34,7 @@ class ProfileViewModel(
     init {
         observeLocalStats()
         observeAniListState()
+        observePreferences()
     }
 
     /** Observe local stats (library + watch progress). Always active. */
@@ -69,6 +71,25 @@ class ProfileViewModel(
         }
     }
 
+    /** Observe user preferences (display name, avatar, stats source). */
+    private fun observePreferences() {
+        viewModelScope.launch {
+            combine(
+                preferences.displayName.changes(),
+                preferences.displayAvatarUrl.changes(),
+                preferences.useTrackerStats.changes(),
+            ) { name, avatar, useTracker ->
+                Triple(name, avatar, useTracker)
+            }.collectLatest { (name, avatar, useTracker) ->
+                _state.value = _state.value.copy(
+                    displayName = name,
+                    displayAvatarUrl = avatar,
+                    useTrackerStats = useTracker,
+                )
+            }
+        }
+    }
+
     /** Fetch the AniList avatar URL. */
     private fun fetchAniListAvatar() {
         viewModelScope.launch {
@@ -90,11 +111,19 @@ class ProfileViewModel(
         }
     }
 
-    /** Refresh all stats (pull-to-refresh or manual trigger). */
-    fun refresh() {
-        if (trackerManager.anilist.isLoggedIn) {
-            fetchAniListStats()
-        }
+    /** Set the display name (user-customizable). */
+    fun setDisplayName(name: String) {
+        preferences.displayName.set(name)
+    }
+
+    /** Set the display avatar URL (user-customizable). */
+    fun setDisplayAvatarUrl(url: String) {
+        preferences.displayAvatarUrl.set(url)
+    }
+
+    /** Set whether to use tracker stats or local stats. */
+    fun setUseTrackerStats(use: Boolean) {
+        preferences.useTrackerStats.set(use)
     }
 
     /** Reset watch progress data (called by the reset-stats dialog). */

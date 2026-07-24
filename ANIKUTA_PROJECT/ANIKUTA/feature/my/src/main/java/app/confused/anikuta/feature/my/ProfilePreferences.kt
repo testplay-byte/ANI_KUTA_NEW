@@ -6,30 +6,25 @@ import app.confused.anikuta.core.preferences.PreferenceStore
  * User-customizable Profile page preferences (ADR-018: feature parity with
  * customizable defaults).
  *
- * Controls which sections of the Profile page are visible and holds the
- * "last reset" timestamp for the reset-stats feature.
+ * Controls:
+ * - Which sections of the Profile page are visible.
+ * - The display name and avatar URL (user-customizable, overrides AniList defaults).
+ * - Whether to use tracker (AniList) stats or local stats.
  */
 class ProfilePreferences(
     private val store: PreferenceStore,
 ) {
+    // Section visibility toggles
     val showQuickStats = store.getBoolean("pref_profile_show_quick_stats", true)
     val showGenreChart = store.getBoolean("pref_profile_show_genre", true)
-    val showFormatChart = store.getBoolean("pref_profile_show_format", true)
     val showStatusChart = store.getBoolean("pref_profile_show_status", true)
-    val showScoreChart = store.getBoolean("pref_profile_show_score", true)
-    val showCountryChart = store.getBoolean("pref_profile_show_country", true)
     val showBehindStatus = store.getBoolean("pref_profile_show_behind", true)
     val showRecentlyWatched = store.getBoolean("pref_profile_show_recent", true)
 
-    /** All section visibility preferences (for the customization sheet). */
-    val allSections = listOf(
-        "Quick Stats" to showQuickStats,
-        "Genres" to showGenreChart,
-        "Formats" to showFormatChart,
-        "Status" to showStatusChart,
-        "Scores" to showScoreChart,
-        "Countries" to showCountryChart,
-        "Behind Status" to showBehindStatus,
-        "Recently Watched" to showRecentlyWatched,
-    )
+    // User-customizable display name + avatar (overrides AniList defaults when set)
+    val displayName = store.getString("pref_profile_display_name", "")
+    val displayAvatarUrl = store.getString("pref_profile_display_avatar_url", "")
+
+    // Stats source: true = use tracker (AniList) stats when linked, false = local only
+    val useTrackerStats = store.getBoolean("pref_profile_use_tracker_stats", true)
 }

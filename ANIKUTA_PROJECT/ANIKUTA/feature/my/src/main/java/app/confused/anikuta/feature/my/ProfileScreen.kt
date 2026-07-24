@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -26,35 +25,39 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.feature.my.components.BehindStatusSection
+import app.confused.anikuta.feature.my.components.BehindStatusTab
+import app.confused.anikuta.feature.my.components.ChangeAvatarSheet
 import app.confused.anikuta.feature.my.components.CustomizationSheet
-import app.confused.anikuta.feature.my.components.DistributionChart
+import app.confused.anikuta.feature.my.components.EditProfileDialog
 import app.confused.anikuta.feature.my.components.GenreAnimeSheet
-import app.confused.anikuta.feature.my.components.GenreChipsSection
+import app.confused.anikuta.feature.my.components.GenreRadarChart
 import app.confused.anikuta.feature.my.components.ProfileHeader
+import app.confused.anikuta.feature.my.components.ProfileTabBar
 import app.confused.anikuta.feature.my.components.QuickStatsRow
 import app.confused.anikuta.feature.my.components.RecentlyWatchedSection
 import app.confused.anikuta.feature.my.components.ResetStatsDialog
-import app.confused.anikuta.feature.my.components.ScoreDistributionSection
 import app.confused.anikuta.feature.my.components.StatusDistributionSection
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 /**
- * My Profile screen — redesigned with proper sections, spacing, and visual hierarchy.
+ * My Profile screen — redesigned with tab bar, radar chart, and proper sections.
  *
- * Works in two modes (ADR-013):
- * 1. Local mode (no AniList linked): stats from WatchProgressStore + library.
- * 2. AniList mode (linked): enriched stats from AniList API.
+ * Two tabs:
+ * 1. **Main** — Profile header, Quick Stats, Genre Radar Chart, Status
+ *    Distribution, Recently Watched.
+ * 2. **Behind Status** — Summary cards (Total / Caught Up / Behind) + behind
+ *    anime list.
+ *
+ * No refresh button (removed per user feedback). Settings button in top-right
+ * opens the CustomizationSheet.
  *
  * Design: #B1F256 primary, RobotoFamily font, surfaceVariant cards (alpha 0.4f)
- * with RoundedCornerShape(12dp) to match the More page entries. Compose Canvas
- * charts (no external charting library). Settings button in top-right (NOT back
- * button — device back gesture handles navigation).
+ * with RoundedCornerShape(12dp).
  */
 @Composable
 fun ProfileScreen(
     onOpenAnime: (Int) -> Unit,
-    onLinkAniList: () -> Unit,
     onOpenTrackers: () -> Unit,
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
@@ -62,8 +65,11 @@ fun ProfileScreen(
     val preferences: ProfilePreferences = koinInject()
     val lazyListState = rememberLazyListState()
 
+    var selectedTab by remember { mutableStateOf(0) } // 0 = Main, 1 = Behind Status
     var showCustomization by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var showEditName by remember { mutableStateOf(false) }
+    var showChangeAvatar by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
 
     // CollapsingHeader collapses when the user scrolls down.
@@ -77,14 +83,6 @@ fun ProfileScreen(
                 title = "My Profile",
                 collapsed = isCollapsed,
                 actions = {
-                    // Refresh button (re-fetches AniList stats if linked)
-                    IconButton(onClick = { viewModel.refresh() }) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Refresh",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                        )
-                    }
                     // Settings button — opens customization sheet
                     IconButton(onClick = { showCustomization = true }) {
                         Icon(
@@ -103,132 +101,109 @@ fun ProfileScreen(
                 ) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else {
-                if (stats != null) {
-                    LazyColumn(
-                        state = lazyListState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 120.dp),
-                    ) {
-                        // Section 1: Profile Header
-                        item {
-                            ProfileHeader(
-                                username = state.anilistUsername,
-                                avatarUrl = state.anilistAvatarUrl,
-                                isAniListLinked = state.isAniListLinked,
-                                onLinkAniList = onLinkAniList,
-                            )
-                        }
+            } else if (stats != null) {
+                // Tab bar
+                ProfileTabBar(
+                    selectedTab = selectedTab,
+                    onSelectTab = { selectedTab = it },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
 
-                        // Section 2: Quick Stats
-                        if (preferences.showQuickStats.get()) {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 120.dp),
+                ) {
+                    when (selectedTab) {
+                        0 -> {
+                            // ── Main Tab ──
+                            // Profile Header
                             item {
-                                QuickStatsRow(
+                                ProfileHeader(
+                                    displayName = state.effectiveDisplayName,
+                                    avatarUrl = state.effectiveAvatarUrl,
+                                    isAniListLinked = state.isAniListLinked,
+                                )
+                            }
+
+                            // Quick Stats
+                            if (preferences.showQuickStats.get()) {
+                                item {
+                                    QuickStatsRow(
+                                        totalAnime = stats.totalAnime,
+                                        totalEpisodes = stats.totalEpisodesWatched,
+                                        totalWatchTimeMinutes = stats.totalWatchTimeMinutes,
+                                        meanScore = stats.meanScore,
+                                    )
+                                }
+                            }
+
+                            // Genre Radar Chart
+                            if (preferences.showGenreChart.get() && stats.genreDistribution.isNotEmpty()) {
+                                item {
+                                    GenreRadarChart(
+                                        genres = stats.genreDistribution,
+                                        onGenreClick = { genre -> selectedGenre = genre },
+                                    )
+                                }
+                            }
+
+                            // Status Distribution
+                            if (preferences.showStatusChart.get() && stats.statusDistribution.isNotEmpty()) {
+                                item {
+                                    StatusDistributionSection(
+                                        statusDistribution = stats.statusDistribution,
+                                    )
+                                }
+                            }
+
+                            // Recently Watched
+                            if (preferences.showRecentlyWatched.get() && stats.recentlyWatched.isNotEmpty()) {
+                                item {
+                                    RecentlyWatchedSection(
+                                        recentlyWatched = stats.recentlyWatched,
+                                        onOpenAnime = onOpenAnime,
+                                    )
+                                }
+                            }
+                        }
+                        1 -> {
+                            // ── Behind Status Tab ──
+                            item {
+                                BehindStatusTab(
                                     totalAnime = stats.totalAnime,
-                                    totalEpisodes = stats.totalEpisodesWatched,
-                                    totalWatchTimeMinutes = stats.totalWatchTimeMinutes,
-                                    meanScore = stats.meanScore,
-                                )
-                            }
-                        }
-
-                        // Section 3: Genres (clickable chips)
-                        if (preferences.showGenreChart.get() && stats.genreDistribution.isNotEmpty()) {
-                            item {
-                                GenreChipsSection(
-                                    genres = stats.genreDistribution,
-                                    onGenreClick = { genre ->
-                                        selectedGenre = genre
-                                    },
-                                )
-                            }
-                        }
-
-                        // Section 4: Formats (bar chart — from AniList if linked)
-                        if (preferences.showFormatChart.get()) {
-                            val formatDist = state.anilistStats?.formatDistribution ?: stats.formatDistribution
-                            if (formatDist.isNotEmpty()) {
-                                item {
-                                    DistributionChart(
-                                        title = "Formats",
-                                        entries = formatDist.toList(),
-                                    )
-                                }
-                            }
-                        }
-
-                        // Section 5: Status Distribution (release status cards)
-                        if (preferences.showStatusChart.get() && stats.statusDistribution.isNotEmpty()) {
-                            item {
-                                StatusDistributionSection(
-                                    statusDistribution = stats.statusDistribution,
-                                )
-                            }
-                        }
-
-                        // Section 6: Score Distribution (vertical bars)
-                        if (preferences.showScoreChart.get()) {
-                            val scoreDist = state.anilistStats?.scoreDistribution ?: stats.scoreDistribution
-                            if (scoreDist.isNotEmpty()) {
-                                item {
-                                    ScoreDistributionSection(
-                                        scoreDistribution = scoreDist,
-                                    )
-                                }
-                            }
-                        }
-
-                        // Section 7: Countries (bar chart — from AniList if linked)
-                        if (preferences.showCountryChart.get()) {
-                            val countryDist = state.anilistStats?.countryDistribution ?: stats.countryDistribution
-                            if (countryDist.isNotEmpty()) {
-                                item {
-                                    DistributionChart(
-                                        title = "Countries",
-                                        entries = countryDist.toList(),
-                                    )
-                                }
-                            }
-                        }
-
-                        // Section 8: Behind Status (dedicated section)
-                        if (preferences.showBehindStatus.get()) {
-                            item {
-                                BehindStatusSection(
                                     behindAnime = stats.behindAnime,
                                     onOpenAnime = onOpenAnime,
                                 )
                             }
                         }
-
-                        // Section 9: Recently Watched (3 items)
-                        if (preferences.showRecentlyWatched.get() && stats.recentlyWatched.isNotEmpty()) {
-                            item {
-                                RecentlyWatchedSection(
-                                    recentlyWatched = stats.recentlyWatched,
-                                    onOpenAnime = onOpenAnime,
-                                )
-                            }
-                        }
                     }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(16.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "No stats yet. Start watching anime to see your stats!",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No stats yet. Start watching anime to see your stats!",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
 
-        // Customization sheet (section visibility toggles + reset stats)
+        // Customization sheet
         if (showCustomization) {
             CustomizationSheet(
                 preferences = preferences,
+                onChangeName = {
+                    showCustomization = false
+                    showEditName = true
+                },
+                onChangeAvatar = {
+                    showCustomization = false
+                    showChangeAvatar = true
+                },
                 onResetStats = {
                     showCustomization = false
                     showResetDialog = true
@@ -237,7 +212,31 @@ fun ProfileScreen(
             )
         }
 
-        // Genre anime sheet (shows anime in the selected genre)
+        // Edit name dialog
+        if (showEditName) {
+            EditProfileDialog(
+                currentName = state.displayName,
+                onConfirm = { name ->
+                    viewModel.setDisplayName(name)
+                    showEditName = false
+                },
+                onDismiss = { showEditName = false },
+            )
+        }
+
+        // Change avatar sheet
+        if (showChangeAvatar) {
+            ChangeAvatarSheet(
+                currentAvatarUrl = state.displayAvatarUrl,
+                onConfirm = { url ->
+                    viewModel.setDisplayAvatarUrl(url)
+                    showChangeAvatar = false
+                },
+                onDismiss = { showChangeAvatar = false },
+            )
+        }
+
+        // Genre anime sheet
         if (selectedGenre != null && stats != null) {
             val genre = selectedGenre!!
             val genreAnime = stats.libraryAnime.filter { it.genre.contains(genre) }
