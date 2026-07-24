@@ -95,8 +95,14 @@ fun formatPlaybackTimestamp(positionSeconds: Int, durationSeconds: Int): String 
     return "${formatDuration(positionSeconds)} / ${formatDuration(durationSeconds)}"
 }
 
-/** Formats a single duration in seconds as "M:SS" or "H:MM:SS". */
-private fun formatDuration(totalSeconds: Int): String {
+/**
+ * Formats a single duration in seconds as "M:SS" or "H:MM:SS".
+ *
+ * Public so the History screen can format the watched-duration and the
+ * total-duration separately (the user wants them on opposite sides of the
+ * seek bar — watched on the left in the themed color, total on the right).
+ */
+fun formatDuration(totalSeconds: Int): String {
     if (totalSeconds < 0) return "0:00"
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60

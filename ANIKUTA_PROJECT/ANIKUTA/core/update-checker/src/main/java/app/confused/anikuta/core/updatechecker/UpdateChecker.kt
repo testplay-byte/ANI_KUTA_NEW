@@ -119,11 +119,31 @@ class UpdateChecker(
         // killed. The user reported the list cleared on app close+reopen; this
         // is the fix. We rebuild minimal UpdateResults from the StoredResult
         // DTOs (the full Anime is re-fetched live when the user opens detail).
+        //
+        // AUTO-EXPIRE: any result whose checkedAt is older than 2 days is
+        // marked isNew=false on load — so the "new" highlight auto-disappears
+        // for stale updates without the user having to open each one. Per user
+        // feedback (round 4): "the highlighting will automatically disappear
+        // from the updates if they are older than two days."
         try {
             val stored = preferences.storedResults().get()
             if (stored.isNotEmpty()) {
-                _results.value = stored.map { it.toUpdateResult() }
-                Log.i(TAG, "Loaded ${stored.size} persisted update results")
+                val twoDaysMs = 2L * 24 * 60 * 60 * 1000L
+                val now = System.currentTimeMillis()
+                val loaded = stored.map { sr ->
+                    if (sr.isNew && (now - sr.checkedAt) > twoDaysMs) {
+                        sr.copy(isNew = false).toUpdateResult()
+                    } else {
+                        sr.toUpdateResult()
+                    }
+                }
+                _results.value = loaded
+                // If any expired, persist the updated state so we don't redo
+                // this every launch.
+                if (loaded.any { !it.isNew } && stored.any { it.isNew }) {
+                    persistResults(loaded)
+                }
+                Log.i(TAG, "Loaded ${loaded.size} persisted update results (auto-expired isNew > 2 days)")
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to load persisted update results (non-fatal)", e)

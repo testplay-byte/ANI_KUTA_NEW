@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.confused.anikuta.core.common.util.formatDuration
 import app.confused.anikuta.core.common.util.formatPlaybackTimestamp
 import app.confused.anikuta.core.common.util.formatTimeAgo
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
@@ -213,11 +214,13 @@ private fun HistoryRow(
     onClick: () -> Unit,
 ) {
     val fraction = entry.progressFraction
-    // When the bar is a near-empty sliver (< 5%), the floating timestamp
-    // would sit over a near-empty bar (cramped). Instead, show the timestamp
-    // to the right (in the text column, under the pill) and don't overlay it.
-    val floatTimestampOnBar = fraction >= 0.05f
-    val timestamp = formatPlaybackTimestamp(
+    // When the bar is a near-empty sliver (< 5%), the timestamp row above it
+    // would look cramped. Instead, show the combined timestamp to the right
+    // (in the text column, under the pill) and render the bar alone.
+    val showTimestampAboveBar = fraction >= 0.05f
+    val watchedDuration = formatDuration(entry.progress.positionSeconds)
+    val totalDuration = formatDuration(entry.progress.durationSeconds)
+    val combinedTimestamp = formatPlaybackTimestamp(
         entry.progress.positionSeconds,
         entry.progress.durationSeconds,
     )
@@ -287,12 +290,13 @@ private fun HistoryRow(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         )
                     }
-                    // When the timestamp isn't floating on the bar (tiny
-                    // progress), show it here — right of cover, under the pill.
-                    if (!floatTimestampOnBar && hasDuration) {
+                    // When the timestamp isn't above the bar (tiny progress),
+                    // show the combined timestamp here — right of cover, under
+                    // the pill.
+                    if (!showTimestampAboveBar && hasDuration) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = timestamp,
+                            text = combinedTimestamp,
                             fontFamily = RobotoFamily,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
@@ -301,52 +305,52 @@ private fun HistoryRow(
                     }
                 }
             }
-            // Progress bar — 5dp strip along the very bottom edge. The watched-
-            // time timestamp floats ON TOP of it (overlaid, centered) when
-            // progress is meaningful; otherwise the bar renders alone.
-            if (floatTimestampOnBar && hasDuration) {
-                Box(
+            // Progress bar area. Per user feedback (round 4):
+            //  - The watched-duration (e.g. "12:34") shows ABOVE the seek bar,
+            //    on the LEFT, in the themed (primary) color, with NO background.
+            //  - The total duration (e.g. "24:00") shows ABOVE the seek bar, on
+            //    the RIGHT (rightmost), in onSurfaceVariant.
+            //  - The seek bar itself is a 7dp strip (thicker than the old 5dp)
+            //    along the very bottom edge, full-width, rounded ends.
+            //  - When progress < 5%, the timestamp row above the bar would be
+            //    cramped — so the bar renders alone (the combined timestamp is
+            //    shown in the text column instead, handled above).
+            if (showTimestampAboveBar && hasDuration) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(16.dp),
-                    contentAlignment = Alignment.Center,
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    LinearProgressIndicator(
-                        progress = { fraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(5.dp)
-                            .clip(RoundedCornerShape(3.dp)),
+                    // Watched duration — themed color, no background.
+                    Text(
+                        text = watchedDuration,
+                        fontFamily = RobotoFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     )
-                    // Floating timestamp badge — surface-backed for legibility
-                    // over the bar. Centered on the bar.
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        shape = RoundedCornerShape(4.dp),
-                    ) {
-                        Text(
-                            text = timestamp,
-                            fontFamily = RobotoFamily,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                        )
-                    }
+                    // Total duration — rightmost, subdued.
+                    Text(
+                        text = totalDuration,
+                        fontFamily = RobotoFamily,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-            } else {
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                )
             }
+            // The seek bar — 7dp thick, full-width, rounded ends.
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(7.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            )
         }
     }
 }

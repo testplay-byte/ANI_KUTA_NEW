@@ -100,18 +100,22 @@ fun ScheduleCalendar(
         entries.groupBy { calendarDayKey(it.airingAtMillis) }
     }
 
-    // SWIPE LIMITS (per user feedback, round 3):
-    //  - Back: only 1 month before the current month. Trying to go further back
-    //    shows a red "What are you trying to do?" message.
-    //  - Forward: up to 12 months ahead. Trying to go further shows a red
-    //    "What are you even trying to do? Stop it." message.
-    // The pager uses a large page range (so the swipe gesture feels free), but
-    // a LaunchedEffect snaps the pager back if it settles beyond the bounds,
-    // and the chevrons show the red message when clicked at the bounds.
-    val minPageOffset = -1   // 1 month back
-    val maxPageOffset = 12   // 12 months ahead
-    val pageCount = 1001
-    val initialPage = 500
+    // SWIPE LIMITS (per user feedback, round 4 — HARD limits):
+    //  - Back: only 1 month before the current month. The pager physically
+    //    can't scroll further back — no empty red area drags in, no loading of
+    //    older months at all.
+    //  - Forward: up to 12 months ahead. Same hard limit.
+    // This is achieved by setting pageCount = 14 (1 back + current + 12 ahead)
+    // with initialPage = 1 (the current month). The pager's own bounds prevent
+    // scrolling past page 0 or page 13 — no snap-back needed.
+    //
+    // The red message shows when the user clicks a chevron at the bound, OR
+    // when a swipe reaches the bound (so the user gets feedback that they
+    // can't go further).
+    val pageCount = 14   // 1 back + current + 12 ahead
+    val initialPage = 1  // page 1 = current month; page 0 = 1 month back
+    val minPage = 0      // 1 month back (hard floor)
+    val maxPage = 13     // 12 months ahead (hard ceiling)
     val pagerState = rememberPagerState(initialPage = initialPage) { pageCount }
     val scope = rememberCoroutineScope()
 
@@ -119,7 +123,7 @@ fun ScheduleCalendar(
     // below) or on any tap (the overlay is clickable to dismiss).
     var limitMessage by remember { mutableStateOf<String?>(null) }
 
-    // Convert a pager page index to a Calendar (page 500 = current month).
+    // Convert a pager page index to a Calendar (page 1 = current month).
     fun pageToMonth(page: Int): Calendar {
         val offset = page - initialPage
         return Calendar.getInstance().apply {
@@ -132,29 +136,24 @@ fun ScheduleCalendar(
     fun showForwardLimit() { limitMessage = "What are you even trying to do? Stop it." }
 
     // "Jump to today" — when the signal counter changes, animate the pager back
-    // to the current-month page.
+    // to the current-month page (page 1).
     LaunchedEffect(jumpToTodaySignal) {
         if (jumpToTodaySignal > 0) {
             pagerState.animateScrollToPage(initialPage)
         }
     }
 
-    // Snap-back + message when the user swipes/settles beyond the bounds.
-    // HorizontalPager can't hard-limit scrolling, so we detect out-of-bounds
-    // settlement and animate back + show the message.
+    // Show the red message when the user swipes to the hard bound — so they
+    // get feedback that they can't go further. (The pager's own bounds prevent
+    // actually scrolling past, but the message confirms WHY.)
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage to pagerState.targetPage }
-            .collect { (current, target) ->
-                val offset = current - initialPage
-                if (offset < minPageOffset) {
+        snapshotFlow { pagerState.currentPage }
+            .collect { page ->
+                if (page == minPage) {
+                    // Reached the back bound — show the message briefly so the
+                    // user knows they can't go further back.
                     showBackLimit()
-                    pagerState.animateScrollToPage(initialPage + minPageOffset)
-                } else if (offset > maxPageOffset) {
-                    showForwardLimit()
-                    pagerState.animateScrollToPage(initialPage + maxPageOffset)
-                } else if (target - initialPage < minPageOffset) {
-                    showBackLimit()
-                } else if (target - initialPage > maxPageOffset) {
+                } else if (page == maxPage) {
                     showForwardLimit()
                 }
             }
@@ -178,8 +177,10 @@ fun ScheduleCalendar(
     val cardHorizontalPadding = 8.dp
 
     // Put the whole calendar in a dedicated card so it reads as one clean unit.
+    // Per user feedback (round 4): use surfaceVariant at 0.4f alpha — the SAME
+    // background as the History/Updates row backgrounds — for consistency.
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(16.dp),
         modifier = modifier
             .fillMaxWidth()
@@ -189,16 +190,14 @@ fun ScheduleCalendar(
             CalendarHeader(
                 month = displayedMonth,
                 onPrev = {
-                    val offset = pagerState.currentPage - initialPage
-                    if (offset <= minPageOffset) {
+                    if (pagerState.currentPage <= minPage) {
                         showBackLimit()
                     } else {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
                     }
                 },
                 onNext = {
-                    val offset = pagerState.currentPage - initialPage
-                    if (offset >= maxPageOffset) {
+                    if (pagerState.currentPage >= maxPage) {
                         showForwardLimit()
                     } else {
                         scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
