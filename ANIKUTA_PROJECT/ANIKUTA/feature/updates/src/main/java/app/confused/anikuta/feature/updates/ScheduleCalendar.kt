@@ -223,12 +223,13 @@ fun ScheduleCalendar(
             androidx.compose.foundation.layout.BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                val cardWidth = maxWidth
+                val cardWidthPx = maxWidth.value
                 // 6 inter-cell gaps × 4dp spacing across 7 columns.
-                val totalSpacing = 6 * 4.dp
-                val cellSize = (cardWidth - totalSpacing) / 7
+                val totalSpacingPx = 6f * 4f
+                val cellSizePx = (cardWidthPx - totalSpacingPx) / 7f
                 // A month spans at most 6 week-rows; 5 inter-row gaps × 4dp.
-                val gridHeight = cellSize * 6 + 5 * 4.dp
+                val gridHeightPx = cellSizePx * 6f + 5f * 4f
+                val gridHeight = gridHeightPx.dp
 
                 HorizontalPager(
                     state = pagerState,
