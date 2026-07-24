@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
-import app.confused.anikuta.feature.my.components.BehindStatusSection
 import app.confused.anikuta.feature.my.components.BehindStatusTab
 import app.confused.anikuta.feature.my.components.ChangeAvatarSheet
 import app.confused.anikuta.feature.my.components.CustomizationSheet
@@ -49,8 +49,11 @@ import org.koin.compose.koinInject
  * 2. **Behind Status** — Summary cards (Total / Caught Up / Behind) + behind
  *    anime list.
  *
- * No refresh button (removed per user feedback). Settings button in top-right
- * opens the CustomizationSheet.
+ * Pull-to-refresh: dragging down from the top triggers [viewModel.refresh],
+ * which re-fetches AniList stats (if linked). Local stats auto-update via
+ * the reactive Flow.
+ *
+ * Settings button in top-right opens the CustomizationSheet.
  *
  * Design: #B1F256 primary, RobotoFamily font, surfaceVariant cards (alpha 0.4f)
  * with RoundedCornerShape(12dp).
@@ -109,72 +112,80 @@ fun ProfileScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
                 )
 
-                LazyColumn(
-                    state = lazyListState,
+                // Pull-to-refresh wrapper — drag down to refresh stats
+                PullToRefreshBox(
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = { viewModel.refresh() },
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 120.dp),
                 ) {
-                    when (selectedTab) {
-                        0 -> {
-                            // ── Main Tab ──
-                            // Profile Header
-                            item {
-                                ProfileHeader(
-                                    displayName = state.effectiveDisplayName,
-                                    avatarUrl = state.effectiveAvatarUrl,
-                                    isAniListLinked = state.isAniListLinked,
-                                )
-                            }
-
-                            // Quick Stats
-                            if (preferences.showQuickStats.get()) {
+                    LazyColumn(
+                        state = lazyListState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 120.dp),
+                    ) {
+                        when (selectedTab) {
+                            0 -> {
+                                // ── Main Tab ──
+                                // Profile Header
                                 item {
-                                    QuickStatsRow(
+                                    ProfileHeader(
+                                        displayName = state.effectiveDisplayName,
+                                        avatarUrl = state.effectiveAvatarUrl,
+                                        isAniListLinked = state.isAniListLinked,
+                                    )
+                                }
+
+                                // Quick Stats
+                                if (preferences.showQuickStats.get()) {
+                                    item {
+                                        QuickStatsRow(
+                                            totalAnime = stats.totalAnime,
+                                            totalEpisodes = stats.totalEpisodesWatched,
+                                            totalWatchTimeMinutes = stats.totalWatchTimeMinutes,
+                                            meanScore = stats.meanScore,
+                                        )
+                                    }
+                                }
+
+                                // Genre Radar Chart — passes selectedGenre for highlighting
+                                if (preferences.showGenreChart.get() && stats.genreDistribution.isNotEmpty()) {
+                                    item {
+                                        GenreRadarChart(
+                                            genres = stats.genreDistribution,
+                                            onGenreClick = { genre -> selectedGenre = genre },
+                                            selectedGenre = selectedGenre,
+                                        )
+                                    }
+                                }
+
+                                // Status Distribution
+                                if (preferences.showStatusChart.get() && stats.statusDistribution.isNotEmpty()) {
+                                    item {
+                                        StatusDistributionSection(
+                                            statusDistribution = stats.statusDistribution,
+                                        )
+                                    }
+                                }
+
+                                // Recently Watched
+                                if (preferences.showRecentlyWatched.get() && stats.recentlyWatched.isNotEmpty()) {
+                                    item {
+                                        RecentlyWatchedSection(
+                                            recentlyWatched = stats.recentlyWatched,
+                                            onOpenAnime = onOpenAnime,
+                                        )
+                                    }
+                                }
+                            }
+                            1 -> {
+                                // ── Behind Status Tab ──
+                                item {
+                                    BehindStatusTab(
                                         totalAnime = stats.totalAnime,
-                                        totalEpisodes = stats.totalEpisodesWatched,
-                                        totalWatchTimeMinutes = stats.totalWatchTimeMinutes,
-                                        meanScore = stats.meanScore,
-                                    )
-                                }
-                            }
-
-                            // Genre Radar Chart
-                            if (preferences.showGenreChart.get() && stats.genreDistribution.isNotEmpty()) {
-                                item {
-                                    GenreRadarChart(
-                                        genres = stats.genreDistribution,
-                                        onGenreClick = { genre -> selectedGenre = genre },
-                                    )
-                                }
-                            }
-
-                            // Status Distribution
-                            if (preferences.showStatusChart.get() && stats.statusDistribution.isNotEmpty()) {
-                                item {
-                                    StatusDistributionSection(
-                                        statusDistribution = stats.statusDistribution,
-                                    )
-                                }
-                            }
-
-                            // Recently Watched
-                            if (preferences.showRecentlyWatched.get() && stats.recentlyWatched.isNotEmpty()) {
-                                item {
-                                    RecentlyWatchedSection(
-                                        recentlyWatched = stats.recentlyWatched,
+                                        behindAnime = stats.behindAnime,
                                         onOpenAnime = onOpenAnime,
                                     )
                                 }
-                            }
-                        }
-                        1 -> {
-                            // ── Behind Status Tab ──
-                            item {
-                                BehindStatusTab(
-                                    totalAnime = stats.totalAnime,
-                                    behindAnime = stats.behindAnime,
-                                    onOpenAnime = onOpenAnime,
-                                )
                             }
                         }
                     }
@@ -236,7 +247,7 @@ fun ProfileScreen(
             )
         }
 
-        // Genre anime sheet
+        // Genre anime sheet — when open, the selected genre chip is highlighted
         if (selectedGenre != null && stats != null) {
             val genre = selectedGenre!!
             val genreAnime = stats.libraryAnime.filter { it.genre.contains(genre) }

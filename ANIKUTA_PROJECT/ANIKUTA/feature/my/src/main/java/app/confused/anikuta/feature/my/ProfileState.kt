@@ -6,6 +6,7 @@ import app.confused.anikuta.core.tracker.TrackerUserStats
 /** UI state for the My Profile page. */
 data class ProfileState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val isAniListLinked: Boolean = false,
     val anilistUsername: String? = null,
     val anilistAvatarUrl: String? = null,

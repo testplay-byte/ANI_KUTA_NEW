@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
@@ -37,17 +38,20 @@ import kotlin.math.min
  * Genre Radar Chart (Kiviat / spider / star diagram).
  *
  * Shows up to 16 top genres as axes radiating from the center. Each axis length
- * is proportional to the genre's count. The shape is filled with the primary
- * color (semi-transparent) and outlined.
+ * is proportional to the genre's count. Each axis has its own color intensity —
+ * the most frequent genre gets the most vivid color, less frequent genres get
+ * less intense colors.
  *
  * Features:
- * - Smart genre placement: longest names at top/bottom, shortest at left/right,
- *   other positions random (prevents label crowding on sides).
+ * - Smart genre placement: longest names at top/bottom, shortest at left/right
+ *   (only the shortest genres belong on the sides; if multiple have the same
+ *   length, they can switch randomly). Other positions are random.
  * - Dynamic grid ring count: more rings for higher counts (max 30).
  * - Clickable labels: tapping a genre label opens the anime sheet.
- * - Text overlap prevention: radius adjusts based on label widths.
+ * - Text overlap prevention: radius adjusts based on label widths + container bounds.
  * - Up to 16 genres supported.
- * - Horizontally scrollable legend below.
+ * - Horizontally scrollable legend below with highlight for selected genre.
+ * - Per-genre color intensity (most frequent = most vivid).
  *
  * Uses Compose Canvas (no external charting library — per design language rules).
  */
@@ -55,6 +59,7 @@ import kotlin.math.min
 fun GenreRadarChart(
     genres: Map<String, Int>,
     onGenreClick: (String) -> Unit,
+    selectedGenre: String? = null,
     modifier: Modifier = Modifier,
 ) {
     if (genres.isEmpty()) return
@@ -81,11 +86,11 @@ fun GenreRadarChart(
     // Font size adapts to genre count (smaller if many genres)
     val labelFontSize = if (n <= 8) 11.sp else if (n <= 12) 10.sp else 9.sp
 
-    // Pre-measure all labels to compute the needed radius
+    // Pre-measure all labels (genre name only — no count)
     val measuredLabels = remember(placedGenres, labelFontSize) {
         placedGenres.map { entry ->
             textMeasurer.measure(
-                text = "${entry.key} (${entry.value})",
+                text = entry.key,
                 style = TextStyle(
                     fontSize = labelFontSize,
                     fontWeight = FontWeight.Bold,
@@ -96,9 +101,14 @@ fun GenreRadarChart(
         }
     }
 
-    // Compute the maximum label half-width to prevent overlap
-    val maxLabelHalfWidth = measuredLabels.maxOf { it.size.width / 2f }
-    val maxLabelHalfHeight = measuredLabels.maxOf { it.size.height / 2f }
+    // Compute per-genre color intensity (most frequent = most vivid)
+    val genreColors = remember(placedGenres, maxCount, primaryColor) {
+        placedGenres.map { entry ->
+            // Intensity: 0.4 (least frequent) to 1.0 (most frequent)
+            val intensity = 0.4f + 0.6f * (entry.value.toFloat() / maxCount)
+            primaryColor.copy(alpha = intensity)
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         SectionHeader("Genres")
@@ -108,20 +118,23 @@ fun GenreRadarChart(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         ) {
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(340.dp)
+                    .height(360.dp)
                     .padding(4.dp)
                     .pointerInput(n, placedGenres) {
                         detectTapGestures { tapOffset ->
                             // Check if tap is near any label position
                             val centerX = size.width / 2f
                             val centerY = size.height / 2f
-                            val radius = min(centerX, centerY) * 0.75f
-                            val labelR = radius + maxLabelHalfWidth + 12f
+                            // Bigger radius (0.78) to use more space
+                            val radius = min(centerX, centerY) * 0.78f
+                            // Label radius based on max label width, but clamped to container
+                            val maxLabelW = measuredLabels.maxOf { it.size.width / 2f }
+                            val labelR = (radius + maxLabelW + 8f).coerceAtMost(centerX - 8f)
 
                             for (i in 0 until n) {
                                 val angle = (2.0 * PI * i / n) - PI / 2
@@ -144,9 +157,11 @@ fun GenreRadarChart(
             ) {
                 val centerX = size.width / 2f
                 val centerY = size.height / 2f
-                // Bigger radius (0.75 instead of 0.65) to use more space
-                val radius = min(centerX, centerY) * 0.75f
-                val labelR = radius + maxLabelHalfWidth + 12f
+                // Bigger radius (0.78) to use more space
+                val radius = min(centerX, centerY) * 0.78f
+                // Label radius based on max label width, but clamped to container
+                val maxLabelW = measuredLabels.maxOf { it.size.width / 2f }
+                val labelR = (radius + maxLabelW + 8f).coerceAtMost(centerX - 4f)
 
                 // Draw concentric grid rings (dynamic count, more visible)
                 for (level in 1..gridRings) {
@@ -161,25 +176,26 @@ fun GenreRadarChart(
                     ringPath.close()
                     drawPath(
                         path = ringPath,
-                        color = gridColor.copy(alpha = 0.5f), // More visible (was 0.3f)
-                        style = Stroke(width = 1.5f), // Thicker (was 1f)
+                        color = gridColor.copy(alpha = 0.5f),
+                        style = Stroke(width = 1.5f),
                     )
                 }
 
-                // Draw axes (lines from center to each vertex) — more visible
+                // Draw axes (lines from center to each vertex) — per-genre color
                 for (i in 0 until n) {
                     val angle = (2.0 * PI * i / n) - PI / 2
                     val x = centerX + (radius * cos(angle)).toFloat()
                     val y = centerY + (radius * sin(angle)).toFloat()
                     drawLine(
-                        color = axisColor.copy(alpha = 0.5f), // More visible (was 0.3f)
+                        color = genreColors[i].copy(alpha = 0.6f),
                         start = Offset(centerX, centerY),
                         end = Offset(x, y),
-                        strokeWidth = 1.5f, // Thicker (was 1f)
+                        strokeWidth = 1.5f,
                     )
                 }
 
-                // Draw the data polygon (filled + outlined)
+                // Draw the data polygon (filled + outlined) — per-genre colored vertices
+                // Use a gradient fill based on primary color
                 val dataPath = Path()
                 for (i in 0 until n) {
                     val angle = (2.0 * PI * i / n) - PI / 2
@@ -191,19 +207,19 @@ fun GenreRadarChart(
                 }
                 dataPath.close()
 
-                // Fill (semi-transparent primary — more visible)
+                // Fill (semi-transparent primary)
                 drawPath(
                     path = dataPath,
-                    color = primaryColor.copy(alpha = 0.3f), // Was 0.25f
+                    color = primaryColor.copy(alpha = 0.3f),
                 )
                 // Outline (thicker)
                 drawPath(
                     path = dataPath,
                     color = primaryColor,
-                    style = Stroke(width = 2.5f), // Was 2f
+                    style = Stroke(width = 2.5f),
                 )
 
-                // Draw data points (circles at each vertex)
+                // Draw data points (circles at each vertex) — per-genre color
                 for (i in 0 until n) {
                     val angle = (2.0 * PI * i / n) - PI / 2
                     val value = placedGenres[i].value.toFloat() / maxCount
@@ -211,23 +227,29 @@ fun GenreRadarChart(
                     val x = centerX + (r * cos(angle)).toFloat()
                     val y = centerY + (r * sin(angle)).toFloat()
                     drawCircle(
-                        color = primaryColor,
+                        color = genreColors[i],
                         radius = 5f,
                         center = Offset(x, y),
                     )
                 }
 
                 // Draw genre labels (positioned just outside the outer ring)
+                // Labels are clamped to stay within the container bounds
                 for (i in 0 until n) {
                     val angle = (2.0 * PI * i / n) - PI / 2
                     val x = centerX + (labelR * cos(angle)).toFloat()
                     val y = centerY + (labelR * sin(angle)).toFloat()
                     val textResult = measuredLabels[i]
+                    val textW = textResult.size.width
+                    val textH = textResult.size.height
+                    // Clamp label position so it stays within the canvas bounds
+                    val clampedX = (x - textW / 2f).coerceIn(2f, size.width - textW - 2f) + textW / 2f
+                    val clampedY = (y - textH / 2f).coerceIn(2f, size.height - textH - 2f) + textH / 2f
                     drawText(
                         textLayoutResult = textResult,
                         topLeft = Offset(
-                            x - textResult.size.width / 2f,
-                            y - textResult.size.height / 2f,
+                            clampedX - textW / 2f,
+                            clampedY - textH / 2f,
                         ),
                     )
                 }
@@ -243,8 +265,13 @@ fun GenreRadarChart(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(topGenres) { (genre, count) ->
+                val isSelected = genre == selectedGenre
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    },
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.pointerInput(genre) {
                         detectTapGestures { onGenreClick(genre) }
@@ -255,7 +282,11 @@ fun GenreRadarChart(
                         fontFamily = RobotoFamily,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = if (isSelected) {
+                            androidx.compose.ui.graphics.Color.Black
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
@@ -270,8 +301,9 @@ fun GenreRadarChart(
  * Places genres so that:
  * - Longest names go to top (index 0) and bottom (index n/2) — vertical positions
  *   where there's more vertical space for long text.
- * - Shortest names go to right (index n/4) and left (index 3n/4) — horizontal
- *   positions where long names would overlap with the chart.
+ * - Shortest names go to right (index n/4) and left (index 3n/4) — ONLY the shortest
+ *   genres belong on the sides. If multiple genres have the same shortest length,
+ *   two of them are randomly selected for the sides, and the rest go to other positions.
  * - Remaining positions are filled randomly.
  *
  * This prevents long labels from crowding the sides of the chart where they
@@ -295,40 +327,53 @@ private fun placeGenresByLabelLength(
         result[bottomIdx] = byLength[byLength.size - 2] // second longest at bottom
     }
 
-    // Place shortest 2 at right (index n/4) and left (index 3n/4)
+    // Find the shortest genres (those with the minimum character count).
+    // If multiple have the same shortest length, pick 2 randomly for the sides.
     if (n >= 3) {
+        val minLen = byLength[0].key.length
+        val shortestGenres = byLength.filter { it.key.length == minLen }
+        val shortestShuffled = shortestGenres.shuffled()
+        val placed = result.filterNotNull().toMutableSet()
+
+        // Right position (index n/4)
         val rightIdx = n / 4
-        // Only place if the position is different from top/bottom
-        if (rightIdx != 0 && rightIdx != n / 2) {
-            result[rightIdx] = byLength[0] // shortest at right
-        } else {
-            // Find next available position near right
-            for (i in 1 until n) {
-                if (result[i] == null) {
-                    result[i] = byLength[0]
-                    break
+        if (rightIdx != 0 && rightIdx != n / 2 && result[rightIdx] == null) {
+            val rightGenre = shortestShuffled.getOrNull(0)
+            if (rightGenre != null && rightGenre !in placed) {
+                result[rightIdx] = rightGenre
+                placed.add(rightGenre)
+            }
+        }
+
+        // Left position (index 3n/4)
+        if (n >= 4) {
+            val leftIdx = 3 * n / 4
+            if (leftIdx != 0 && leftIdx != n / 2 && result[leftIdx] == null) {
+                val leftGenre = shortestShuffled.getOrNull(1) ?: shortestShuffled.getOrNull(0)
+                if (leftGenre != null && leftGenre !in placed) {
+                    result[leftIdx] = leftGenre
+                    placed.add(leftGenre)
                 }
             }
         }
-    }
-    if (n >= 4) {
-        val leftIdx = 3 * n / 4
-        if (result[leftIdx] == null && leftIdx != 0 && leftIdx != n / 2) {
-            result[leftIdx] = byLength[1] // second shortest at left
-        } else {
-            // Find next available position
-            for (i in 1 until n) {
-                if (result[i] == null) {
-                    result[i] = byLength[1]
-                    break
-                }
+
+        // If the right/left positions were already taken by top/bottom,
+        // place the shortest genres at the next available random positions.
+        for (shortGenre in shortestShuffled) {
+            if (shortGenre in placed) continue
+            // Find a random available position
+            val available = (0 until n).filter { result[it] == null }
+            if (available.isNotEmpty()) {
+                val pos = available.random()
+                result[pos] = shortGenre
+                placed.add(shortGenre)
             }
         }
     }
 
     // Fill remaining positions with the rest, shuffled randomly
-    val placed = result.filterNotNull().toSet()
-    val remaining = genres.filter { it !in placed }.shuffled()
+    val placedSet = result.filterNotNull().toSet()
+    val remaining = genres.filter { it !in placedSet }.shuffled()
     var remIdx = 0
     for (i in 0 until n) {
         if (result[i] == null) {

@@ -111,6 +111,32 @@ class ProfileViewModel(
         }
     }
 
+    /**
+     * Refresh all stats (called by pull-to-refresh).
+     *
+     * Sets [ProfileState.isRefreshing] to true while the refresh is in progress,
+     * then re-fetches AniList stats (if linked). Local stats auto-update via
+     * the reactive Flow in [observeLocalStats].
+     */
+    fun refresh() {
+        if (_state.value.isRefreshing) return // already refreshing
+        _state.value = _state.value.copy(isRefreshing = true)
+        viewModelScope.launch {
+            try {
+                if (trackerManager.anilist.isLoggedIn) {
+                    val stats = statsCalculator.fetchAniListStats()
+                    _state.value = _state.value.copy(anilistStats = stats)
+                }
+                // Local stats auto-update via Flow; brief delay so the indicator is visible
+                kotlinx.coroutines.delay(500)
+            } catch (e: Exception) {
+                Log.e(TAG, "Refresh failed", e)
+            } finally {
+                _state.value = _state.value.copy(isRefreshing = false)
+            }
+        }
+    }
+
     /** Set the display name (user-customizable). */
     fun setDisplayName(name: String) {
         preferences.displayName.set(name)
