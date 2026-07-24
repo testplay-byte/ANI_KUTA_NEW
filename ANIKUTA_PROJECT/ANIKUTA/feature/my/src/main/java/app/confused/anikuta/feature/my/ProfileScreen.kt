@@ -58,6 +58,7 @@ import org.koin.compose.koinInject
  * Design: #B1F256 primary, RobotoFamily font, surfaceVariant cards (alpha 0.4f)
  * with RoundedCornerShape(12dp).
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onOpenAnime: (Int) -> Unit,
