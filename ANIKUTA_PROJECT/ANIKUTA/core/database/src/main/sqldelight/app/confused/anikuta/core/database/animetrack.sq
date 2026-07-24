@@ -50,3 +50,14 @@ INSERT OR REPLACE INTO animetrack (
 
 delete:
 DELETE FROM animetrack WHERE _id = :id;
+
+-- ── Agent 2: Profile + Trackers — additional queries ──
+
+selectAllTracks:
+SELECT * FROM animetrack;
+
+deleteByAnimeIdAndTrackerId:
+DELETE FROM animetrack WHERE anime_id = :animeId AND tracker_id = :trackerId;
+
+updateLastSeen:
+UPDATE animetrack SET last_seen = :lastSeen WHERE _id = :id;

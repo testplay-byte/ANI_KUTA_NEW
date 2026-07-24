@@ -92,7 +92,19 @@ class App : Application() {
                 updateCheckerModule,
                 historyModule,
                 updatesModule,
+                // ── Agent 2: Profile + Trackers ──
+                app.confused.anikuta.core.tracker.di.trackerModule,
+                app.confused.anikuta.feature.my.di.myModule,
+                app.confused.anikuta.feature.trackers.di.trackersModule,
             )
+        }
+
+        // ── Agent 2: Start the TrackSyncManager (auto-syncs progress to trackers) ──
+        try {
+            val trackSyncManager = GlobalContext.get().get<app.confused.anikuta.core.tracker.TrackSyncManager>()
+            trackSyncManager.start()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to start TrackSyncManager", e)
         }
 
         // Ensure the Default category exists (Phase A — library page).

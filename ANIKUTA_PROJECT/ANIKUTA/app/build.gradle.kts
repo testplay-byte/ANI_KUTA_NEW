@@ -71,6 +71,10 @@ dependencies {
     // ── Agent 1: History + Updates ──
     implementation(projects.feature.history)
     implementation(projects.feature.updates)
+    // ── Agent 2: Profile + Trackers ──
+    implementation(projects.feature.my)
+    implementation(projects.feature.trackers)
+    implementation(projects.core.tracker)
 
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)

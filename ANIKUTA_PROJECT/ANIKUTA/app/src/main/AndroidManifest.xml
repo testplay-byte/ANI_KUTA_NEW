@@ -27,10 +27,28 @@
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
-            android:theme="@style/Theme.ANIKUTA">
+            android:theme="@style/Theme.ANIKUTA"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- ── Agent 2: Profile + Trackers — OAuth callback intent-filters ──
+                 We use Aniyomi's Client IDs (5338 for AniList, 686b980... for MAL),
+                 so the OAuth providers redirect to aniyomi:// URIs (configured on
+                 their developer portals). We must catch these redirects so our app
+                 appears in the "open with" list. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aniyomi" android:host="anilist-auth" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aniyomi" android:host="myanimelist-auth" />
             </intent-filter>
         </activity>
 
