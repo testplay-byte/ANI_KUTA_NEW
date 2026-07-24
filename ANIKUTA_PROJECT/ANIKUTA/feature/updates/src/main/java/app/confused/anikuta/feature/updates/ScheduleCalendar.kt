@@ -143,20 +143,43 @@ fun ScheduleCalendar(
         }
     }
 
-    // Show the red message when the user swipes to the hard bound — so they
-    // get feedback that they can't go further. (The pager's own bounds prevent
-    // actually scrolling past, but the message confirms WHY.)
+    // Show the red message when the user swipes to OR TRIES TO SWIPE PAST the
+    // hard bound. The pager's own bounds prevent actually scrolling past, but
+    // we detect the attempt via:
+    //  1. currentPage reaching the bound (settled there), OR
+    //  2. The user dragging toward the bound while already at it (the pager
+    //     resists, but the offset delta reveals the intent). We watch
+    //     pagerState.currentPage + pagerState.targetPage + the scroll offset
+    //     sign — when at the bound and the drag direction is "past", show it.
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }
-            .collect { page ->
-                if (page == minPage) {
-                    // Reached the back bound — show the message briefly so the
-                    // user knows they can't go further back.
+        snapshotFlow {
+            Triple(
+                pagerState.currentPage,
+                pagerState.targetPage,
+                pagerState.currentPageOffsetFraction,
+            )
+        }.collect { (current, target, offsetFraction) ->
+            // Settled on / dragged to the back bound.
+            if (current == minPage) {
+                // If the user is dragging further back (offsetFraction < 0 means
+                // the next page is being dragged in from the start — but at the
+                // hard floor the pager resists; we detect the attempt via target
+                // going below minPage OR a negative offset while at minPage).
+                if (target < minPage || offsetFraction < -0.05f) {
                     showBackLimit()
-                } else if (page == maxPage) {
+                } else if (target == minPage) {
+                    showBackLimit()
+                }
+            }
+            // Settled on / dragged to the forward bound.
+            if (current == maxPage) {
+                if (target > maxPage || offsetFraction > 0.05f) {
+                    showForwardLimit()
+                } else if (target == maxPage) {
                     showForwardLimit()
                 }
             }
+        }
     }
 
     // Auto-dismiss the limit message after ~4s.
@@ -214,11 +237,13 @@ fun ScheduleCalendar(
             // background extend far below the last week row (user feedback: "the
             // background is way too large … even though there is no calendar
             // showing anything in that area"). We constrain the pager height to
-            // the grid's natural height: 6 rows max (any month spans ≤6 weeks) ×
-            // cellHeight + row spacing. Cell height = (cardWidth / 7) since cells
-            // are aspectRatio(1f) and weighted 1f across 7 columns (minus the
-            // 6×4dp inter-cell spacing, approximated). We use BoxWithConstraints
-            // to read the available width and compute the deterministic height.
+            // the grid's natural height for the DISPLAYED month — using the
+            // actual number of weeks that month spans (5 or 6), not always 6.
+            // This way a 5-week month renders a 5-row grid + the background
+            // only stretches to those 5 rows. Cell height = (cardWidth - 6×4dp
+            // spacing) / 7 since cells are aspectRatio(1f) weighted 1f across 7
+            // columns.
+            val displayedWeekCount = remember(displayedMonth) { weeksInMonth(displayedMonth) }
             androidx.compose.foundation.layout.BoxWithConstraints(
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -226,8 +251,9 @@ fun ScheduleCalendar(
                 // 6 inter-cell gaps × 4dp spacing across 7 columns.
                 val totalSpacingPx = 6f * 4f
                 val cellSizePx = (cardWidthPx - totalSpacingPx) / 7f
-                // A month spans at most 6 week-rows; 5 inter-row gaps × 4dp.
-                val gridHeightPx = cellSizePx * 6f + 5f * 4f
+                // The displayed month's week count drives the height (5 or 6).
+                val rowCount = displayedWeekCount.coerceIn(5, 6)
+                val gridHeightPx = cellSizePx * rowCount + (rowCount - 1) * 4f
                 val gridHeight = gridHeightPx.dp
 
                 HorizontalPager(
@@ -756,6 +782,20 @@ private fun formatAirTime(epochMs: Long): String {
  * The grid always starts on Sunday; null cells are rendered as invisible
  * spacers (no bordered block) by [MonthGrid].
  */
+/**
+ * Returns the number of week-rows [month] spans in the calendar grid (5 or 6).
+ *
+ * A month that starts on Sunday and has 28 days (e.g. Feb in a non-leap year)
+ * spans exactly 4 weeks, but our grid pads to full weeks so it renders as 4
+ * rows. Most months span 5 or 6. Used to size the pager height dynamically so
+ * the card background only stretches to the actual grid height (per user
+ * feedback: "the background is way too tall … make sure that the background
+ * only gets applied to that specific area").
+ */
+private fun weeksInMonth(month: Calendar): Int {
+    return buildMonthWeeks(month).size
+}
+
 private fun buildMonthWeeks(month: Calendar): List<List<DayInfo?>> {
     val cal = (month.clone() as Calendar).apply {
         set(Calendar.DAY_OF_MONTH, 1)

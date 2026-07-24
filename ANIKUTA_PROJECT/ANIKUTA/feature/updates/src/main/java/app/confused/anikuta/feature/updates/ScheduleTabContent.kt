@@ -398,56 +398,66 @@ private fun ScheduleRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                // "Episode N" in a primary-tinted pill.
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp),
+                // Episode + release time in ONE row: "Episode N" pill on the
+                // left, release time on the right. Per user feedback (round 5):
+                // "show the releasing time on the right side of the episode
+                // itself. Like it says episode 16 and then on the right side of
+                // it it should say the rest of the things, like July 26 at
+                // 9:00 a.m."  AM/PM format for now.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = "Episode ${entry.episodeNumber}",
-                        fontFamily = RobotoFamily,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                // Countdown: detailed + live for Today/Tomorrow; full date with
-                // highlighted time for beyond.
-                if (isTodayOrTomorrow) {
-                    val countdown = formatDetailedCountdown(entry.airingAtMillis, now)
-                    Text(
-                        text = "in $countdown",
-                        fontFamily = RobotoFamily,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                } else {
-                    val fmt = java.text.SimpleDateFormat("MMM d 'at'", java.util.Locale.getDefault())
-                    val timeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-                    val datePart = fmt.format(java.util.Date(entry.airingAtMillis))
-                    val timePart = timeFmt.format(java.util.Date(entry.airingAtMillis))
-                    androidx.compose.foundation.layout.Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    // "Episode N" in a primary-tinted pill.
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
                     ) {
                         Text(
-                            text = "$datePart ",
+                            text = "Episode ${entry.episodeNumber}",
                             fontFamily = RobotoFamily,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         )
+                    }
+                    // Release time on the right. Live countdown for Today/
+                    // Tomorrow; full date + AM/PM time for beyond.
+                    if (isTodayOrTomorrow) {
+                        val countdown = formatDetailedCountdown(entry.airingAtMillis, now)
                         Text(
-                            text = timePart,
+                            text = "in $countdown",
                             fontFamily = RobotoFamily,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                    } else {
+                        // AM/PM format: "Jul 26 at 9:00 AM" (time in primary).
+                        val dateFmt = java.text.SimpleDateFormat("MMM d 'at'", java.util.Locale.getDefault())
+                        val timeFmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+                        val datePart = dateFmt.format(java.util.Date(entry.airingAtMillis))
+                        val timePart = timeFmt.format(java.util.Date(entry.airingAtMillis))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "$datePart ",
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = timePart,
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }

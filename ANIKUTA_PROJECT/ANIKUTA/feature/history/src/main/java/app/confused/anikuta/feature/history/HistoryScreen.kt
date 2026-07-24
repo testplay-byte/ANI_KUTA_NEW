@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.common.util.formatDuration
-import app.confused.anikuta.core.common.util.formatPlaybackTimestamp
 import app.confused.anikuta.core.common.util.formatTimeAgo
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.component.EmptyState
@@ -214,16 +213,8 @@ private fun HistoryRow(
     onClick: () -> Unit,
 ) {
     val fraction = entry.progressFraction
-    // When the bar is a near-empty sliver (< 5%), the timestamp row above it
-    // would look cramped. Instead, show the combined timestamp to the right
-    // (in the text column, under the pill) and render the bar alone.
-    val showTimestampAboveBar = fraction >= 0.05f
     val watchedDuration = formatDuration(entry.progress.positionSeconds)
     val totalDuration = formatDuration(entry.progress.durationSeconds)
-    val combinedTimestamp = formatPlaybackTimestamp(
-        entry.progress.positionSeconds,
-        entry.progress.durationSeconds,
-    )
     val hasDuration = entry.progress.durationSeconds > 0
 
     Surface(
@@ -261,8 +252,7 @@ private fun HistoryRow(
                 }
                 Spacer(modifier = Modifier.size(12.dp))
 
-                // Text stack: title + episode/watched-time pill (+ timestamp
-                // when it's not floating on the bar).
+                // Text stack: title + episode/watched-time pill + duration row.
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = entry.displayTitle,
@@ -290,58 +280,58 @@ private fun HistoryRow(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         )
                     }
-                    // When the timestamp isn't above the bar (tiny progress),
-                    // show the combined timestamp here — right of cover, under
-                    // the pill.
-                    if (!showTimestampAboveBar && hasDuration) {
+                    // Duration row — UNDER the episode pill, in a dedicated
+                    // background. Per user feedback (round 5): "the total
+                    // duration of the episode and the total duration the user
+                    // has watched will just show under the episode number … It
+                    // will have a dedicated background to it."
+                    //
+                    // The watched-duration (primary) is positioned at the
+                    // horizontal location matching the green bar's fill endpoint
+                    // (per user: "shown just above the bar's height, like the
+                    // green bar's ending point"). We use a weighted spacer so
+                    // the watched-duration text sits at fraction × rowWidth.
+                    if (hasDuration) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = combinedTimestamp,
-                            fontFamily = RobotoFamily,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // Spacer that grows with the progress fraction,
+                                // pushing the watched-duration text to the fill
+                                // endpoint. Capped so the text never overflows.
+                                Spacer(modifier = Modifier.weight(fraction.coerceAtLeast(0.02f)))
+                                Text(
+                                    text = watchedDuration,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(modifier = Modifier.weight((1f - fraction).coerceAtLeast(0.02f)))
+                                // Total duration — rightmost.
+                                Text(
+                                    text = totalDuration,
+                                    fontFamily = RobotoFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
             }
-            // Progress bar area. Per user feedback (round 4):
-            //  - The watched-duration (e.g. "12:34") shows ABOVE the seek bar,
-            //    on the LEFT, in the themed (primary) color, with NO background.
-            //  - The total duration (e.g. "24:00") shows ABOVE the seek bar, on
-            //    the RIGHT (rightmost), in onSurfaceVariant.
-            //  - The seek bar itself is a 7dp strip (thicker than the old 5dp)
-            //    along the very bottom edge, full-width, rounded ends.
-            //  - When progress < 5%, the timestamp row above the bar would be
-            //    cramped — so the bar renders alone (the combined timestamp is
-            //    shown in the text column instead, handled above).
-            if (showTimestampAboveBar && hasDuration) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Watched duration — themed color, no background.
-                    Text(
-                        text = watchedDuration,
-                        fontFamily = RobotoFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    // Total duration — rightmost, subdued.
-                    Text(
-                        text = totalDuration,
-                        fontFamily = RobotoFamily,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            // The seek bar — 7dp thick, full-width, rounded ends.
+            // The seek bar — 7dp thick, full-width, rounded ends. Renders at
+            // the very bottom edge. The duration text is in the pill above
+            // (under the episode pill), with the watched-duration aligned to
+            // this bar's fill endpoint.
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = Modifier
