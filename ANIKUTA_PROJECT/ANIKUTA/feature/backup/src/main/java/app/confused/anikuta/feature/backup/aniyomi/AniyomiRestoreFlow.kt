@@ -64,7 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.confused.anikuta.core.backup.translation.AniListResolution
+import app.confused.anikuta.core.backup.translation.AnilistResolution
 import app.confused.anikuta.core.backup.translation.TranslationStats
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import kotlinx.coroutines.delay
@@ -653,7 +653,7 @@ private fun LinkStatItem(label: String, value: Int, color: Color) {
 }
 
 @Composable
-private fun LinkingRow(res: AniListResolution, isCurrent: Boolean) {
+private fun LinkingRow(res: AnilistResolution, isCurrent: Boolean) {
     val isFailed = res is AnilistResolution.Failed
     val bgColor = if (isFailed) {
         LimeRedContainer

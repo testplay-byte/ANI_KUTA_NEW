@@ -11,7 +11,7 @@ import app.confused.anikuta.core.backup.BackupStorage
 import app.confused.anikuta.core.backup.format.BackupFormatDetector
 import app.confused.anikuta.core.backup.format.AniyomiBackupFormat
 import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackup
-import app.confused.anikuta.core.backup.translation.AniListResolution
+import app.confused.anikuta.core.backup.translation.AnilistResolution
 import app.confused.anikuta.core.backup.translation.AniyomiBackupTranslator
 import app.confused.anikuta.core.backup.translation.TranslationResult
 import app.confused.anikuta.core.backup.translation.TranslationStats
