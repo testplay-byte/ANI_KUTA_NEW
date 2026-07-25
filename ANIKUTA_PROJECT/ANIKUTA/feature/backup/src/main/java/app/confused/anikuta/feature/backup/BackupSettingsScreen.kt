@@ -107,12 +107,19 @@ fun BackupSettingsScreen(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         if (uri != null) {
-            // Detect format — if it's Aniyomi (.tachibk), open the Aniyomi restore flow
-            val isAniyomi = uri.lastPathSegment?.endsWith(".tachibk", ignoreCase = true) == true
-            if (isAniyomi) {
-                onAniyomiRestore(uri)
-            } else {
+            // Route based on file format:
+            // - .anikuta files → normal ANIKUTA restore flow
+            // - .tachibk files → Aniyomi restore flow (supported)
+                       // - ANY OTHER file → Aniyomi restore flow (will show "not supported" screen)
+            val fileName = uri.lastPathSegment ?: ""
+            val isAnikuta = fileName.endsWith(".anikuta", ignoreCase = true)
+            if (isAnikuta) {
+                // Our own format — use the normal restore flow
                 viewModel.onSelectBackupFile(uri)
+            } else {
+                // Everything else (.tachibk, random files) → Aniyomi restore flow
+                // which handles format detection + shows "not supported" if unknown
+                onAniyomiRestore(uri)
             }
         }
     }

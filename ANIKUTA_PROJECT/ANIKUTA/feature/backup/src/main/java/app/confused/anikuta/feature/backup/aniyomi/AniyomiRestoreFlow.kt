@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.model.AniListAnime
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupCategory
 import app.confused.anikuta.core.backup.translation.AnilistResolution
 import app.confused.anikuta.core.backup.translation.TranslationStats
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
@@ -564,29 +565,49 @@ private fun ManualLinkingScreen(
             Text("Manual Linking", fontFamily = RobotoFamily, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onBackground)
             Spacer(Modifier.height(8.dp))
-            Text("${state.failedAnime.size} anime could not be automatically matched. Tap to search AniList manually, or skip.",
-                fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            if (state.failedAnime.isEmpty()) {
+                // Empty state — all anime have been linked
+                Text("All anime have been successfully linked.",
+                    fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text("${state.failedAnime.size} anime could not be automatically matched. Tap to search AniList manually, or skip.",
+                    fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(Modifier.height(16.dp))
 
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.failedAnime) { failed ->
-                    Surface(
-                        color = LimeRedContainer, shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().clickable { searchingForAnime = failed },
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(6.dp), modifier = Modifier.size(48.dp)) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            if (state.failedAnime.isEmpty()) {
+                // Empty state — show a friendly message in the body
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("No anime to link", fontFamily = RobotoFamily, fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(state.failedAnime) { failed ->
+                        Surface(
+                            color = LimeRedContainer, shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { searchingForAnime = failed },
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(6.dp), modifier = Modifier.size(48.dp)) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                    }
                                 }
+                                Spacer(Modifier.size(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(when (failed) { is AnilistResolution.Failed -> failed.title; is AnilistResolution.RateLimited -> failed.title; else -> "Unknown" },
+                                        fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LimeRed)
+                                    Text(when (failed) { is AnilistResolution.Failed -> failed.reason; is AnilistResolution.RateLimited -> failed.reason; else -> "" }, fontFamily = RobotoFamily, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(Icons.Filled.Search, null, tint = LimeRed, modifier = Modifier.size(20.dp))
                             }
-                            Spacer(Modifier.size(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(when (failed) { is AnilistResolution.Failed -> failed.title; is AnilistResolution.RateLimited -> failed.title; else -> "Unknown" },
-                                    fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LimeRed)
-                                Text(when (failed) { is AnilistResolution.Failed -> failed.reason; is AnilistResolution.RateLimited -> failed.reason; else -> "" }, fontFamily = RobotoFamily, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Filled.Search, null, tint = LimeRed, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -598,7 +619,10 @@ private fun ManualLinkingScreen(
                     Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
                 }
                 Button(onNext, Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
-                    Text("Skip & Continue", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        if (state.failedAnime.isEmpty()) "Continue" else "Skip & Continue",
+                        fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold,
+                    )
                 }
             }
         }
@@ -751,7 +775,18 @@ private fun PreRestoreSummaryScreen(
 ) {
     val resolved = state.resolutions.count { it is AnilistResolution.Resolved }
     val skipped = state.resolutions.count { it is AnilistResolution.Failed || it is AnilistResolution.RateLimited }
-    val categories = state.aniyomiBackup.backupAnimeCategories
+    val backupCategories = state.aniyomiBackup.backupAnimeCategories
+
+    // Always include the Default category (id=1) — it's always present in ANIKUTA
+    // but may not be listed in the Aniyomi backup's category list.
+    // We add it as a synthetic entry if it's not already present.
+    val hasDefault = backupCategories.any { it.name.equals("Default", ignoreCase = true) || it.id == 1L }
+    val allCategories = if (hasDefault) {
+        backupCategories
+    } else {
+        listOf(AniyomiBackupCategory(name = "Default", order = 0, id = 1, flags = 0)) + backupCategories
+    }
+    val categories = allCategories
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(24.dp)) {
@@ -786,9 +821,15 @@ private fun PreRestoreSummaryScreen(
 
                 // Count anime per category from the backup
                 val animeByCategory = mutableMapOf<Long, Int>()
-                state.aniyomiBackup.backupAnime.filter { it.favorite }.forEach { ani ->
-                    ani.categories.forEach { catId ->
-                        animeByCategory[catId] = (animeByCategory[catId] ?: 0) + 1
+                val favoriteAnime = state.aniyomiBackup.backupAnime.filter { it.favorite }
+                favoriteAnime.forEach { ani ->
+                    if (ani.categories.isEmpty()) {
+                        // Anime with no category will go to Default (id=1)
+                        animeByCategory[1L] = (animeByCategory[1L] ?: 0) + 1
+                    } else {
+                        ani.categories.forEach { catId ->
+                            animeByCategory[catId] = (animeByCategory[catId] ?: 0) + 1
+                        }
                     }
                 }
 
