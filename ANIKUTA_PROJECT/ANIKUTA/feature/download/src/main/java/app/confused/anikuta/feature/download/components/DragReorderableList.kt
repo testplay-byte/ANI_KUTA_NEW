@@ -96,7 +96,7 @@ fun DragReorderableList(
     ) {
         internalItems.forEachIndexed { index, item ->
             val isDragged = index == draggedIndex
-            val translationY = if (isDragged) dragOffset else 0f
+            val translationAmount = if (isDragged) dragOffset else 0f
 
             Surface(
                 color = if (isDragged) {
@@ -108,7 +108,7 @@ fun DragReorderableList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(itemHeightDp)
-                    .graphicsLayer { translationY = translationY }
+                    .graphicsLayer { this.translationY = translationAmount }
                     .then(
                         if (isDragged) Modifier.shadow(8.dp, RoundedCornerShape(12.dp))
                         else Modifier
