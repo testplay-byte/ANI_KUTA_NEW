@@ -136,17 +136,23 @@ class AdvancedHttpDownloader(
         val chunkProgress = resumeChunks.toMutableList()
         var lastSaveTime = System.currentTimeMillis()
 
-        suspend fun saveResumeThrottled() {
+        // Non-suspend resume save (called from the non-suspend onChunkProgress
+        // callback). Reads a snapshot of chunkProgress under the mutex; writes
+        // the resume JSON to disk. Throttled to once per RESUME_SAVE_INTERVAL_MS.
+        fun saveResumeThrottled() {
             val now = System.currentTimeMillis()
             if (now - lastSaveTime >= RESUME_SAVE_INTERVAL_MS) {
+                lastSaveTime = now
+                // Snapshot the progress (best-effort — no lock; worst case is
+                // a slightly stale resume file, which is safe).
+                val snapshot = chunkProgress.toList()
                 resumeManager.saveResume(DownloadResumeManager.ResumeMetadata(
                     taskId = taskId,
                     videoUrl = videoUrl,
                     totalBytes = totalBytes,
                     chunkCount = threadCount,
-                    chunks = chunkProgress.toList(),
+                    chunks = snapshot,
                 ))
-                lastSaveTime = now
             }
         }
 
@@ -231,7 +237,7 @@ class AdvancedHttpDownloader(
         videoUrl: String,
         headers: String?,
         maxRetries: Int,
-        onChunkProgress: (downloaded: Long) -> Unit,
+        onChunkProgress: suspend (downloaded: Long) -> Unit,
     ) {
         var attempt = 0
         var lastError: Exception? = null
@@ -266,7 +272,7 @@ class AdvancedHttpDownloader(
         chunk: DownloadResumeManager.ChunkProgress,
         videoUrl: String,
         headers: String?,
-        onChunkProgress: (downloaded: Long) -> Unit,
+        onChunkProgress: suspend (downloaded: Long) -> Unit,
     ) {
         val chunkFile = resumeManager.chunkFile(taskId, chunk.index)
         val resumeFrom = chunk.start + chunk.downloaded
