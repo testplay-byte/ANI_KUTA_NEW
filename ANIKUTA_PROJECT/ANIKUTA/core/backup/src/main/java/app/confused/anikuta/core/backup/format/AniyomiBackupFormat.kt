@@ -1,12 +1,16 @@
 package app.confused.anikuta.core.backup.format
 
 import android.util.Log
-import app.confused.anikuta.core.backup.BackupCategory
-import app.confused.anikuta.core.backup.BackupEntry
 import app.confused.anikuta.core.backup.BackupException
 import app.confused.anikuta.core.backup.BackupFormat
 import app.confused.anikuta.core.backup.BackupFormatType
 import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackup
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupAnime
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupCategory
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupEpisode
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupAnimeTracking
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackupAnimeHistory
+import app.confused.anikuta.core.backup.format.aniyomi.AniyomiLegacyBackup
 import app.confused.anikuta.core.backup.model.AnimeBackup
 import app.confused.anikuta.core.backup.model.BackupContainer
 import app.confused.anikuta.core.backup.model.CategoryBackup
@@ -25,20 +29,23 @@ import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 
 private const val TAG = "AnikutaBackup"
-private const val GZIP_MAGIC = 0x1f8b
 
 /**
  * Reads Aniyomi protobuf backup files (`.tachibk`) — restore-only.
  *
  * Aniyomi backups are protocol-buffer-encoded (optionally gzipped). This
- * format decodes them using `kotlinx-serialization-protobuf` + the minimal
- * model classes in [format.aniyomi], then maps the data to ANIKUTA's
- * [BackupContainer] structure.
+ * format tries two decode strategies:
+ * 1. **Modern format** (`AniyomiBackup`): anime at proto field 501.
+ * 2. **Legacy format** (`AniyomiLegacyBackup`): anime at proto field 3.
+ *
+ * This matches Aniyomi's own `BackupDecoder` which checks `isLegacyBackup`
+ * first and falls back. We try modern first (more common in recent backups),
+ * then legacy.
  *
  * **Matching strategy:** Aniyomi anime are matched to AniList IDs via their
  * tracker entries (AniList tracker has `syncId = 2`, `mediaId` = AniList ID).
- * Anime without AniList tracking are imported by title (the app can
- * re-search AniList on the details page).
+ * Anime without AniList tracking are imported by title (the app can re-search
+ * AniList on the details page).
  *
  * **Not supported (restore-only):** [write] throws — we never export in
  * Aniyomi format.
@@ -63,19 +70,35 @@ class AniyomiBackupFormat : BackupFormat {
         try {
             // Read the full byte array (need to check for gzip magic first)
             val rawBytes = input.readBytes()
+            Log.i(TAG, "Aniyomi backup: read ${rawBytes.size} raw bytes")
+
             val protoBytes = if (isGzipped(rawBytes)) {
+                Log.d(TAG, "Aniyomi backup: gzip-compressed, decompressing...")
                 GZIPInputStream(rawBytes.inputStream()).use { it.readBytes() }
             } else {
                 rawBytes
             }
+            Log.d(TAG, "Aniyomi backup: ${protoBytes.size} bytes to decode")
 
-            val aniyomiBackup = protoBuf.decodeFromByteArray(
-                AniyomiBackup.serializer(),
-                protoBytes,
-            )
+            // Try modern format first (anime at proto field 501)
+            val aniyomiBackup = try {
+                Log.d(TAG, "Aniyomi backup: trying modern format (Backup)...")
+                val modern = protoBuf.decodeFromByteArray(
+                    AniyomiBackup.serializer(),
+                    protoBytes,
+                )
+                if (modern.backupAnime.isNotEmpty()) {
+                    Log.i(TAG, "Aniyomi backup: modern format decoded — ${modern.backupAnime.size} anime")
+                    modern
+                } else {
+                    Log.d(TAG, "Aniyomi backup: modern format had 0 anime, trying legacy...")
+                    tryLegacy(protoBytes)
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Aniyomi backup: modern format failed (${e.message}), trying legacy...")
+                tryLegacy(protoBytes)
+            }
 
-            Log.i(TAG, "Aniyomi backup decoded: ${aniyomiBackup.backupAnime.size} anime, " +
-                "${aniyomiBackup.backupAnimeCategories.size} categories")
             mapToContainer(aniyomiBackup)
         } catch (e: BackupException) {
             throw e
@@ -83,6 +106,25 @@ class AniyomiBackupFormat : BackupFormat {
             Log.e(TAG, "Failed to read Aniyomi backup", e)
             throw BackupException.CorruptFile("Aniyomi read failed: ${e.message}", e)
         }
+    }
+
+    /**
+     * Tries to decode the bytes as a legacy Aniyomi backup (anime at proto field 3).
+     * Throws if legacy decode also fails.
+     */
+    private fun tryLegacy(protoBytes: ByteArray): AniyomiBackup {
+        val legacy = protoBuf.decodeFromByteArray(
+            AniyomiLegacyBackup.serializer(),
+            protoBytes,
+        )
+        Log.i(TAG, "Aniyomi backup: legacy format decoded — ${legacy.backupAnime.size} anime")
+        // Convert legacy to modern structure
+        return AniyomiBackup(
+            backupCategories = legacy.backupCategories,
+            backupAnime = legacy.backupAnime,
+            backupAnimeCategories = legacy.backupAnimeCategories,
+            backupAnimeSources = legacy.backupAnimeSources,
+        )
     }
 
     override fun detect(input: InputStream): Boolean {
@@ -93,11 +135,8 @@ class AniyomiBackupFormat : BackupFormat {
             input.reset()
             if (read < 2) return false
             // Aniyomi backups are gzip (0x1f 0x8b) or raw protobuf.
-            // Raw protobuf is hard to distinguish from random bytes, so we
-            // only detect the gzip variant reliably. Non-gzipped protobuf
-            // will be caught by the AnikutaBackupFormat detector failing
-            // (not a zip) and then the BackupFormatDetector will try Aniyomi
-            // as a last resort.
+            // We detect the gzip variant. Non-gzipped protobuf is tried as a
+            // fallback by the BackupManager if ANIKUTA detection fails.
             header[0].toInt() and 0xFF == 0x1f && header[1].toInt() and 0xFF == 0x8b
         } catch (e: Exception) {
             false
@@ -113,7 +152,7 @@ class AniyomiBackupFormat : BackupFormat {
      * categories become [CategoryBackup]s.
      */
     private fun mapToContainer(aniyomi: AniyomiBackup): BackupContainer {
-        val entries = mutableListOf<BackupEntry>()
+        val entries = mutableListOf<app.confused.anikuta.core.backup.BackupEntry>()
 
         // ── Library + Anime details ──
         val animeBackups = aniyomi.backupAnime.map { ani ->
@@ -134,8 +173,8 @@ class AniyomiBackupFormat : BackupFormat {
             )
         }
         if (animeBackups.isNotEmpty()) {
-            entries.add(BackupEntry.Library(animes = animeBackups.filter { it.favorite }))
-            entries.add(BackupEntry.AnimeDetails(animes = animeBackups))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.Library(animes = animeBackups.filter { it.favorite }))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.AnimeDetails(animes = animeBackups))
         }
 
         // ── Episodes ──
@@ -165,12 +204,13 @@ class AniyomiBackupFormat : BackupFormat {
             }
         }
         if (episodesByAnime.isNotEmpty()) {
-            entries.add(BackupEntry.Episodes(byAnime = episodesByAnime))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.Episodes(byAnime = episodesByAnime))
         }
 
         // ── Categories ──
-        if (aniyomi.backupAnimeCategories.isNotEmpty()) {
-            val cats = aniyomi.backupAnimeCategories.map { cat ->
+        val allCategories = aniyomi.backupAnimeCategories.ifEmpty { aniyomi.backupCategories }
+        if (allCategories.isNotEmpty()) {
+            val cats = allCategories.map { cat ->
                 CategoryBackup(
                     _id = cat.id,
                     name = cat.name,
@@ -188,10 +228,10 @@ class AniyomiBackupFormat : BackupFormat {
                     ))
                 }
             }
-            entries.add(BackupEntry.Categories(categories = cats, links = links))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.Categories(categories = cats, links = links))
         }
 
-        // ─<arg_value> Watch progress (from history) ──
+        // ── Watch progress (from history) ──
         val progressEntries = mutableMapOf<String, WatchProgressItem>()
         aniyomi.backupAnime.forEach { ani ->
             ani.history.forEach { hist ->
@@ -209,7 +249,7 @@ class AniyomiBackupFormat : BackupFormat {
             }
         }
         if (progressEntries.isNotEmpty()) {
-            entries.add(BackupEntry.WatchProgress(progress = WatchProgressBackup(entries = progressEntries)))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.WatchProgress(progress = WatchProgressBackup(entries = progressEntries)))
         }
 
         // ── Tracker bindings ──
@@ -229,7 +269,7 @@ class AniyomiBackupFormat : BackupFormat {
             }
         }
         // Always include tracker entry (even if empty) so restore knows to process it
-        entries.add(BackupEntry.Tracker(data = TrackerBackupModel(
+        entries.add(app.confused.anikuta.core.backup.BackupEntry.Tracker(data = TrackerBackupModel(
             bindings = trackItems,
         )))
 
@@ -247,8 +287,10 @@ class AniyomiBackupFormat : BackupFormat {
             }
         }
         if (sourceLinks.isNotEmpty()) {
-            entries.add(BackupEntry.SourceLinks(links = SourceLinkBackup(sourceLinks = sourceLinks)))
+            entries.add(app.confused.anikuta.core.backup.BackupEntry.SourceLinks(links = SourceLinkBackup(sourceLinks = sourceLinks)))
         }
+
+        Log.i(TAG, "Aniyomi backup mapped: ${entries.size} entries")
 
         return BackupContainer(
             schemaVersion = BackupContainer.CURRENT_SCHEMA_VERSION,

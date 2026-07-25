@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,11 +13,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CloudUpload
@@ -28,12 +31,16 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.backup.BackupCategory
+import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.feature.backup.components.BackupCategoryList
@@ -97,6 +105,9 @@ fun BackupSettingsScreen(
     val scrollState = rememberScrollState()
     val isCollapsed = false // BackupSettingsScreen is not scroll-collapsed for simplicity
 
+    // State for the "Create backup" category-selection bottom sheet
+    var showCreateBackupSheet by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             CollapsingHeader(
@@ -110,6 +121,8 @@ fun BackupSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
             ) {
                 // ── Section 1: Backup ──
+                // Just a button. Tapping it opens a bottom sheet where the user
+                // selects which data categories to include, then confirms.
                 item {
                     BackupSectionLabel("Backup")
                     SectionCard(
@@ -117,17 +130,10 @@ fun BackupSettingsScreen(
                         title = "Create backup",
                         subtitle = "Export your data to a .anikuta file",
                     ) {
-                        BackupCategoryList(
-                            categories = viewModel.categories,
-                            selected = manualCategories,
-                            onToggle = { viewModel.toggleManualCategory(it) },
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = { viewModel.createBackup() },
+                            onClick = { showCreateBackupSheet = true },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            enabled = manualCategories.isNotEmpty(),
                         ) {
                             Text(
                                 text = "Create backup",
@@ -258,6 +264,20 @@ fun BackupSettingsScreen(
                     }
                 }
             }
+        }
+
+        // ── Create backup category-selection bottom sheet ──
+        if (showCreateBackupSheet) {
+            CreateBackupSheet(
+                categories = viewModel.categories,
+                selected = manualCategories,
+                onToggle = { viewModel.toggleManualCategory(it) },
+                onConfirm = {
+                    showCreateBackupSheet = false
+                    viewModel.createBackup()
+                },
+                onDismiss = { showCreateBackupSheet = false },
+            )
         }
 
         // ── State overlays ──
@@ -401,8 +421,77 @@ private fun buildRestoreMessage(summary: app.confused.anikuta.core.backup.Restor
         if (summary.totalSkipped > 0) appendLine("Skipped: ${summary.totalSkipped}")
         if (summary.totalErrors > 0) appendLine("Errors: ${summary.totalErrors}")
         appendLine()
-        summary.categoryResults.filter { it.hasResults }.forEach { result ->
-            appendLine("• ${result.category.displayName}: ${result.importedCount} imported")
+        summary.categoryResults.forEach { result ->
+            val status = when {
+                result.importedCount > 0 -> "${result.importedCount} imported"
+                result.note != null -> result.note
+                else -> "no data"
+            }
+            appendLine("• ${result.category.displayName}: $status")
+        }
+    }
+}
+
+/**
+ * Bottom sheet for selecting which data categories to include in a manual backup.
+ *
+ * Shows the full category list with checkboxes + a "Create backup" confirm button.
+ * Uses AnikutaBottomSheet (dragHandle = null per design principle #2).
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateBackupSheet(
+    categories: List<BackupCategory>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AnikutaBottomSheet(onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Select data to back up",
+                fontFamily = RobotoFamily,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${selected.size} of ${categories.size} categories selected",
+                fontFamily = RobotoFamily,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Category checkbox list — scrollable if long
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                BackupCategoryList(
+                    categories = categories,
+                    selected = selected,
+                    onToggle = onToggle,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                enabled = selected.isNotEmpty(),
+            ) {
+                Text(
+                    text = "Create backup",
+                    fontFamily = RobotoFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+            }
         }
     }
 }

@@ -4,38 +4,56 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.protobuf.ProtoNumber
 
 /**
- * Minimal copy of Aniyomi's protobuf backup models — restore-only.
+ * Minimal Aniyomi protobuf models — restore-only.
  *
- * These mirror the `@ProtoNumber` annotations from
- * `ANIYOMI_REFRENCE/.../data/backup/models/Backup*.kt` so that
- * `kotlinx-serialization-protobuf` can decode Aniyomi `.tachibk` files.
+ * **Design principle:** Only declare fields we actually need to restore
+ * (anime, episodes, categories, tracking, history). Fields we don't need
+ * (preferences, extensions, repos, custom buttons) are NOT declared — the
+ * protobuf decoder skips unknown fields at the wire level, so this is safe
+ * and robust against schema changes in those areas.
  *
- * Only the anime-related fields are included (manga fields are omitted —
- * ANIKUTA is anime-first). Fields that reference Aniyomi domain enums
- * (e.g. `AnimeUpdateStrategy`) are typed as `Int` to avoid pulling in
- * Aniyomi's source-api module.
+ * **Why not declare all fields?** Aniyomi's `PreferenceValue` is a sealed
+ * class with a specific wire format. If our model declares it with a different
+ * structure, the decoder fails. By not declaring preference/extension fields
+ * at all, we avoid this issue entirely.
  *
- * **Adding fields:** match the exact `@ProtoNumber` from the Aniyomi source.
+ * **Two root models:** Aniyomi has both a modern `Backup` format (anime at
+ * proto field 501) and a `LegacyBackup` format (anime at proto field 3).
+ * We try modern first, then fall back to legacy (matching Aniyomi's own
+ * `BackupDecoder` logic).
+ *
+ * Proto numbers match Aniyomi's source exactly for the fields we declare.
  * Never change an existing proto number — that breaks decoding.
  */
 
-/** Root protobuf backup model (Aniyomi `Backup` / `LegacyBackup`). */
+// ── Root models ──
+
+/**
+ * Modern Aniyomi backup format (current).
+ * Anime are at proto field 501.
+ */
 @Serializable
 data class AniyomiBackup(
-    @ProtoNumber(1) val backupManga: List<AniyomiBackupManga> = emptyList(),
     @ProtoNumber(2) val backupCategories: List<AniyomiBackupCategory> = emptyList(),
-    @ProtoNumber(101) val backupSources: List<AniyomiBackupSource> = emptyList(),
-    @ProtoNumber(104) val backupPreferences: List<AniyomiBackupPreference> = emptyList(),
-    @ProtoNumber(105) val backupSourcePreferences: List<AniyomiBackupSourcePreferences> = emptyList(),
-    @ProtoNumber(106) val backupMangaExtensionRepo: List<AniyomiBackupExtensionRepo> = emptyList(),
-    // Aniyomi-specific (500+)
     @ProtoNumber(500) val isLegacy: Boolean = true,
     @ProtoNumber(501) val backupAnime: List<AniyomiBackupAnime> = emptyList(),
     @ProtoNumber(502) val backupAnimeCategories: List<AniyomiBackupCategory> = emptyList(),
     @ProtoNumber(503) val backupAnimeSources: List<AniyomiBackupAnimeSource> = emptyList(),
-    @ProtoNumber(504) val backupExtensions: List<AniyomiBackupExtension> = emptyList(),
-    @ProtoNumber(505) val backupAnimeExtensionRepo: List<AniyomiBackupExtensionRepo> = emptyList(),
 )
+
+/**
+ * Legacy Aniyomi backup format (older versions).
+ * Anime are at proto field 3.
+ */
+@Serializable
+data class AniyomiLegacyBackup(
+    @ProtoNumber(2) val backupCategories: List<AniyomiBackupCategory> = emptyList(),
+    @ProtoNumber(3) val backupAnime: List<AniyomiBackupAnime> = emptyList(),
+    @ProtoNumber(4) val backupAnimeCategories: List<AniyomiBackupCategory> = emptyList(),
+    @ProtoNumber(103) val backupAnimeSources: List<AniyomiBackupAnimeSource> = emptyList(),
+)
+
+// ── Anime model (matches Aniyomi's BackupAnime exactly for declared fields) ──
 
 @Serializable
 data class AniyomiBackupAnime(
@@ -53,7 +71,7 @@ data class AniyomiBackupAnime(
     @ProtoNumber(17) val categories: List<Long> = emptyList(),
     @ProtoNumber(18) val tracking: List<AniyomiBackupAnimeTracking> = emptyList(),
     @ProtoNumber(100) val favorite: Boolean = true,
-    @ProtoNumber(101) val episodeFlags: Int = 0,
+    @ProtoNumber(101) val episode_flags: Int = 0,
     @ProtoNumber(103) val viewer_flags: Int = 0,
     @ProtoNumber(104) val history: List<AniyomiBackupAnimeHistory> = emptyList(),
     @ProtoNumber(105) val updateStrategy: Int = 0,
@@ -70,13 +88,13 @@ data class AniyomiBackupEpisode(
     @ProtoNumber(4) val seen: Boolean = false,
     @ProtoNumber(5) val bookmark: Boolean = false,
     @ProtoNumber(6) val lastSecondSeen: Long = 0,
-    @ProtoNumber(16) val totalSeconds: Long = 0,
     @ProtoNumber(7) val dateFetch: Long = 0,
     @ProtoNumber(8) val dateUpload: Long = 0,
     @ProtoNumber(9) val episodeNumber: Float = 0F,
     @ProtoNumber(10) val sourceOrder: Long = 0,
     @ProtoNumber(11) val lastModifiedAt: Long = 0,
     @ProtoNumber(12) val version: Long = 0,
+    @ProtoNumber(16) val totalSeconds: Long = 0,
     @ProtoNumber(501) val fillermark: Boolean = false,
     @ProtoNumber(502) val summary: String? = null,
     @ProtoNumber(503) val previewUrl: String? = null,
@@ -118,55 +136,4 @@ data class AniyomiBackupAnimeHistory(
 data class AniyomiBackupAnimeSource(
     @ProtoNumber(1) val name: String = "",
     @ProtoNumber(2) val sourceId: Long = 0,
-)
-
-@Serializable
-data class AniyomiBackupSource(
-    @ProtoNumber(1) val name: String = "",
-    @ProtoNumber(2) val sourceId: Long = 0,
-)
-
-// ── Stubs (parsed but not deeply processed by ANIKUTA restore) ──
-
-@Serializable
-data class AniyomiBackupPreference(
-    @ProtoNumber(1) val key: String = "",
-    @ProtoNumber(2) val value: AniyomiBackupPreferenceValue? = null,
-)
-
-@Serializable
-data class AniyomiBackupPreferenceValue(
-    @ProtoNumber(1) val int: Int? = null,
-    @ProtoNumber(2) val long: Long? = null,
-    @ProtoNumber(3) val float: Float? = null,
-    @ProtoNumber(4) val string: String? = null,
-    @ProtoNumber(5) val boolean: Boolean? = null,
-    @ProtoNumber(6) val stringSet: List<String> = emptyList(),
-)
-
-@Serializable
-data class AniyomiBackupSourcePreferences(
-    @ProtoNumber(1) val sourceKey: String = "",
-    @ProtoNumber(2) val prefs: List<AniyomiBackupPreference> = emptyList(),
-)
-
-@Serializable
-data class AniyomiBackupManga(
-    @ProtoNumber(1) val source: Long = 0,
-    @ProtoNumber(2) val url: String = "",
-    @ProtoNumber(3) val title: String = "",
-)
-
-@Serializable
-data class AniyomiBackupExtension(
-    @ProtoNumber(1) val name: String = "",
-    @ProtoNumber(2) val version: String = "",
-)
-
-@Serializable
-data class AniyomiBackupExtensionRepo(
-    @ProtoNumber(1) val baseUrl: String = "",
-    @ProtoNumber(2) val name: String = "",
-    @ProtoNumber(3) val shortName: String? = null,
-    @ProtoNumber(4) val website: String? = null,
 )

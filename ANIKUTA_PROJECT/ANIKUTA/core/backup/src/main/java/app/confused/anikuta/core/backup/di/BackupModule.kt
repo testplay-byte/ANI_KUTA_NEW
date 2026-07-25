@@ -31,40 +31,47 @@ import org.koin.dsl.module
  * Koin module for the backup engine (`:core:backup`).
  *
  * Registers:
- * - All 10 [BackupProvider] implementations (each backed by its data source).
+ * - All 10 [BackupProvider] implementations as a single `List<BackupProvider>`
+ *   (NOT 10 separate `single<BackupProvider>` — in Koin, multiple `single<T>`
+ *   with the same type + no qualifier OVERWRITE each other, leaving only the
+ *   last one registered. This was the root cause of "only 1 category saved").
  * - [CoverDownloader] — HTTP cover image downloader.
- * - [BackupManager] — the orchestrator (gets providers via `getAll<BackupProvider>()`).
+ * - [BackupManager] — the orchestrator (receives the provider list).
  * - [BackupPreferences] — auto-backup config + SAF folder URI.
  * - [BackupStorage] — SAF folder/file management.
  * - [AutoBackupScheduler] — WorkManager periodic work scheduler.
  *
- * Must be added to `modules(...)` in `App.kt`'s `startKoin`.
- *
  * **Adding a new provider:**
  * 1. Create the provider class.
- * 2. Register it here with `single<BackupProvider> { ... }` (Koin collects all
- *    `BackupProvider` bindings into a list for [BackupManager]).
+ * 2. Add it to the `listOf(...)` in the `single<List<BackupProvider>>` binding below.
  */
 val backupModule: Module = module {
-    // ── Backup providers (each registered as BackupProvider so Koin collects them) ──
-    single<BackupProvider> { LibraryBackupProvider(get<AnikutaDatabase>()) }
-    single<BackupProvider> { AnimeDetailsBackupProvider(get<AnikutaDatabase>()) }
-    single<BackupProvider> { EpisodeBackupProvider(get<AnikutaDatabase>()) }
-    single<BackupProvider> { CategoryBackupProvider(get<AnikutaDatabase>()) }
-    single<BackupProvider> { EpisodeMetadataBackupProvider(get<EpisodeMetadataCache>()) }
-    single<BackupProvider> { WatchProgressBackupProvider(get<WatchProgressStore>()) }
-    single<BackupProvider> { SourceLinkBackupProvider(get<SourceLinkStore>(), get<ExtensionLinkStore>()) }
-    single<BackupProvider> { TrackerBackupProviderAdapter(get<TrackerBackupProvider>()) }
-    single<BackupProvider> { PreferencesBackupProvider(get<PreferenceStore>()) }
-    single<BackupProvider> { CoverImageProvider(get<AnikutaDatabase>()) }
+    // ── All backup providers as a single list ──
+    // CRITICAL: Do NOT use multiple `single<BackupProvider> { ... }` — they share
+    // the same Koin key (BackupProvider, null) and overwrite each other.
+    // Using a single List binding preserves all 10 providers.
+    single<List<BackupProvider>> {
+        listOf(
+            LibraryBackupProvider(get<AnikutaDatabase>()),
+            AnimeDetailsBackupProvider(get<AnikutaDatabase>()),
+            EpisodeBackupProvider(get<AnikutaDatabase>()),
+            CategoryBackupProvider(get<AnikutaDatabase>()),
+            EpisodeMetadataBackupProvider(get<EpisodeMetadataCache>()),
+            WatchProgressBackupProvider(get<WatchProgressStore>()),
+            SourceLinkBackupProvider(get<SourceLinkStore>(), get<ExtensionLinkStore>()),
+            TrackerBackupProviderAdapter(get<TrackerBackupProvider>()),
+            PreferencesBackupProvider(get<PreferenceStore>()),
+            CoverImageProvider(get<AnikutaDatabase>()),
+        )
+    }
 
     // ── Cover downloader ──
     single { CoverDownloader() }
 
-    // ── Orchestrator (receives all providers via Koin getAll) ──
+    // ── Orchestrator (receives the full provider list) ──
     single {
         BackupManager(
-            providers = getAll<BackupProvider>(),
+            providers = get<List<BackupProvider>>(),
             coverDownloader = get<CoverDownloader>(),
         )
     }

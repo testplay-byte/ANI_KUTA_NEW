@@ -56,7 +56,11 @@ class BackupManager(
     suspend fun createBackup(options: BackupOptions, output: OutputStream): BackupResult<CreateSummary> =
         withContext(Dispatchers.IO) {
             try {
-                Log.i(TAG, "Creating backup: ${options.categories.size} categories, format=${options.format}")
+                Log.i(TAG, "═══ Creating backup ═══")
+                Log.i(TAG, "  Selected categories: ${options.categories}")
+                Log.i(TAG, "  Format: ${options.format}")
+                Log.i(TAG, "  Registered providers: ${providers.size} — ids=${providers.map { it.id }}")
+
                 val entries = mutableListOf<BackupEntry>()
                 var totalItems = 0
 
@@ -64,26 +68,34 @@ class BackupManager(
                 providers.forEach { provider ->
                     if (options.includes(provider.id)) {
                         try {
+                            Log.d(TAG, "  → Exporting provider: ${provider.id}")
                             val entry = provider.export()
+                            val itemCount = countItems(entry)
                             entries.add(entry)
-                            totalItems += countItems(entry)
-                            Log.d(TAG, "  ✓ ${provider.id}: ${countItems(entry)} items")
+                            totalItems += itemCount
+                            Log.i(TAG, "    ✓ ${provider.id}: $itemCount items")
                         } catch (e: Exception) {
-                            Log.e(TAG, "  ✗ ${provider.id}: export failed", e)
+                            Log.e(TAG, "    ✗ ${provider.id}: export FAILED", e)
                             // Continue — one provider failing shouldn't abort the whole backup
                         }
+                    } else {
+                        Log.d(TAG, "  ⊘ ${provider.id}: not selected, skipping")
                     }
                 }
+
+                Log.i(TAG, "  Total entries collected: ${entries.size}")
+                Log.i(TAG, "  Total items: $totalItems")
 
                 // Download cover images if selected
                 val covers = mutableMapOf<Int, ByteArray>()
                 val coverEntry = entries.firstOrNull { it is BackupEntry.CoverImages } as? BackupEntry.CoverImages
                 if (coverEntry != null && coverEntry.covers.isNotEmpty()) {
-                    Log.i(TAG, "Downloading ${coverEntry.covers.size} cover images...")
+                    Log.i(TAG, "  Downloading ${coverEntry.covers.size} cover images...")
                     val urlMap = coverEntry.covers.mapNotNull { (idStr, url) ->
                         idStr.toIntOrNull()?.let { it to url }
                     }.toMap()
                     covers.putAll(coverDownloader.downloadAll(urlMap))
+                    Log.i(TAG, "  Covers downloaded: ${covers.size}/${urlMap.size}")
                 }
 
                 // Build + write the container
@@ -94,9 +106,10 @@ class BackupManager(
                     deviceName = android.os.Build.MODEL,
                     entries = entries,
                 )
+                Log.i(TAG, "  Writing container with ${container.entries.size} entries...")
                 anikutaFormat.write(container, covers, output)
 
-                Log.i(TAG, "Backup created: ${entries.size} entries, $totalItems items, ${covers.size} covers")
+                Log.i(TAG, "═══ Backup created: ${entries.size} entries, $totalItems items, ${covers.size} covers ═══")
                 BackupResult.Success(CreateSummary(
                     filePath = "", // set by the caller (BackupStorage knows the URI)
                     sizeBytes = 0, // set by the caller
@@ -124,8 +137,12 @@ class BackupManager(
     suspend fun readSummary(input: InputStream): BackupResult<RestoreSummary> = withContext(Dispatchers.IO) {
         try {
             val bytes = input.readBytes()
+            Log.i(TAG, "═══ Reading backup summary ═══")
+            Log.i(TAG, "  File size: ${bytes.size} bytes")
+
             val formatType = BackupFormatDetector.detect(bytes)
                 ?: throw BackupException.UnknownFormat("unrecognized magic bytes")
+            Log.i(TAG, "  Detected format: $formatType")
 
             val format = when (formatType) {
                 BackupFormatType.ANIKUTA -> anikutaFormat
@@ -141,13 +158,17 @@ class BackupManager(
                 )
             }
 
-            // Build a summary from the entries
+            Log.i(TAG, "  Container: schema=${container.schemaVersion}, ${container.entries.size} entries, createdAt=${container.createdAt}")
+
+            // Build a summary from the entries — show ALL categories present in the backup
             val categoryResults = container.entries.map { entry ->
                 val category = BackupCategory.fromId(entry.providerId)
+                val itemCount = countItems(entry)
+                Log.i(TAG, "    • ${entry.providerId}: $itemCount items ${if (category == null) "(UNKNOWN CATEGORY)" else ""}")
                 RestoreCategoryResult(
                     category = category ?: BackupCategory.PREFERENCES, // fallback
                     importedCount = 0, // not yet imported
-                    skippedCount = countItems(entry),
+                    skippedCount = itemCount,
                     errorCount = 0,
                     note = if (category == null) "Unknown provider: ${entry.providerId}" else null,
                 )
@@ -197,7 +218,10 @@ class BackupManager(
                 )
             }
 
-            Log.i(TAG, "Restoring backup: format=$formatType, ${container.entries.size} entries, created=${container.createdAt}")
+            Log.i(TAG, "═══ Restoring backup ═══")
+            Log.i(TAG, "  Format: $formatType")
+            Log.i(TAG, "  Container: ${container.entries.size} entries, created=${container.createdAt}")
+            Log.i(TAG, "  Registered providers: ${providers.size} — ids=${providers.map { it.id }}")
 
             // Build a provider lookup map
             val providerMap = providers.associateBy { it.id }
