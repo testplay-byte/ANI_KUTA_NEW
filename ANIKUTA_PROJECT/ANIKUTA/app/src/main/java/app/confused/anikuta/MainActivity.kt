@@ -366,6 +366,13 @@ private fun AnikutaApp() {
             showBackup -> {
                 app.confused.anikuta.feature.backup.BackupSettingsScreen(
                     onBack = { showBackup = false },
+                    onRestoreComplete = {
+                        // After restore completes + user clicks OK → navigate to Library.
+                        // Close all sub-screens and switch to the library tab.
+                        showBackup = false
+                        showSettings = false
+                        currentRoute = "library"
+                    },
                 )
             }
             // Settings sub-screen (from More)

@@ -1,6 +1,38 @@
 package app.confused.anikuta.core.backup
 
 /**
+ * Summary of a backup create operation — one entry per category that was backed up.
+ *
+ * Used by the UI to show the user a rich grid-based summary of what was saved.
+ *
+ * @param category the backup category that was processed.
+ * @param itemCount how many items were backed up in this category.
+ */
+data class CreateCategoryResult(
+    val category: BackupCategory,
+    val itemCount: Int,
+)
+
+/**
+ * Summary of a backup create operation.
+ *
+ * @param filePath the path/URI of the created backup file.
+ * @param sizeBytes the file size in bytes.
+ * @param categoryCount how many categories were included.
+ * @param itemCount approximate total number of data items backed up.
+ * @param createdAt when the backup was created (epoch ms).
+ * @param categories per-category breakdown (for the grid success popup).
+ */
+data class CreateSummary(
+    val filePath: String,
+    val sizeBytes: Long,
+    val categoryCount: Int,
+    val itemCount: Int,
+    val createdAt: Long,
+    val categories: List<CreateCategoryResult> = emptyList(),
+)
+
+/**
  * Summary of a restore operation — one entry per category that was processed.
  *
  * Used by the UI to show the user what was restored, what was skipped, and
@@ -40,21 +72,4 @@ data class RestoreSummary(
     val totalImported: Int = categoryResults.sumOf { it.importedCount },
     val totalSkipped: Int = categoryResults.sumOf { it.skippedCount },
     val totalErrors: Int = categoryResults.sumOf { it.errorCount },
-)
-
-/**
- * Summary of a backup create operation.
- *
- * @param filePath the path/URI of the created backup file.
- * @param sizeBytes the file size in bytes.
- * @param categoryCount how many categories were included.
- * @param itemCount approximate total number of data items backed up.
- * @param createdAt when the backup was created (epoch ms).
- */
-data class CreateSummary(
-    val filePath: String,
-    val sizeBytes: Long,
-    val categoryCount: Int,
-    val itemCount: Int,
-    val createdAt: Long,
 )

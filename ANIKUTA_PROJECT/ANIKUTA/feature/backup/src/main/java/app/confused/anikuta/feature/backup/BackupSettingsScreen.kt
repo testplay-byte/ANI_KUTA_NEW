@@ -4,7 +4,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,18 +16,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,13 +35,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,26 +50,32 @@ import app.confused.anikuta.core.backup.BackupCategory
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.feature.backup.components.AutoIncludeSheet
 import app.confused.anikuta.feature.backup.components.BackupCategoryList
 import app.confused.anikuta.feature.backup.components.BackupSectionLabel
+import app.confused.anikuta.feature.backup.components.BackupSuccessDialog
+import app.confused.anikuta.feature.backup.components.CreateBackupAnimationOverlay
 import app.confused.anikuta.feature.backup.components.FrequencySelector
-import app.confused.anikuta.feature.backup.components.RestoreConfirmSheet
+import app.confused.anikuta.feature.backup.components.MaxBackupsSelector
+import app.confused.anikuta.feature.backup.components.RestoreAnimationOverlay
+import app.confused.anikuta.feature.backup.components.RestoreCompleteDialog
+import app.confused.anikuta.feature.backup.components.RestoreSummaryDialog
 import org.koin.androidx.compose.koinViewModel
 
 /**
  * Backup & Restore settings screen.
  *
- * Four sections (per the implementation prompt):
- * 1. **Backup** — category checkboxes + "Create backup" button.
- * 2. **Restore** — "Restore from file" button (opens file picker).
- * 3. **Auto-backup** — enable switch + frequency selector + category checkboxes.
- * 4. **Storage** — current folder + "Select folder" button + usage display.
+ * Three sections:
+ * 1. **Backup & Restore** (combined) — Create backup + Restore from file buttons.
+ * 2. **Auto-backup** — toggle in header, frequency 2x2 grid, max-backups, "what to include" button.
+ * 3. **Storage** — folder selector + usage display.
  *
- * State overlays:
- * - Creating/Restoring: loading indicator.
- * - Created/Restored: success dialog with summary.
- * - Error: error dialog.
- * - RestorePending: [RestoreConfirmSheet] bottom sheet.
+ * UI features:
+ * - CollapsingHeader that shrinks on scroll (wired to LazyColumn scroll state).
+ * - Bottom sheet backdrop dim + blur when Create Backup / Auto-include sheets open.
+ * - Rich grid-based success/restore dialogs (not plain text).
+ * - Beautiful 5-second-minimum restore animation.
+ * - Post-restore: user clicks OK → redirected to Library page via [onRestoreComplete].
  *
  * Design: #B1F256 primary, RobotoFamily, surfaceVariant cards (alpha 0.4f),
  * CollapsingHeader, no drag handles on bottom sheets.
@@ -78,6 +83,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun BackupSettingsScreen(
     onBack: () -> Unit,
+    onRestoreComplete: () -> Unit = {},
     viewModel: BackupViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -85,10 +91,11 @@ fun BackupSettingsScreen(
     val autoCategories by viewModel.autoCategories.collectAsStateWithLifecycle()
     val autoEnabled by viewModel.autoEnabled.collectAsStateWithLifecycle()
     val autoFrequency by viewModel.autoFrequency.collectAsStateWithLifecycle()
+    val autoMaxKeep by viewModel.autoMaxKeep.collectAsStateWithLifecycle()
     val folderUri by viewModel.folderUri.collectAsStateWithLifecycle()
     val storageUsage by viewModel.storageUsage.collectAsStateWithLifecycle()
 
-    // SAF folder picker (for the Storage section)
+    // SAF folder picker
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri: Uri? ->
@@ -102,14 +109,32 @@ fun BackupSettingsScreen(
         if (uri != null) viewModel.onSelectBackupFile(uri)
     }
 
-    val scrollState = rememberScrollState()
-    val isCollapsed = false // BackupSettingsScreen is not scroll-collapsed for simplicity
+    // LazyColumn scroll state → drives the CollapsingHeader
+    val listState = rememberLazyListState()
+    val isCollapsed = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20
 
-    // State for the "Create backup" category-selection bottom sheet
+    // Bottom sheet states
     var showCreateBackupSheet by remember { mutableStateOf(false) }
+    var showAutoIncludeSheet by remember { mutableStateOf(false) }
+
+    // Whether any sheet is open (for backdrop dim + blur)
+    val anySheetOpen = showCreateBackupSheet || showAutoIncludeSheet
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        // ── Main content (dimmed + blurred when a sheet is open) ──
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (anySheetOpen) {
+                        Modifier
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
+                            .blur(8.dp)
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
             CollapsingHeader(
                 title = "Backup & Restore",
                 collapsed = isCollapsed,
@@ -117,19 +142,19 @@ fun BackupSettingsScreen(
             )
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
             ) {
-                // ── Section 1: Backup ──
-                // Just a button. Tapping it opens a bottom sheet where the user
-                // selects which data categories to include, then confirms.
+                // ── Section 1: Backup & Restore (combined) ──
                 item {
-                    BackupSectionLabel("Backup")
+                    BackupSectionLabel("Backup & Restore")
                     SectionCard(
                         icon = Icons.Filled.CloudUpload,
-                        title = "Create backup",
-                        subtitle = "Export your data to a .anikuta file",
+                        title = "Backup & Restore",
+                        subtitle = "Create a backup or restore from a file",
                     ) {
+                        // Create backup button
                         Button(
                             onClick = { showCreateBackupSheet = true },
                             modifier = Modifier.fillMaxWidth(),
@@ -141,24 +166,15 @@ fun BackupSettingsScreen(
                                 fontWeight = FontWeight.ExtraBold,
                             )
                         }
-                    }
-                }
-
-                // ── Section 2: Restore ──
-                item {
-                    BackupSectionLabel("Restore")
-                    SectionCard(
-                        icon = Icons.Filled.Restore,
-                        title = "Restore from file",
-                        subtitle = "Import data from an ANIKUTA or Aniyomi backup",
-                    ) {
-                        Button(
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Restore button
+                        androidx.compose.material3.OutlinedButton(
                             onClick = { filePicker.launch(arrayOf("*/*")) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                         ) {
                             Text(
-                                text = "Select backup file",
+                                text = "Restore from file",
                                 fontFamily = RobotoFamily,
                                 fontWeight = FontWeight.ExtraBold,
                             )
@@ -166,36 +182,22 @@ fun BackupSettingsScreen(
                     }
                 }
 
-                // ── Section 3: Auto-backup ──
+                // ── Section 2: Auto-backup ──
                 item {
                     BackupSectionLabel("Auto-backup")
                     SectionCard(
                         icon = Icons.Filled.Schedule,
                         title = "Automatic backups",
                         subtitle = "Periodically back up your data in the background",
-                    ) {
-                        // Enable switch
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Enable auto-backup",
-                                fontFamily = RobotoFamily,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                            )
+                        toggle = {
                             Switch(
                                 checked = autoEnabled,
                                 onCheckedChange = { viewModel.toggleAutoEnabled(it) },
                             )
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Frequency selector (only shown when enabled)
+                        },
+                    ) {
                         if (autoEnabled) {
+                            // Frequency 2x2 grid
                             Text(
                                 text = "FREQUENCY",
                                 fontFamily = RobotoFamily,
@@ -209,10 +211,12 @@ fun BackupSettingsScreen(
                                 selected = autoFrequency,
                                 onSelect = { viewModel.setAutoFrequency(it) },
                             )
+
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            // Max backups to keep
                             Text(
-                                text = "WHAT TO INCLUDE",
+                                text = "MAX BACKUPS TO KEEP",
                                 fontFamily = RobotoFamily,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -220,16 +224,36 @@ fun BackupSettingsScreen(
                                 letterSpacing = 0.06.sp,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            BackupCategoryList(
-                                categories = viewModel.categories,
-                                selected = autoCategories,
-                                onToggle = { viewModel.toggleAutoCategory(it) },
+                            MaxBackupsSelector(
+                                selected = autoMaxKeep,
+                                onSelect = { viewModel.setAutoMaxKeep(it) },
                             )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // What to include — behind a button
+                            Button(
+                                onClick = { showAutoIncludeSheet = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text(
+                                    text = "What to include (${autoCategories.size})",
+                                    fontFamily = RobotoFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                )
+                            }
                         }
                     }
                 }
 
-                // ── Section 4: Storage ──
+                // ── Section 3: Storage ──
                 item {
                     BackupSectionLabel("Storage")
                     SectionCard(
@@ -280,33 +304,42 @@ fun BackupSettingsScreen(
             )
         }
 
+        // ── Auto-include category-selection bottom sheet ──
+        if (showAutoIncludeSheet) {
+            AutoIncludeSheet(
+                categories = viewModel.categories,
+                selected = autoCategories,
+                onToggle = { viewModel.toggleAutoCategory(it) },
+                onDismiss = { showAutoIncludeSheet = false },
+            )
+        }
+
         // ── State overlays ──
         when (val s = state) {
-            is BackupUiState.Creating -> LoadingOverlay(s.message)
-            is BackupUiState.ReadingFile -> LoadingOverlay("Reading ${s.fileName}…")
-            is BackupUiState.Restoring -> LoadingOverlay(s.message)
-            is BackupUiState.Created -> SuccessDialog(
-                title = "Backup created",
-                message = "Saved ${s.summary.itemCount} items across ${s.summary.categoryCount} categories.\n\nFile: ${s.summary.filePath}",
+            is BackupUiState.Creating -> CreateBackupAnimationOverlay(s.message)
+            is BackupUiState.ReadingFile -> RestoreAnimationOverlay("Reading ${s.fileName}…")
+            is BackupUiState.Restoring -> RestoreAnimationOverlay(s.message)
+            is BackupUiState.Created -> BackupSuccessDialog(
+                summary = s.summary,
                 onDismiss = { viewModel.dismissState() },
             )
-            is BackupUiState.Restored -> SuccessDialog(
-                title = "Restore complete",
-                message = buildRestoreMessage(s.summary),
-                onDismiss = { viewModel.dismissState() },
+            is BackupUiState.Restored -> RestoreCompleteDialog(
+                summary = s.summary,
+                onDismiss = {
+                    viewModel.dismissState()
+                    onRestoreComplete()
+                },
             )
             is BackupUiState.Error -> ErrorDialog(
                 message = s.message,
                 onDismiss = { viewModel.dismissState() },
             )
-            is BackupUiState.RestorePending -> {
-                RestoreConfirmSheet(
-                    summary = s.summary,
-                    fileUri = s.fileUri,
-                    onConfirm = { uri -> viewModel.confirmRestore(uri) },
-                    onCancel = { viewModel.dismissState() },
-                )
-            }
+            is BackupUiState.RestorePending -> RestoreSummaryDialog(
+                summary = s.summary,
+                fileUri = s.fileUri,
+                onConfirm = { uri -> viewModel.confirmRestore(uri) },
+                onCancel = { viewModel.dismissState() },
+            )
             BackupUiState.Idle -> { /* no overlay */ }
         }
     }
@@ -317,9 +350,10 @@ private fun SectionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
+    toggle: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    androidx.compose.material3.Surface(
+    Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
@@ -335,7 +369,7 @@ private fun SectionCard(
                     modifier = Modifier.size(24.dp),
                 )
                 Spacer(modifier = Modifier.size(12.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
                         fontFamily = RobotoFamily,
@@ -350,50 +384,14 @@ private fun SectionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (toggle != null) {
+                    toggle()
+                }
             }
             Spacer(modifier = Modifier.height(16.dp))
             content()
         }
     }
-}
-
-@Composable
-private fun LoadingOverlay(message: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = message,
-                fontFamily = RobotoFamily,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
-}
-
-@Composable
-private fun SuccessDialog(title: String, message: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("OK", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
-            }
-        },
-        title = {
-            Text(title, fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
-        },
-        text = {
-            Text(message, fontFamily = RobotoFamily, fontSize = 14.sp)
-        },
-    )
 }
 
 @Composable
@@ -414,28 +412,8 @@ private fun ErrorDialog(message: String, onDismiss: () -> Unit) {
     )
 }
 
-private fun buildRestoreMessage(summary: app.confused.anikuta.core.backup.RestoreSummary): String {
-    return buildString {
-        appendLine("Format: ${summary.formatType.displayName}")
-        appendLine("Imported: ${summary.totalImported} items")
-        if (summary.totalSkipped > 0) appendLine("Skipped: ${summary.totalSkipped}")
-        if (summary.totalErrors > 0) appendLine("Errors: ${summary.totalErrors}")
-        appendLine()
-        summary.categoryResults.forEach { result ->
-            val status = when {
-                result.importedCount > 0 -> "${result.importedCount} imported"
-                result.note != null -> result.note
-                else -> "no data"
-            }
-            appendLine("• ${result.category.displayName}: $status")
-        }
-    }
-}
-
 /**
  * Bottom sheet for selecting which data categories to include in a manual backup.
- *
- * Shows the full category list with checkboxes + a "Create backup" confirm button.
  * Uses AnikutaBottomSheet (dragHandle = null per design principle #2).
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

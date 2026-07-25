@@ -62,6 +62,7 @@ class BackupManager(
                 Log.i(TAG, "  Registered providers: ${providers.size} — ids=${providers.map { it.id }}")
 
                 val entries = mutableListOf<BackupEntry>()
+                val categoryResults = mutableListOf<CreateCategoryResult>()
                 var totalItems = 0
 
                 // Collect entries from selected providers
@@ -73,6 +74,10 @@ class BackupManager(
                             val itemCount = countItems(entry)
                             entries.add(entry)
                             totalItems += itemCount
+                            val category = BackupCategory.fromId(provider.id)
+                            if (category != null) {
+                                categoryResults.add(CreateCategoryResult(category, itemCount))
+                            }
                             Log.i(TAG, "    ✓ ${provider.id}: $itemCount items")
                         } catch (e: Exception) {
                             Log.e(TAG, "    ✗ ${provider.id}: export FAILED", e)
@@ -116,6 +121,7 @@ class BackupManager(
                     categoryCount = entries.size,
                     itemCount = totalItems,
                     createdAt = container.createdAt,
+                    categories = categoryResults,
                 ))
             } catch (e: BackupException) {
                 Log.e(TAG, "Backup creation failed: ${e.message}", e)

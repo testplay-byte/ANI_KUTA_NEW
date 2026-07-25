@@ -58,6 +58,13 @@ class AutoBackupWorker(
                     is BackupResult.Success -> {
                         preferences.lastAutoBackup.set(System.currentTimeMillis())
                         Log.i(TAG, "AutoBackupWorker: success — ${result.data.itemCount} items")
+
+                        // Enforce the retention limit — delete old auto-backups beyond maxKeep
+                        val maxKeep = preferences.autoMaxKeep.get()
+                        val deleted = storage.cleanupOldAutoBackups(maxKeep)
+                        if (deleted > 0) {
+                            Log.i(TAG, "AutoBackupWorker: cleaned up $deleted old auto-backup(s), keeping $maxKeep")
+                        }
                     }
                     is BackupResult.Error -> {
                         Log.e(TAG, "AutoBackupWorker: failed — ${result.message}")

@@ -199,6 +199,52 @@ class BackupStorage(
         val prefix = if (isAuto) "auto" else "backup"
         return "${prefix}_$now.anikuta"
     }
+
+    /**
+     * Deletes old auto-backup files, keeping only the [maxToKeep] most recent.
+     *
+     * Called by [AutoBackupWorker] after each successful backup to enforce the
+     * user-configured retention limit. Files are sorted by last-modified
+     * descending; the oldest beyond [maxToKeep] are deleted.
+     *
+     * @param maxToKeep how many auto-backup files to keep (1-4).
+     * @return the number of files deleted.
+     */
+    fun cleanupOldAutoBackups(maxToKeep: Int): Int {
+        if (maxToKeep <= 0) return 0
+        try {
+            val autoDir = getOrCreateAutoBackupDir() ?: return 0
+            val autoFiles = autoDir.listFiles()
+                .filter { it.isFile && it.name?.endsWith(".anikuta") == true }
+                .sortedByDescending { it.lastModified() }
+
+            if (autoFiles.size <= maxToKeep) {
+                Log.d(TAG, "cleanupOldAutoBackups: ${autoFiles.size} files ≤ $maxToKeep, nothing to delete")
+                return 0
+            }
+
+            val toDelete = autoFiles.drop(maxToKeep)
+            var deleted = 0
+            toDelete.forEach { doc ->
+                try {
+                    val name = doc.name ?: "unknown"
+                    if (doc.delete()) {
+                        deleted++
+                        Log.i(TAG, "cleanupOldAutoBackups: deleted old auto-backup: $name")
+                    } else {
+                        Log.w(TAG, "cleanupOldAutoBackups: failed to delete: $name")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "cleanupOldAutoBackups: error deleting file", e)
+                }
+            }
+            Log.i(TAG, "cleanupOldAutoBackups: kept ${autoFiles.size - deleted}, deleted $deleted")
+            return deleted
+        } catch (e: Exception) {
+            Log.e(TAG, "cleanupOldAutoBackups: failed", e)
+            return 0
+        }
+    }
 }
 
 /** Metadata about a backup file on disk. */

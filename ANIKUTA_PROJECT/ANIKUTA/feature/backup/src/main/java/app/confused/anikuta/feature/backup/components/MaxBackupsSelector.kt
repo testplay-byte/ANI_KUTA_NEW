@@ -2,7 +2,6 @@ package app.confused.anikuta.feature.backup.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,59 +15,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.core.backup.AutoBackupFrequency
+import app.confused.anikuta.core.backup.BackupPreferences
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
- * A 2x2 grid frequency selector for auto-backup.
+ * A 4-cell grid selector for the max auto-backups to keep (1-4).
  *
- * Layout:
- * ```
- * ┌──────────────┬──────────────┐
- * │ Every 6 hrs  │ Every 12 hrs │
- * ├──────────────┼──────────────┤
- * │ Every 24 hrs │   Weekly     │
- * └──────────────┴──────────────┘
- * ```
+ * Each cell shows a number (1, 2, 3, 4). The selected cell is filled with
+ * primary color; inactive are surfaceVariant.
  *
- * Active cell is filled with primary color; inactive are surfaceVariant.
- * Matches the design language (principle #8 — multi-way toggle).
- *
- * @param selected the currently selected frequency.
- * @param onSelect called when a frequency is tapped.
+ * @param selected the currently selected max-keep value (1-4).
+ * @param onSelect called when a number is tapped.
  */
 @Composable
-fun FrequencySelector(
-    selected: AutoBackupFrequency,
-    onSelect: (AutoBackupFrequency) -> Unit,
+fun MaxBackupsSelector(
+    selected: Int,
+    onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val frequencies = AutoBackupFrequency.entries
-    // Row 1: 6h + 12h, Row 2: 24h + Weekly
-    val row1 = frequencies.take(2)
-    val row2 = frequencies.drop(2)
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        FrequencyRow(row1, selected, onSelect)
-        FrequencyRow(row2, selected, onSelect)
-    }
-}
-
-@Composable
-private fun FrequencyRow(
-    frequencies: List<AutoBackupFrequency>,
-    selected: AutoBackupFrequency,
-    onSelect: (AutoBackupFrequency) -> Unit,
-) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        frequencies.forEach { freq ->
-            val isSelected = freq == selected
+        for (n in BackupPreferences.MAX_KEEP_MIN..BackupPreferences.MAX_KEEP_MAX) {
+            val isSelected = n == selected
             Surface(
                 color = if (isSelected) {
                     MaterialTheme.colorScheme.primary
@@ -78,12 +48,12 @@ private fun FrequencyRow(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { onSelect(freq) },
+                    .clickable { onSelect(n) },
             ) {
                 Text(
-                    text = freq.displayName,
+                    text = n.toString(),
                     fontFamily = RobotoFamily,
-                    fontSize = 13.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.onPrimary
@@ -91,7 +61,7 @@ private fun FrequencyRow(
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                     modifier = Modifier
-                        .padding(vertical = 16.dp, horizontal = 8.dp)
+                        .padding(vertical = 14.dp)
                         .align(Alignment.CenterHorizontally),
                 )
             }
