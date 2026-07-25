@@ -25,5 +25,5 @@ val downloadAppModule: Module = module {
     includes(downloadModule, downloadFeatureModule)
 
     single { ResolverService() }
-    single { DownloadOrchestrator(get(), get()) }
+    single { DownloadOrchestrator(get(), get(), get()) }
 }

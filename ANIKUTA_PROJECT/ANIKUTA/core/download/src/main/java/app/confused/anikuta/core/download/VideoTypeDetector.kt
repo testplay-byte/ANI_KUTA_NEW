@@ -80,15 +80,20 @@ object VideoTypeDetector {
         }
     }
 
-    /** True if this video type can be downloaded by the default (non-ffmpeg) downloader. */
-    fun isDownloadable(type: VideoType): Boolean = type == VideoType.DIRECT_VIDEO
+    /**
+     * True if this video type can be downloaded by the default downloader.
+     * DIRECT_VIDEO → [HttpDownloader]; HLS_STREAM → [HlsDownloader].
+     * DASH + HTML remain unsupported (DASH needs ffmpeg; HTML is a resolver bug).
+     */
+    fun isDownloadable(type: VideoType): Boolean =
+        type == VideoType.DIRECT_VIDEO || type == VideoType.HLS_STREAM
 
     /** A human-readable reason for unsupported types (for the error message). */
     fun unsupportedReason(type: VideoType): String? = when (type) {
-        VideoType.HLS_STREAM -> "HLS stream (.m3u8) — requires the 1DM download method (future). The default downloader cannot download HLS playlists."
         VideoType.DASH_STREAM -> "DASH stream (.mpd) — requires the 1DM download method (future)."
         VideoType.HTML_PAGE -> "The URL returned an HTML page, not a video. This is likely a resolver issue with this extension."
         VideoType.UNKNOWN -> "Unknown video format — cannot verify this is a playable video file."
         VideoType.DIRECT_VIDEO -> null
+        VideoType.HLS_STREAM -> null // now supported via HlsDownloader
     }
 }

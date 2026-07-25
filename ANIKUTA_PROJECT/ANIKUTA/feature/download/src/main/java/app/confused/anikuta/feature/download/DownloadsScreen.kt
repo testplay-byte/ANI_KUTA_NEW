@@ -55,12 +55,12 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun DownloadsScreen(
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: DownloadViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showSettings by remember { mutableStateOf(false) }
 
     val collapsed = lazyListState.firstVisibleItemIndex > 0 ||
         lazyListState.firstVisibleItemScrollOffset > 20
@@ -88,7 +88,7 @@ fun DownloadsScreen(
                     title = "Downloads",
                     collapsed = collapsed,
                     actions = {
-                        IconButton(onClick = { showSettings = true }) {
+                        IconButton(onClick = onOpenSettings) {
                             Icon(
                                 imageVector = Icons.Filled.Settings,
                                 contentDescription = "Download settings",
@@ -155,17 +155,6 @@ fun DownloadsScreen(
                 }
             }
         }
-    }
-
-    // Download settings bottom sheet (dragHandle = null — design principle #2).
-    if (showSettings) {
-        DownloadPreferencesSheet(
-            onDismiss = { showSettings = false },
-            onFolderPicked = { uri ->
-                viewModel.setDownloadFolder(uri)
-                showSettings = false
-            },
-        )
     }
 }
 

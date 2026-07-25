@@ -72,6 +72,18 @@ fun EpisodeDownloadControl(
                 }
             }
 
+            EpisodeDownloadState.Resolving -> {
+                // Immediate spinner — the resolve phase (1-3s) before the task
+                // is enqueued. Cancelable.
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.size(4.dp))
+                CancelButton(onCancel)
+            }
+
             EpisodeDownloadState.Queued -> {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),

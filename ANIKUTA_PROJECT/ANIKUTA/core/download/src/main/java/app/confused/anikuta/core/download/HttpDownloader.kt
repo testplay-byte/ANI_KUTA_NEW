@@ -50,6 +50,7 @@ class HttpDownloader(
     private val client: OkHttpClient,
     private val storage: DownloadStorageProvider,
     private val tempCache: TempDownloadCache,
+    private val hlsDownloader: HlsDownloader = HlsDownloader(client),
 ) {
 
     /**
@@ -135,7 +136,8 @@ class HttpDownloader(
     }
 
     /**
-     * Streams the video to the internal cache file, reporting progress.
+     * Downloads the video to the internal cache file, reporting progress.
+     * Routes to [HlsDownloader] for HLS streams; direct-stream for video files.
      * Returns the total bytes downloaded.
      */
     private suspend fun downloadVideoToCache(
@@ -145,9 +147,17 @@ class HttpDownloader(
         taskId: Long,
         onProgress: (Long, Long) -> Unit,
     ): Long {
+        // Pre-flight: if the URL clearly indicates HLS, route directly to HlsDownloader.
+        val preType = VideoTypeDetector.detectFromUrl(url)
+        if (preType == VideoTypeDetector.VideoType.HLS_STREAM) {
+            DownloadLogger.i("HLS detected (URL) — delegating to HlsDownloader")
+            return hlsDownloader.download(url, headers, tempFile) { downloaded, total ->
+                onProgress(downloaded, total)
+            }
+        }
+
         val request = Request.Builder().url(url).apply {
             if (!headers.isNullOrBlank()) {
-                // Headers stored as "Key: Value\nKey2: Value2" (matches MPV format).
                 headers.split('\n').forEach { line ->
                     val sep = line.indexOf(':')
                     if (sep > 0) {
@@ -163,10 +173,6 @@ class HttpDownloader(
                     throw DownloadException("HTTP ${response.code} for video URL")
                 }
 
-                // ── Video-type detection ──
-                // Reject HLS/DASH/HTML before we waste bandwidth downloading
-                // a corrupt/playlist file. This is the fix for the "green screen"
-                // corrupt-download issue.
                 val videoType = VideoTypeDetector.detect(url, response)
                 if (!VideoTypeDetector.isDownloadable(videoType)) {
                     val reason = VideoTypeDetector.unsupportedReason(videoType)
@@ -175,6 +181,17 @@ class HttpDownloader(
                     throw DownloadException(reason)
                 }
 
+                // ── HLS detected via Content-Type (URL didn't indicate it) ──
+                // Close this response, delegate to HlsDownloader (which fetches
+                // the playlist fresh + downloads segments).
+                if (videoType == VideoTypeDetector.VideoType.HLS_STREAM) {
+                    DownloadLogger.i("HLS detected (Content-Type) — delegating to HlsDownloader")
+                    return@use hlsDownloader.download(url, headers, tempFile) { downloaded, total ->
+                        onProgress(downloaded, total)
+                    }
+                }
+
+                // ── Direct video stream ──
                 val total = response.body?.contentLength() ?: -1L
                 DownloadLogger.i("Downloading (type=$videoType, contentLength=$total) → ${tempFile.name}")
 
@@ -183,7 +200,7 @@ class HttpDownloader(
                         val buffer = ByteArray(BUFFER_SIZE)
                         var downloaded = 0L
                         while (true) {
-                            coroutineContext.ensureActive() // cooperative cancel/pause
+                            coroutineContext.ensureActive()
                             val read = input.read(buffer)
                             if (read == -1) break
                             os.write(buffer, 0, read)
@@ -288,6 +305,8 @@ class HttpDownloader(
         val dot = path.lastIndexOf('.')
         if (dot < 0 || dot == path.length - 1) return "mp4"
         val ext = path.substring(dot + 1).lowercase()
+        // HLS streams are concatenated into a .ts file (MPV plays .ts natively).
+        if (ext == "m3u8" || ext == "m3u") return "ts"
         return when (ext) {
             "mp4", "mkv", "webm", "avi", "mov", "m4v", "ts" -> ext
             else -> "mp4"

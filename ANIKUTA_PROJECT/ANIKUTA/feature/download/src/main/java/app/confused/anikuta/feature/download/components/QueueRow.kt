@@ -111,6 +111,22 @@ fun QueueRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Server / quality / audio line (if available)
+                val videoInfo = listOfNotNull(
+                    task.request.videoServer.takeIf { it.isNotBlank() },
+                    task.request.videoQuality.takeIf { it.isNotBlank() },
+                    task.request.videoAudio.takeIf { it.isNotBlank() },
+                )
+                if (videoInfo.isNotEmpty()) {
+                    Text(
+                        text = videoInfo.joinToString(" • "),
+                        fontFamily = RobotoFamily,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(6.dp))
                 when (task.status) {
                     DownloadStatus.DOWNLOADING -> {

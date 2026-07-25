@@ -21,6 +21,13 @@ sealed interface EpisodeDownloadState {
     /** No download exists for this episode. Shows the download button. */
     data object NotDownloaded : EpisodeDownloadState
 
+    /**
+     * Resolving video sources (the phase between tapping download + the task
+     * being enqueued). Shows an immediate spinner so the user knows the tap
+     * registered — the resolve takes 1-3s.
+     */
+    data object Resolving : EpisodeDownloadState
+
     /** In the queue, waiting for a download slot. Shows a spinner + cancel. */
     data object Queued : EpisodeDownloadState
 

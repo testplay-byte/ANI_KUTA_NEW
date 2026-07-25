@@ -37,4 +37,10 @@ data class DownloadRequest(
     val subtitleTracks: List<DownloadTrack> = emptyList(),
     val audioTracks: List<DownloadTrack> = emptyList(),
     val sourceId: Long = 0L,
+    /** The server name (for UI display on the downloads page). */
+    val videoServer: String = "",
+    /** The quality label (e.g. "1080p") — for UI display. */
+    val videoQuality: String = "",
+    /** The audio version label (e.g. "SUB") — for UI display. */
+    val videoAudio: String = "",
 )
