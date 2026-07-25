@@ -30,6 +30,7 @@ dependencies {
     implementation(projects.core.player)            // WatchProgressStore
     implementation(projects.core.episodeMetadata)   // EpisodeMetadataCache
     implementation(projects.core.tracker)           // TrackerBackupProvider iface + TrackRepository
+    implementation(projects.core.anilist)           // AniListApi for Aniyomi translation
 
     // ── Data modules (concrete stores not behind :core interfaces) ──
     // SourceLinkStore + ExtensionLinkStore are concrete classes in :data:extension.

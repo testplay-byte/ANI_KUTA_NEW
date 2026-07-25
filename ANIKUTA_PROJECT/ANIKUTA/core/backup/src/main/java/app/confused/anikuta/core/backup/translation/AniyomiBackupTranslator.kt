@@ -137,12 +137,11 @@ class AniyomiBackupTranslator(
                 resolution = resolution,
             )
 
-            Log.i(TAG, "  [${index + 1}/${anime.size}] '${ani.title}' → ${
-                when (resolution) {
-                    is AnilistResolution.Resolved → "✓ AniList ${resolution.anilistId} (${resolution.method})"
-                    is AnilistResolution.Failed -> "✗ ${resolution.reason}"
-                }
-            }")
+            val statusText = when (resolution) {
+                is AnilistResolution.Resolved -> "✓ AniList ${resolution.anilistId} (${resolution.method})"
+                is AnilistResolution.Failed -> "✗ ${resolution.reason}"
+            }
+            Log.i(TAG, "  [${index + 1}/${anime.size}] '${ani.title}' → $statusText")
         }
 
         // ── Phase 2: Build BackupContainer ──
