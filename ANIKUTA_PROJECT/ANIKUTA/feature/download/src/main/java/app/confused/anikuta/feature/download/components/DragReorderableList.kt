@@ -1,6 +1,6 @@
 package app.confused.anikuta.feature.download.components
 
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,23 +38,31 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
  * A drag-and-drop reorderable list. Each item has a drag handle (≡) on the
- * left; long-press the handle to start dragging. When the dragged item
- * crosses another item's vertical midpoint, they swap. On release, [onReorder]
- * is called with the new order.
+ * **right** (per the owner's request). **Immediate drag** — no long-press
+ * needed; touching the handle + dragging starts reordering right away. The
+ * handle area is 48dp wide (large touch target).
+ *
+ * When the dragged item crosses another item's vertical midpoint, they swap.
+ * On release, [onReorder] is called with the new order.
+ *
+ * **Scroll coexistence:** the drag handle is the ONLY area that captures drag
+ * gestures. The rest of the row passes through to the parent scroll. This
+ * means the user can scroll the list by dragging the label area, and reorder
+ * by dragging the handle.
  *
  * **Usage:** for short lists (< 20 items) like quality/audio/server
  * preference lists. Uses a plain `Column` (not LazyColumn) because these
- * lists are short and drag-and-drop with LazyColumn requires complex
- * item-key tracking.
+ * lists are short.
  *
  * **Design:** surfaceVariant 0.4f cards, RoundedCornerShape(12dp), the
- * dragged item gets an elevation shadow + slight scale. RobotoFamily.
- * The drag handle is tinted `onSurfaceVariant` (subtle); it becomes `primary`
- * (lime green) while dragging for visual feedback.
+ * dragged item gets an elevation shadow + primaryContainer background. The
+ * handle is tinted `onSurfaceVariant` (subtle); it becomes `primary`
+ * (lime green) while dragging for visual feedback. Handle is 48dp wide +
+ * full row height (44dp) for easy grabbing.
  *
  * @param items The list of strings to display + reorder.
  * @param onReorder Called with the new list order when the user finishes
- *   dragging an item.
+ *   dragging an item (or during, on each swap — the caller persists it).
  */
 @Composable
 fun DragReorderableList(
@@ -63,12 +71,12 @@ fun DragReorderableList(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
-    val itemHeightDp = 44.dp
+    val itemHeightDp = 48.dp
     val itemHeightPx = with(density) { itemHeightDp.toPx() }
 
     // Drag state
-    var draggedIndex by remember { mutableIntStateOf(-1) } // which item is being dragged
-    var dragOffset by remember { mutableFloatStateOf(0f) } // pixel offset from the dragged item's top
+    var draggedIndex by remember { mutableIntStateOf(-1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -76,7 +84,6 @@ fun DragReorderableList(
     ) {
         items.forEachIndexed { index, item ->
             val isDragged = index == draggedIndex
-            // Calculate the Y offset for the dragged item.
             val graphicsLayerOffset = if (isDragged) dragOffset else 0f
 
             Surface(
@@ -99,21 +106,43 @@ fun DragReorderableList(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Drag handle — long-press to start dragging.
+                    // Priority number
+                    Text(
+                        text = "${index + 1}.",
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width(24.dp),
+                    )
+
+                    // Item label
+                    Text(
+                        text = item,
+                        fontFamily = RobotoFamily,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+
+                    // Drag handle — on the RIGHT (per owner request). 48dp wide
+                    // for a large, easy-to-grab touch target. Immediate drag
+                    // (detectDragGestures, NOT detectDragGesturesAfterLongPress).
+                    // This area captures the drag; the rest of the row passes
+                    // through to the parent scroll.
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .width(48.dp)
+                            .height(itemHeightDp)
                             .pointerInput(items) {
-                                detectDragGesturesAfterLongPress(
+                                detectDragGestures(
                                     onDragStart = {
                                         draggedIndex = index
                                         dragOffset = 0f
                                     },
                                     onDragEnd = {
-                                        if (draggedIndex >= 0) {
-                                            draggedIndex = -1
-                                            dragOffset = 0f
-                                        }
+                                        draggedIndex = -1
+                                        dragOffset = 0f
                                     },
                                     onDragCancel = {
                                         draggedIndex = -1
@@ -123,10 +152,9 @@ fun DragReorderableList(
                                         change.consume()
                                         dragOffset += dragAmount.y
 
-                                        // Check if we should swap with the next/previous item.
                                         val currentIndex = draggedIndex
                                         if (currentIndex >= 0) {
-                                            // If dragged down past the next item's midpoint → swap down
+                                            // Swap down
                                             if (dragOffset > itemHeightPx && currentIndex < items.size - 1) {
                                                 val mutable = items.toMutableList()
                                                 val moved = mutable.removeAt(currentIndex)
@@ -135,7 +163,7 @@ fun DragReorderableList(
                                                 draggedIndex = currentIndex + 1
                                                 dragOffset -= itemHeightPx
                                             }
-                                            // If dragged up past the previous item's midpoint → swap up
+                                            // Swap up
                                             else if (dragOffset < -itemHeightPx && currentIndex > 0) {
                                                 val mutable = items.toMutableList()
                                                 val moved = mutable.removeAt(currentIndex)
@@ -155,30 +183,9 @@ fun DragReorderableList(
                             contentDescription = "Drag to reorder",
                             tint = if (isDragged) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
-
-                    Spacer(Modifier.width(4.dp))
-
-                    // Priority number
-                    Text(
-                        text = "${index + 1}.",
-                        fontFamily = RobotoFamily,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(24.dp),
-                    )
-
-                    // Item label
-                    Text(
-                        text = item,
-                        fontFamily = RobotoFamily,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
             }
         }

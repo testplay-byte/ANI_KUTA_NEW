@@ -364,6 +364,16 @@ private fun AnikutaApp() {
 
             when (val result = resolverService.resolve(source, episode)) {
                 is ResolverResult.Success -> {
+                    // ── Record discovered servers during WATCH resolution ──
+                    // (not just download) so the user's server preferences are
+                    // populated as they browse/watch, per the owner's request.
+                    try {
+                        val serverDiscovery: app.confused.anikuta.core.download.ServerDiscoveryStore =
+                            org.koin.core.context.GlobalContext.get().get()
+                        serverDiscovery.recordServers(source.id, result.servers.map { it.name })
+                    } catch (e: Exception) {
+                        Log.w("AnikutaDownload", "Failed to record servers during watch", e)
+                    }
                     resolverState = VideoResolverState.Show(epNum, result.servers)
                 }
                 is ResolverResult.NoSources -> {
@@ -508,6 +518,8 @@ private fun AnikutaApp() {
             detailAnimeId != null -> {
                 // Build the per-episode download-state map for this anime.
                 // Keyed by episode URL (stripped of the anilistId prefix) → state.
+                // Resolving episodes (tapped download, waiting for resolve) take
+                // priority — shows the immediate spinner on the row.
                 val currentDownloadStates = downloadTasksMap
                     .filterKeys { it.startsWith("${detailAnimeId}:") }
                     .mapKeys { (key, _) -> key.substringAfter(':') }
@@ -525,6 +537,16 @@ private fun AnikutaApp() {
                                 app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Downloaded
                             app.confused.anikuta.core.download.DownloadStatus.CANCELLED ->
                                 app.confused.anikuta.feature.animedetails.EpisodeDownloadState.NotDownloaded
+                        }
+                    }
+                    .toMutableMap()
+                    .apply {
+                        // Merge resolving episodes — these take priority (immediate spinner).
+                        resolvingEpisodes.forEach { (episodeUrl, isResolving) ->
+                            if (isResolving) {
+                                this[episodeUrl] =
+                                    app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Resolving
+                            }
                         }
                     }
                 AnimeDetailScreen(
@@ -622,14 +644,11 @@ private fun AnikutaApp() {
                     },
                 )
             }
-            // ── Agent 2: Downloads — full-screen page ──
-            showDownloads -> {
-                app.confused.anikuta.feature.download.DownloadsScreen(
-                    onBack = { showDownloads = false },
-                    onOpenSettings = { showDownloadSettings = true },
-                )
-            }
             // ── Agent 2: Download settings (full page, replaces bottom sheet) ──
+            // MUST come BEFORE showDownloads — when the user taps the gear,
+            // showDownloadSettings becomes true but showDownloads is still true.
+            // Without this ordering, the showDownloads branch wins and the
+            // settings screen never appears.
             showDownloadSettings -> {
                 // Build the extension-source list from trusted extensions.
                 val extensionSources = extensionManager.getTrustedExtensions().flatMap { ext ->
@@ -644,6 +663,13 @@ private fun AnikutaApp() {
                 app.confused.anikuta.feature.download.DownloadSettingsScreen(
                     onBack = { showDownloadSettings = false },
                     extensionSources = extensionSources,
+                )
+            }
+            // ── Agent 2: Downloads — full-screen page ──
+            showDownloads -> {
+                app.confused.anikuta.feature.download.DownloadsScreen(
+                    onBack = { showDownloads = false },
+                    onOpenSettings = { showDownloadSettings = true },
                 )
             }
             // ── Agent 2: Profile + Trackers — full-screen pages ──

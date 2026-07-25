@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        ANIKUTA network security config.
+
+        Extensions (Aniyomi-compatible) often return http:// video URLs
+        (e.g. localhost proxy URLs, or unencrypted CDNs). Without this config,
+        Android 9+ blocks cleartext traffic with:
+          "Clear text communication to localhost not permitted by network
+           security policy"
+
+        We allow cleartext for ALL domains because:
+        1. Extension video URLs are user-installed content — we can't predict
+           which domains they'll use.
+        2. Many anime CDNs don't support HTTPS.
+        3. The MPV player + OkHttp client both need to access these URLs.
+
+        This matches Aniyomi's approach (it also allows cleartext globally).
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
