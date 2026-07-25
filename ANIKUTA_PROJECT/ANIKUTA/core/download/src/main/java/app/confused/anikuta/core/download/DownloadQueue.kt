@@ -47,10 +47,18 @@ class DownloadQueue(
 ) {
 
     private val scope = scope
-    private val idCounter = AtomicLong(loadMaxId() + 1)
 
+    // ── State ──
+    // IMPORTANT: initialization order matters. [_tasks] MUST be initialized
+    // before [idCounter] (which calls [loadMaxId]). Kotlin runs property
+    // initializers top-to-bottom; if [idCounter] came first, [loadMaxId] would
+    // read a null [_tasks] and NPE (this was the startup crash). [loadMaxId]
+    // reads from the store directly so it has no dependency on [_tasks] —
+    // defensive against future reordering.
     private val _tasks = MutableStateFlow(store.purgeCancelled())
     val tasks: StateFlow<List<DownloadTask>> = _tasks.asStateFlow()
+
+    private val idCounter = AtomicLong(loadMaxId() + 1)
 
     private val jobs = mutableMapOf<Long, Job>()
     private var lastPersistAt = 0L
@@ -115,10 +123,10 @@ class DownloadQueue(
     fun cancel(taskId: Long) {
         val task = _tasks.value.firstOrNull { it.id == taskId } ?: return
         jobs.remove(taskId)?.cancel()
-        // Delete the partial file (if any) so a re-download starts clean.
-        if (task.status != DownloadStatus.COMPLETED) {
-            downloader.let { /* storage deletion is handled by manager on delete */ }
-        }
+        // Note: partial-file cleanup for a cancelled in-progress download is
+        // handled by the manager's deleteDownload (storage.deleteEpisode). A
+        // fresh re-download also overwrites the partial video file via
+        // openVideoOutputStream (which deletes any existing file first).
         // Remove from the list entirely (cancelled = not kept).
         updateTasks(_tasks.value.filterNot { it.id == taskId })
         persistNow()
@@ -268,7 +276,13 @@ class DownloadQueue(
     private fun currentConcurrentLimit(): Int =
         preferences.concurrentDownloads().get().coerceIn(1, 5)
 
-    private fun loadMaxId(): Long = _tasks.value.maxOfOrNull { it.id } ?: 0L
+    /**
+     * The highest task ID ever assigned (so new IDs don't collide with
+     * persisted ones after a restart). Reads from the store directly (NOT
+     * [_tasks]) so it's safe to call during construction before [_tasks] is
+     * initialized — defensive against init-order bugs.
+     */
+    private fun loadMaxId(): Long = store.getAll().maxOfOrNull { it.id } ?: 0L
 
     private fun now() = System.currentTimeMillis()
 
