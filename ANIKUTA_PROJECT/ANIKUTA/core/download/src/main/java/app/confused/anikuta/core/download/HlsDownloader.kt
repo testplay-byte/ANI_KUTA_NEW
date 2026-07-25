@@ -104,7 +104,7 @@ class HlsDownloader(
             (if (initSegmentUrl != null) " + init segment" else ""))
 
         // ── 5. Download + concatenate ──
-        val totalToDownload = segments.size + (if (initSegmentUrl != null) 1 else 0)
+        val totalToDownload: Long = (segments.size + (if (initSegmentUrl != null) 1 else 0)).toLong()
         var downloaded = 0L
         FileOutputStream(tempFile).use { out ->
             // Write the init segment first (for fMP4/.m4s streams).
