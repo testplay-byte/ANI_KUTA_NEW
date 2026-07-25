@@ -61,7 +61,24 @@ object VideoTypeDetector {
         if (contentType.startsWith("video/")) return VideoType.DIRECT_VIDEO
 
         // ── URL extension (fallback when Content-Type is missing/generic) ──
-        return detectFromUrl(url)
+        val urlType = detectFromUrl(url)
+        // If the URL clearly indicates HLS/DASH/HTML, honor that (catches
+        // servers that send a generic Content-Type for HLS playlists).
+        if (urlType == VideoType.HLS_STREAM || urlType == VideoType.DASH_STREAM ||
+            urlType == VideoType.HTML_PAGE) {
+            return urlType
+        }
+        // If the URL clearly indicates a direct video (mp4/mkv/etc.), honor it.
+        if (urlType == VideoType.DIRECT_VIDEO) return VideoType.DIRECT_VIDEO
+
+        // UNKNOWN — the Content-Type is generic (octet-stream, missing, etc.)
+        // and the URL has no clean extension. This is VERY common for video
+        // CDNs (e.g. `https://cdn.example.com/video/abc123?token=xyz`).
+        // We treat UNKNOWN as DIRECT_VIDEO (downloadable) — the file-size
+        // validation in HttpDownloader catches corrupt/error downloads.
+        // Rejecting UNKNOWN here was the cause of the "Unknown video format"
+        // error on valid video URLs.
+        return VideoType.DIRECT_VIDEO
     }
 
     /** Inspects only the URL (no response yet) — used for pre-flight checks. */

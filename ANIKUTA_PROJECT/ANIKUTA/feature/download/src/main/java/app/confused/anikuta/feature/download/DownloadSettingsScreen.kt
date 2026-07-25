@@ -102,6 +102,14 @@ fun DownloadSettingsScreen(
         .collectAsState(initial = preferences.audioFallback().get())
     val serverFallback by preferences.serverFallback().changes()
         .collectAsState(initial = preferences.serverFallback().get())
+    val downloadMethod by preferences.method().changes()
+        .collectAsState(initial = preferences.method().get())
+    val advThreads by preferences.advancedThreadCount().changes()
+        .collectAsState(initial = preferences.advancedThreadCount().get())
+    val advRetries by preferences.advancedMaxRetries().changes()
+        .collectAsState(initial = preferences.advancedMaxRetries().get())
+    val advMinSize by preferences.advancedMinSizeMb().changes()
+        .collectAsState(initial = preferences.advancedMinSizeMb().get())
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val folderLauncher = rememberLauncherForActivityResult(
@@ -134,6 +142,73 @@ fun DownloadSettingsScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // ── Download method (Normal / Advanced) ──
+            item {
+                SectionContainer("Download method") {
+                    // 2-way toggle: Normal vs Advanced
+                    val methodOptions = listOf(
+                        "Normal" to (downloadMethod == app.confused.anikuta.core.download.DownloadMethod.NORMAL),
+                        "Advanced" to (downloadMethod == app.confused.anikuta.core.download.DownloadMethod.ADVANCED),
+                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = if (downloadMethod == app.confused.anikuta.core.download.DownloadMethod.NORMAL) {
+                                "Normal: single-threaded download. Works for all video types including HLS. No resume."
+                            } else {
+                                "Advanced: multi-threaded download with resume + auto-retry. Faster for large files. Falls back to Normal for HLS + unsupported servers."
+                            },
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        SegmentedRowLocal(options = methodOptions) { idx ->
+                            preferences.method().set(
+                                if (idx == 0) app.confused.anikuta.core.download.DownloadMethod.NORMAL
+                                else app.confused.anikuta.core.download.DownloadMethod.ADVANCED
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Advanced settings (only visible when Advanced is selected) ──
+            if (downloadMethod == app.confused.anikuta.core.download.DownloadMethod.ADVANCED) {
+                item {
+                    SectionContainer("Advanced settings") {
+                        SettingsRow(
+                            title = "Parallel threads",
+                            subtitle = "$advThreads threads (more = faster, but uses more bandwidth)",
+                            onClick = {
+                                preferences.advancedThreadCount().set(
+                                    ((advThreads % 8) + 1).coerceIn(1, 8)
+                                )
+                            },
+                        )
+                        SettingsRow(
+                            title = "Max retries per chunk",
+                            subtitle = "$advRetries retries on failure (auto-retry before failing)",
+                            onClick = {
+                                preferences.advancedMaxRetries().set(
+                                    ((advRetries % 10) + 1).coerceIn(0, 10)
+                                )
+                            },
+                        )
+                        SettingsRow(
+                            title = "Min file size for multi-threading",
+                            subtitle = "$advMinSize MB (smaller files use a single thread)",
+                            onClick = {
+                                preferences.advancedMinSizeMb().set(
+                                    ((advMinSize % 20) + 1).coerceIn(1, 20)
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
             // ── General ──
             item {
                 SectionContainer("General") {

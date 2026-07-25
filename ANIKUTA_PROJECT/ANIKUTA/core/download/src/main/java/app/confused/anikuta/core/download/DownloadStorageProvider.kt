@@ -298,12 +298,47 @@ class DownloadStorageProvider(
 
     // ── Deletion ──
 
-    /** Deletes the Episode NNN folder (video + subtitles + metadata). */
+    /**
+     * Deletes the Episode NNN folder (video + subtitles + metadata).
+     * **Auto-cleanup:** after deleting the episode, checks if the anime folder
+     * is now empty (no remaining episode folders). If so, deletes the anime
+     * folder too — keeps the user's folder clean (no empty anime directories).
+     */
     fun deleteEpisode(anime: DownloadAnimeInfo, episode: DownloadEpisodeInfo): Boolean {
         val epDir = findEpisodeDir(anime, episode) ?: return false
         val ok = epDir.delete()
         DownloadLogger.i("Deleted episode ${episode.episodeNumber} for anime ${anime.anilistId}: $ok")
+
+        // Auto-delete the anime folder if it's now empty.
+        if (ok) {
+            cleanupEmptyAnimeFolder(anime)
+        }
         return ok
+    }
+
+    /**
+     * Checks if the anime folder has no remaining episode folders. If empty,
+     * deletes it. Called after [deleteEpisode] + after [deleteAnimeDownloads].
+     */
+    fun cleanupEmptyAnimeFolder(anime: DownloadAnimeInfo) {
+        try {
+            val root = rootTree() ?: return
+            val animeDir = root.findFile("ANIKUTA")
+                ?.findFile("downloads")
+                ?.findFile("anime")
+                ?.listFiles()
+                ?.firstOrNull { it.name == animeFolderName(anime) }
+                ?: return
+
+            // Check if there are any remaining episode folders (or any files).
+            val remaining = animeDir.listFiles().filterNotNull()
+            if (remaining.isEmpty()) {
+                animeDir.delete()
+                DownloadLogger.i("Auto-deleted empty anime folder: ${anime.title} [${anime.anilistId}]")
+            }
+        } catch (e: Exception) {
+            DownloadLogger.w("Failed to cleanup empty anime folder (non-fatal)", e)
+        }
     }
 
     /** Deletes the entire anime folder (all episodes). */

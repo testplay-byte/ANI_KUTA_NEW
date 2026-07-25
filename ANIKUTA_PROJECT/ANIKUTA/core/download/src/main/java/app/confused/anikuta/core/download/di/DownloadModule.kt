@@ -5,8 +5,11 @@ import app.confused.anikuta.core.download.DefaultDownloadManager
 import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadPreferences
 import app.confused.anikuta.core.download.DownloadStore
+import app.confused.anikuta.core.download.HttpDownloader
 import app.confused.anikuta.core.download.ServerDiscoveryStore
 import app.confused.anikuta.core.download.TempDownloadCache
+import app.confused.anikuta.core.download.advanced.AdvancedHttpDownloader
+import app.confused.anikuta.core.download.advanced.DownloadResumeManager
 import app.confused.anikuta.core.preferences.PreferenceStore
 import okhttp3.OkHttpClient
 import org.koin.core.module.Module
@@ -41,6 +44,10 @@ val downloadModule: Module = module {
     // TempDownloadCache — clean up stale dirs from a previous crash on creation.
     single { TempDownloadCache(get<Context>()).also { it.cleanupStale() } }
 
+    // Advanced downloader dependencies
+    single { DownloadResumeManager(get()) }
+    single { AdvancedHttpDownloader(get(named("download")), get(), get(), get()) }
+
     single(named("download")) {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -57,6 +64,8 @@ val downloadModule: Module = module {
             preferences = get(),
             store = get(),
             tempCache = get(),
+            advancedDownloader = get(),
+            resumeManager = get(),
         )
     }
 }

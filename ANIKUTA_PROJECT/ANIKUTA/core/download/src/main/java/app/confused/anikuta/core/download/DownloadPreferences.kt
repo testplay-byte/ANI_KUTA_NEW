@@ -44,9 +44,9 @@ class DownloadPreferences(
     val hasDownloadFolder: Boolean
         get() = downloadFolderUri().get().isNotBlank()
 
-    /** The download method (DEFAULT now; ONEDM future — interface-ready). */
+    /** The download method (NORMAL = single-threaded; ADVANCED = multi-threaded + resume). */
     fun method(): Preference<DownloadMethod> =
-        store.getEnum(KEY_METHOD, DownloadMethod.DEFAULT)
+        store.getEnum(KEY_METHOD, DownloadMethod.NORMAL)
 
     /** Only download on Wi-Fi (default true). */
     fun wifiOnly(): Preference<Boolean> =
@@ -137,6 +137,24 @@ class DownloadPreferences(
     fun serverFallback(): Preference<FallbackStrategy> =
         store.getEnum(KEY_SERVER_FALLBACK, FallbackStrategy.TRY_NEXT)
 
+    // ── Advanced download method settings ──
+
+    /** Number of parallel threads for the Advanced method (default 4; 1..8). */
+    fun advancedThreadCount(): Preference<Int> =
+        store.getInt(KEY_ADV_THREADS, 4)
+
+    /** Max retries per chunk on failure for the Advanced method (default 3; 0..10). */
+    fun advancedMaxRetries(): Preference<Int> =
+        store.getInt(KEY_ADV_RETRIES, 3)
+
+    /**
+     * Min file size (in MB) to use multi-threading. Files smaller than this
+     * use a single thread (overhead of parallel chunks isn't worth it for
+     * small files). Default: 5 MB.
+     */
+    fun advancedMinSizeMb(): Preference<Int> =
+        store.getInt(KEY_ADV_MIN_SIZE_MB, 5)
+
     companion object {
         private const val KEY_FOLDER_URI = "pref_dl_folder_uri"
         private const val KEY_METHOD = "pref_dl_method"
@@ -150,6 +168,9 @@ class DownloadPreferences(
         private const val KEY_QUALITY_FALLBACK = "pref_dl_quality_fallback"
         private const val KEY_AUDIO_FALLBACK = "pref_dl_audio_fallback"
         private const val KEY_SERVER_FALLBACK = "pref_dl_server_fallback"
+        private const val KEY_ADV_THREADS = "pref_dl_adv_threads"
+        private const val KEY_ADV_RETRIES = "pref_dl_adv_retries"
+        private const val KEY_ADV_MIN_SIZE_MB = "pref_dl_adv_min_size_mb"
 
         /** Default quality priority (highest first). */
         val DEFAULT_QUALITY_PREFS = listOf("1080p", "720p", "480p", "360p")
@@ -158,12 +179,12 @@ class DownloadPreferences(
     }
 }
 
-/** The download method (per DOWNLOADS-PLAN — two methods, user-selectable). */
+/** The download method (per the owner's spec — Normal vs Advanced). */
 enum class DownloadMethod {
-    /** Standard OkHttp/HLS download (the working method). */
-    DEFAULT,
-    /** Future: multi-threaded, resume-capable, 1DM-style. NOT implemented yet. */
-    ONEDM,
+    /** Normal: single-threaded OkHttp download. No resume. Works for HLS + direct video. */
+    NORMAL,
+    /** Advanced: multi-threaded Range-request download with resume + auto-retry. Direct video only. */
+    ADVANCED,
 }
 
 /**

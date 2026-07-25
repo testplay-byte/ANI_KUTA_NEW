@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,10 +18,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,34 +35,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import kotlin.math.roundToInt
 
 /**
- * A drag-and-drop reorderable list. Each item has a drag handle (≡) on the
- * **right** (per the owner's request). **Immediate drag** — no long-press
- * needed; touching the handle + dragging starts reordering right away. The
- * handle area is 48dp wide (large touch target).
+ * A smooth drag-and-drop reorderable list.
  *
- * When the dragged item crosses another item's vertical midpoint, they swap.
- * On release, [onReorder] is called with the new order.
+ * **How it works:**
+ * - Each item has a drag handle (≡) on the **right**. Touching the handle +
+ *   dragging starts reordering immediately (no long-press).
+ * - The dragged item follows the finger exactly (graphicsLayer translationY
+ *   tracks the accumulated drag offset).
+ * - The target index is computed via `round(dragOffset / itemHeight)` — this
+ *   allows multi-position moves in a single drag (drag fast → skip positions).
+ * - When the target index changes, the internal list reorders instantly +
+ *   the drag offset is adjusted so the item stays visually under the finger
+ *   (no jump). Other items animate to their new positions.
+ * - On release, [onReorder] is called with the final order.
  *
- * **Scroll coexistence:** the drag handle is the ONLY area that captures drag
- * gestures. The rest of the row passes through to the parent scroll. This
- * means the user can scroll the list by dragging the label area, and reorder
- * by dragging the handle.
+ * **Why an internal copy?** Calling [onReorder] during drag causes the parent
+ * to persist the new order → recomposition → `pointerInput` key change →
+ * gesture cancellation (laggy, choppy). By keeping an internal
+ * `mutableStateListOf` + only syncing to the parent on drag END, the gesture
+ * is never cancelled, and the list reorders smoothly in real-time.
  *
- * **Usage:** for short lists (< 20 items) like quality/audio/server
- * preference lists. Uses a plain `Column` (not LazyColumn) because these
- * lists are short.
- *
- * **Design:** surfaceVariant 0.4f cards, RoundedCornerShape(12dp), the
- * dragged item gets an elevation shadow + primaryContainer background. The
- * handle is tinted `onSurfaceVariant` (subtle); it becomes `primary`
- * (lime green) while dragging for visual feedback. Handle is 48dp wide +
- * full row height (44dp) for easy grabbing.
+ * **Scroll coexistence:** only the handle area (48dp) captures drag gestures;
+ * the rest of the row passes through to the parent scroll.
  *
  * @param items The list of strings to display + reorder.
- * @param onReorder Called with the new list order when the user finishes
- *   dragging an item (or during, on each swap — the caller persists it).
+ * @param onReorder Called with the new list order when the user FINISHES
+ *   dragging (on drag end). Not called during the drag.
  */
 @Composable
 fun DragReorderableList(
@@ -74,6 +75,17 @@ fun DragReorderableList(
     val itemHeightDp = 48.dp
     val itemHeightPx = with(density) { itemHeightDp.toPx() }
 
+    // Internal copy — reordered during drag without calling onReorder.
+    // Synced from [items] when the external list changes (e.g. the parent
+    // adds a new item). Only [onReorder] is called on drag END.
+    val internalItems = remember { mutableStateListOf<String>() }
+    LaunchedEffect(items) {
+        if (internalItems.toList() != items) {
+            internalItems.clear()
+            internalItems.addAll(items)
+        }
+    }
+
     // Drag state
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
@@ -82,9 +94,9 @@ fun DragReorderableList(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        items.forEachIndexed { index, item ->
+        internalItems.forEachIndexed { index, item ->
             val isDragged = index == draggedIndex
-            val graphicsLayerOffset = if (isDragged) dragOffset else 0f
+            val translationY = if (isDragged) dragOffset else 0f
 
             Surface(
                 color = if (isDragged) {
@@ -96,7 +108,7 @@ fun DragReorderableList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(itemHeightDp)
-                    .graphicsLayer { translationY = graphicsLayerOffset }
+                    .graphicsLayer { translationY = translationY }
                     .then(
                         if (isDragged) Modifier.shadow(8.dp, RoundedCornerShape(12.dp))
                         else Modifier
@@ -125,26 +137,31 @@ fun DragReorderableList(
                         modifier = Modifier.weight(1f),
                     )
 
-                    // Drag handle — on the RIGHT (per owner request). 48dp wide
-                    // for a large, easy-to-grab touch target. Immediate drag
-                    // (detectDragGestures, NOT detectDragGesturesAfterLongPress).
-                    // This area captures the drag; the rest of the row passes
-                    // through to the parent scroll.
+                    // Drag handle — on the RIGHT. 48dp × 48dp touch target.
+                    // Uses pointerInput(Unit) — stable key so the gesture is
+                    // never cancelled by recomposition during drag.
                     Box(
                         modifier = Modifier
                             .width(48.dp)
                             .height(itemHeightDp)
-                            .pointerInput(items) {
+                            .pointerInput(Unit) {
                                 detectDragGestures(
                                     onDragStart = {
                                         draggedIndex = index
                                         dragOffset = 0f
                                     },
                                     onDragEnd = {
+                                        // Persist the final order to the parent.
+                                        if (internalItems.toList() != items) {
+                                            onReorder(internalItems.toList())
+                                        }
                                         draggedIndex = -1
                                         dragOffset = 0f
                                     },
                                     onDragCancel = {
+                                        // Revert to the original order.
+                                        internalItems.clear()
+                                        internalItems.addAll(items)
                                         draggedIndex = -1
                                         dragOffset = 0f
                                     },
@@ -152,26 +169,27 @@ fun DragReorderableList(
                                         change.consume()
                                         dragOffset += dragAmount.y
 
-                                        val currentIndex = draggedIndex
-                                        if (currentIndex >= 0) {
-                                            // Swap down
-                                            if (dragOffset > itemHeightPx && currentIndex < items.size - 1) {
-                                                val mutable = items.toMutableList()
-                                                val moved = mutable.removeAt(currentIndex)
-                                                mutable.add(currentIndex + 1, moved)
-                                                onReorder(mutable)
-                                                draggedIndex = currentIndex + 1
-                                                dragOffset -= itemHeightPx
-                                            }
-                                            // Swap up
-                                            else if (dragOffset < -itemHeightPx && currentIndex > 0) {
-                                                val mutable = items.toMutableList()
-                                                val moved = mutable.removeAt(currentIndex)
-                                                mutable.add(currentIndex - 1, moved)
-                                                onReorder(mutable)
-                                                draggedIndex = currentIndex - 1
-                                                dragOffset += itemHeightPx
-                                            }
+                                        // Compute the target index based on how far
+                                        // the item has been dragged. round() allows
+                                        // multi-position moves (drag fast → skip).
+                                        val shift = (dragOffset / itemHeightPx).roundToInt()
+                                        val targetIndex = (draggedIndex + shift)
+                                            .coerceIn(0, internalItems.size - 1)
+
+                                        if (targetIndex != draggedIndex && draggedIndex >= 0) {
+                                            // Reorder the internal list: move the dragged
+                                            // item from its current position to targetIndex.
+                                            val moved = internalItems.removeAt(draggedIndex)
+                                            internalItems.add(targetIndex, moved)
+
+                                            // Adjust dragOffset so the item stays visually
+                                            // under the finger after the reorder. If the item
+                                            // moved down by N positions, the Column rendered it
+                                            // N*itemHeight lower, so we subtract N*itemHeight
+                                            // from the offset to keep it visually in place.
+                                            val indexShift = targetIndex - draggedIndex
+                                            dragOffset -= indexShift * itemHeightPx
+                                            draggedIndex = targetIndex
                                         }
                                     },
                                 )

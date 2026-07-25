@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import app.confused.anikuta.core.download.advanced.AdvancedHttpDownloader
+import app.confused.anikuta.core.download.advanced.DownloadResumeManager
 
 /**
  * The DEFAULT-method download manager (standard OkHttp HTTP download — ADR-020).
@@ -46,12 +48,10 @@ class DefaultDownloadManager(
     private val preferences: DownloadPreferences,
     private val store: DownloadStore,
     private val tempCache: TempDownloadCache,
+    private val advancedDownloader: AdvancedHttpDownloader,
+    private val resumeManager: DownloadResumeManager,
     scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
-            // Last-resort safety net: if anything slips past the per-callback
-            // try/catch guards, log it here instead of crashing the app. The
-            // download engine is best-effort — a background coroutine failure
-            // must NEVER take down the foreground UI.
             DownloadLogger.e("Uncaught coroutine exception in download scope (suppressed)", e)
         }
     ),
@@ -59,7 +59,7 @@ class DefaultDownloadManager(
 
     private val appContext = context.applicationContext
     private val storage = DownloadStorageProvider(appContext, preferences)
-    private val downloader = HttpDownloader(okHttp, storage, tempCache)
+    private val downloader = HttpDownloader(okHttp, storage, tempCache, preferences, advancedDownloader)
     private val notifier = DownloadNotificationManager(appContext)
 
     private val queue = DownloadQueue(

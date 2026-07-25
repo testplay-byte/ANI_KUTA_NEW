@@ -8,6 +8,8 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
+import app.confused.anikuta.core.download.advanced.AdvancedHttpDownloader
+import app.confused.anikuta.core.download.advanced.DownloadResumeManager
 
 /**
  * The actual HTTP file downloader (the "DEFAULT" method — ADR-020).
@@ -50,6 +52,8 @@ class HttpDownloader(
     private val client: OkHttpClient,
     private val storage: DownloadStorageProvider,
     private val tempCache: TempDownloadCache,
+    private val preferences: DownloadPreferences,
+    private val advancedDownloader: AdvancedHttpDownloader,
     private val hlsDownloader: HlsDownloader = HlsDownloader(client),
 ) {
 
@@ -156,6 +160,42 @@ class HttpDownloader(
             }
         }
 
+        // ── Advanced method: route to AdvancedHttpDownloader ──
+        // The advanced downloader does its own HEAD probe + multi-threaded
+        // Range requests. If the server doesn't support Range, it falls back
+        // to single-threaded internally. HLS is handled above (URL-based check).
+        // For Content-Type-based HLS detection, the advanced downloader will
+        // fail on the HEAD probe if it's HLS (no Content-Length for playlists),
+        // and we catch that + retry with HlsDownloader.
+        if (preferences.method().get() == DownloadMethod.ADVANCED) {
+            DownloadLogger.i("Advanced method — delegating to AdvancedHttpDownloader")
+            return try {
+                advancedDownloader.download(taskId, url, headers, tempFile) { downloaded, total ->
+                    onProgress(downloaded, total)
+                }
+            } catch (e: DownloadException) {
+                // If the advanced downloader failed (e.g. server returned HLS,
+                // no Content-Length, etc.), fall back to the normal path.
+                DownloadLogger.w("Advanced download failed, falling back to normal: ${e.message}")
+                downloadNormal(url, headers, tempFile, taskId, onProgress)
+            }
+        }
+
+        // ── Normal method ──
+        return downloadNormal(url, headers, tempFile, taskId, onProgress)
+    }
+
+    /**
+     * The Normal method: single-threaded streaming with Content-Type detection.
+     * Also used as a fallback when the Advanced method fails.
+     */
+    private suspend fun downloadNormal(
+        url: String,
+        headers: String?,
+        tempFile: File,
+        taskId: Long,
+        onProgress: (Long, Long) -> Unit,
+    ): Long {
         val request = Request.Builder().url(url).apply {
             if (!headers.isNullOrBlank()) {
                 headers.split('\n').forEach { line ->
@@ -181,9 +221,7 @@ class HttpDownloader(
                     throw DownloadException(reason)
                 }
 
-                // ── HLS detected via Content-Type (URL didn't indicate it) ──
-                // Close this response, delegate to HlsDownloader (which fetches
-                // the playlist fresh + downloads segments).
+                // ── HLS detected via Content-Type ──
                 if (videoType == VideoTypeDetector.VideoType.HLS_STREAM) {
                     DownloadLogger.i("HLS detected (Content-Type) — delegating to HlsDownloader")
                     return@use hlsDownloader.download(url, headers, tempFile) { downloaded, total ->
@@ -227,8 +265,12 @@ class HttpDownloader(
      *  - Empty/missing files
      *  - Files smaller than [MIN_VALID_VIDEO_BYTES] (corrupt/playlist/error page)
      *
-     * The video-type check already happened at the HTTP-response level; this is
-     * a second line of defense for the actual bytes on disk.
+     * **Note:** The video-type check (HLS/DASH/HTML rejection) already happened
+     * at the HTTP-response level in [downloadVideoToCache]. We do NOT re-check
+     * the URL-based type here because many video URLs have no clean extension
+     * (e.g. `https://cdn.example.com/video/abc123?token=xyz`) — the URL-based
+     * check would return UNKNOWN and reject valid downloads. The file-size
+     * check is sufficient as a second line of defense.
      */
     private fun validateDownloadedFile(url: String, tempFile: File, downloadedBytes: Long) {
         if (!tempFile.exists() || tempFile.length() == 0L) {
@@ -238,15 +280,8 @@ class HttpDownloader(
             DownloadLogger.e("Downloaded file too small: ${tempFile.length()} bytes (min=$MIN_VALID_VIDEO_BYTES)")
             throw DownloadException(
                 "Downloaded file is only ${tempFile.length()} bytes — too small to be a real video. " +
-                "The source may have returned an error page or a playlist instead of the video file."
+                "The source may have returned an error page or a redirect instead of the video file."
             )
-        }
-        // Double-check the URL-based type (catches cases where the Content-Type
-        // header was generic but the URL clearly indicates HLS/HTML).
-        val urlType = VideoTypeDetector.detectFromUrl(url)
-        if (!VideoTypeDetector.isDownloadable(urlType)) {
-            val reason = VideoTypeDetector.unsupportedReason(urlType) ?: "Unsupported video type"
-            throw DownloadException(reason)
         }
     }
 
