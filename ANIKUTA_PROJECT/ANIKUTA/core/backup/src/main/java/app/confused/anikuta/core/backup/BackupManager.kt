@@ -312,12 +312,30 @@ class BackupManager(
             // Build a provider lookup map
             val providerMap = providers.associateBy { it.id }
 
+            // Sort entries so Library/AnimeDetails run BEFORE Categories.
+            // This ensures anime are in the DB when CategoryBackupProvider tries to
+            // resolve their local _id for anime_category junction insertion.
+            val entryPriority = mapOf(
+                BackupCategory.ANIME_DETAILS.id to 0,
+                BackupCategory.LIBRARY.id to 1,
+                BackupCategory.EPISODES.id to 2,
+                BackupCategory.CATEGORIES.id to 3,
+                BackupCategory.WATCH_PROGRESS.id to 4,
+                BackupCategory.EPISODE_METADATA.id to 5,
+                BackupCategory.SOURCE_LINKS.id to 6,
+                BackupCategory.TRACKER.id to 7,
+                BackupCategory.PREFERENCES.id to 8,
+                BackupCategory.COVER_IMAGES.id to 9,
+            )
+            val sortedEntries = container.entries.sortedBy { entryPriority[it.providerId] ?: 99 }
+            Log.i(TAG, "  Entry execution order: ${sortedEntries.map { it.providerId }}")
+
             val categoryResults = mutableListOf<RestoreCategoryResult>()
             var totalImported = 0
             var totalSkipped = 0
             var totalErrors = 0
 
-            container.entries.forEach { entry ->
+            sortedEntries.forEach { entry ->
                 val category = BackupCategory.fromId(entry.providerId)
                 val provider = providerMap[entry.providerId]
 

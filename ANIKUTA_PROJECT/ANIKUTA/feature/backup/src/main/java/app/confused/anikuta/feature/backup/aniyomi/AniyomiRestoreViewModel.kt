@@ -281,6 +281,30 @@ class AniyomiRestoreViewModel(
     }
 
     /**
+     * Marks a previously-resolved anime as "wrong match" — converts it to Failed.
+     * The anime will then appear in the manual linking screen.
+     * @param resolved the resolution to mark as wrong.
+     */
+    fun markAsWrong(resolved: AnilistResolution.Resolved) {
+        val current = _state.value as? AniyomiRestoreState.Linking ?: return
+        Log.i(TAG, "Mark as wrong: AniList #${resolved.anilistId} (${resolved.anilistAnime?.title?.romaji})")
+
+        // Replace the resolved entry with a failed entry
+        val updatedResolutions = current.resolutions.map { res ->
+            if (res is AnilistResolution.Resolved && res.anilistId == resolved.anilistId) {
+                AnilistResolution.Failed(
+                    title = resolved.anilistAnime?.title?.romaji ?: resolved.anilistAnime?.title?.english ?: "Unknown",
+                    reason = "Marked as wrong match",
+                )
+            } else {
+                res
+            }
+        }
+
+        _state.value = current.copy(resolutions = updatedResolutions)
+    }
+
+    /**
      * Manually links a failed anime to an AniList anime.
      * Removes the anime from the failed list + updates the restore.
      * @param failed the failed resolution to link.

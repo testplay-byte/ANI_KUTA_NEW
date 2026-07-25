@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +70,7 @@ import app.confused.anikuta.core.backup.translation.TranslationStats
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Lime red color for text/icons. */
 private val LimeRed = Color(0xFFE5484D)
@@ -117,6 +120,7 @@ fun AniyomiRestoreFlow(
         is AniyomiRestoreState.Linking -> LinkingScreen(s,
             onNext = { viewModel.onNextFromLinking() },
             onCancel = { viewModel.cancel(); onCancel() },
+            onMarkWrong = { resolved -> viewModel.markAsWrong(resolved) },
         )
         is AniyomiRestoreState.ManualLinking -> ManualLinkingScreen(s,
             onNext = { viewModel.onSkipManualLinking() },
@@ -163,16 +167,20 @@ private fun FormatDetectionScreen(
                     fontFamily = RobotoFamily, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
                     color = LimeRed, textAlign = TextAlign.Center, lineHeight = 38.sp)
             } else if (state.isSupported) {
-                // ── Green phase ──
+                // ── Green phase — "Don't worry" (big) + spacing + "You can" (smaller) ──
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.size(100.dp)) {
                     Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), shape = CircleShape, modifier = Modifier.size(100.dp)) {}
                     Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(64.dp).scale(iconScale))
                 }
                 Spacer(Modifier.height(32.dp))
-                Text("Don't worry, you can\nrestore from this\nformat too.",
-                    fontFamily = RobotoFamily, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center, lineHeight = 38.sp)
+                Text("Don't worry",
+                    fontFamily = RobotoFamily, fontSize = 40.sp, fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(16.dp))
+                Text("You can restore from this format too.",
+                    fontFamily = RobotoFamily, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             } else {
                 Icon(Icons.Filled.Close, null, tint = LimeRed, modifier = Modifier.size(64.dp))
                 Spacer(Modifier.height(24.dp))
@@ -294,9 +302,17 @@ private fun SummaryStatCard(label: String, value: Int, highlight: Boolean, modif
 // ═══ Step 4: Linking — STAYS until Next. Shows BOTH names. ═══
 
 @Composable
-private fun LinkingScreen(state: AniyomiRestoreState.Linking, onNext: () -> Unit, onCancel: () -> Unit) {
+private fun LinkingScreen(
+    state: AniyomiRestoreState.Linking,
+    onNext: () -> Unit,
+    onCancel: () -> Unit,
+    onMarkWrong: (AnilistResolution.Resolved) -> Unit = {},
+) {
     val progress = state.progress
     val allDone = state.allDone
+
+    // State for the "Is this wrong?" confirmation dialog
+    var wrongTarget by remember { mutableStateOf<AnilistResolution.Resolved?>(null) }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(24.dp)) {
@@ -334,6 +350,9 @@ private fun LinkingScreen(state: AniyomiRestoreState.Linking, onNext: () -> Unit
                     Text("Anime successfully linked", fontFamily = RobotoFamily, fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("Tap a linked anime if the match is wrong.", fontFamily = RobotoFamily, fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
             }
 
@@ -343,7 +362,9 @@ private fun LinkingScreen(state: AniyomiRestoreState.Linking, onNext: () -> Unit
 
             val completed = state.resolutions.take(progress?.currentIndex ?: 0).reversed()
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(completed) { res -> LinkingRow(res) }
+                items(completed) { res ->
+                    LinkingRow(res, onMarkWrong = { resolved -> wrongTarget = resolved })
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -356,6 +377,40 @@ private fun LinkingScreen(state: AniyomiRestoreState.Linking, onNext: () -> Unit
                 }
             }
         }
+    }
+
+    // "Is this wrong?" confirmation dialog
+    if (wrongTarget != null) {
+        val resolved = wrongTarget!!
+        AlertDialog(
+            onDismissRequest = { wrongTarget = null },
+            title = { Text("Is this wrong?", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column {
+                    Text("Backup: ${resolved.anilistAnime?.title?.romaji ?: resolved.anilistAnime?.title?.english ?: "Unknown"}",
+                        fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Matched to: ${resolved.anilistAnime?.title?.romaji ?: resolved.anilistAnime?.title?.english ?: "Unknown"}",
+                        fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Mark this as 'no match'? You can manually link it later.",
+                        fontFamily = RobotoFamily, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button({
+                    onMarkWrong(resolved)
+                    wrongTarget = null
+                }, colors = ButtonDefaults.buttonColors(containerColor = LimeRed, contentColor = Color.White)) {
+                    Text("Yes, it's wrong", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+            dismissButton = {
+                TextButton({ wrongTarget = null }) {
+                    Text("No, it's correct", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                }
+            },
+        )
     }
 }
 
@@ -370,9 +425,10 @@ private fun StatItem(label: String, value: Int, color: Color) {
 /**
  * A linking row showing BOTH the backup name (left) and the AniList name (right)
  * with a clear visual separation (link icon in the middle).
+ * Tapping a linked row opens an "Is this wrong?" dialog to mark it as no match.
  */
 @Composable
-private fun LinkingRow(res: AnilistResolution) {
+private fun LinkingRow(res: AnilistResolution, onMarkWrong: ((AnilistResolution.Resolved) -> Unit)? = null) {
     val isFailed = res is AnilistResolution.Failed
     val bgColor = if (isFailed) LimeRedContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
 
@@ -390,7 +446,13 @@ private fun LinkingRow(res: AnilistResolution) {
         is AnilistResolution.Failed -> null
     }
 
-    Surface(color = bgColor, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = bgColor, shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().then(
+            if (!isFailed && onMarkWrong != null) Modifier.clickable { onMarkWrong(res as AnilistResolution.Resolved) }
+            else Modifier
+        ),
+    ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             // Left: cover image
             if (coverUrl != null) {
@@ -414,15 +476,13 @@ private fun LinkingRow(res: AnilistResolution) {
                 tint = if (isFailed) LimeRed else MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(12.dp))
 
-            // Right: AniList name (the matched name from AniList)
+            // Right: AniList name only (NO AniList ID — the name is enough)
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 if (anilistName != null) {
                     Text("AniList", fontFamily = RobotoFamily, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         letterSpacing = 0.06.sp, textAlign = TextAlign.End)
                     Text(anilistName, fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary, maxLines = 1, textAlign = TextAlign.End)
-                    Text("#${(res as AnilistResolution.Resolved).anilistId}", fontFamily = RobotoFamily, fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End)
                 } else {
                     Text("No match", fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
                         color = LimeRed, textAlign = TextAlign.End)
@@ -500,7 +560,8 @@ private fun ManualLinkingScreen(
 }
 
 /**
- * Bottom sheet for manually searching AniList and linking an anime.
+ * Full-screen search sheet for manually searching AniList and linking an anime.
+ * Only searches when the user clicks the "Search" button (no auto-search).
  */
 @Composable
 private fun ManualSearchSheet(
@@ -512,58 +573,61 @@ private fun ManualSearchSheet(
     var query by remember { mutableStateOf(failed.title) }
     var results by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
-
-    // Auto-search on open
-    LaunchedEffect(failed.title) {
-        searching = true
-        results = viewModel.searchAniList(failed.title)
-        searching = false
-    }
-
-    // Re-search when query changes (debounced)
-    LaunchedEffect(query) {
-        if (query.isNotBlank() && query != failed.title) {
-            delay(500)
-            searching = true
-            results = viewModel.searchAniList(query)
-            searching = false
-        }
-    }
+    var hasSearched by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize(),
     ) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(24.dp)) {
             // Header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Link Anime", fontFamily = RobotoFamily, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text("Link Anime", fontFamily = RobotoFamily, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onBackground)
+                    Text("Original: ${failed.title}", fontFamily = RobotoFamily, fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 TextButton(onDismiss) { Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) }
             }
-            Spacer(Modifier.height(8.dp))
-            Text("Original: ${failed.title}", fontFamily = RobotoFamily, fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
-            // Search field
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Search AniList", fontFamily = RobotoFamily) },
-                leadingIcon = { Icon(Icons.Filled.Search, null) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-            Spacer(Modifier.height(16.dp))
+            // Search field + button
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Search AniList", fontFamily = RobotoFamily) },
+                    leadingIcon = { Icon(Icons.Filled.Search, null) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                Button(
+                    onClick = {
+                        if (query.isNotBlank()) {
+                            scope.launch {
+                                searching = true
+                                hasSearched = true
+                                results = viewModel.searchAniList(query)
+                                searching = false
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Search", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+            Spacer(Modifier.height(20.dp))
 
             // Results
             if (searching) {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else {
+            } else if (hasSearched) {
                 Text("${results.size} results", fontFamily = RobotoFamily, fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
@@ -571,19 +635,18 @@ private fun ManualSearchSheet(
                     items(results) { anime ->
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth().clickable {
                                 viewModel.manuallyLink(failed, anime)
                                 onLinked()
                             },
                         ) {
                             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                // Cover
                                 AsyncImage(
                                     model = anime.coverImage?.large,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(6.dp))
+                                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
                                         .background(MaterialTheme.colorScheme.surfaceVariant),
                                 )
                                 Spacer(Modifier.size(12.dp))
@@ -591,8 +654,6 @@ private fun ManualSearchSheet(
                                     Text(anime.title.romaji ?: anime.title.english ?: "Unknown",
                                         fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface, maxLines = 2)
-                                    Text("AniList #${anime.id}", fontFamily = RobotoFamily, fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (anime.averageScore != null) {
                                         Text("Score: ${anime.averageScore}", fontFamily = RobotoFamily, fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -601,6 +662,17 @@ private fun ManualSearchSheet(
                                 Icon(Icons.Filled.Link, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             }
                         }
+                    }
+                }
+            } else {
+                // Initial state — prompt the user to search
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text("Enter a title and tap Search", fontFamily = RobotoFamily, fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

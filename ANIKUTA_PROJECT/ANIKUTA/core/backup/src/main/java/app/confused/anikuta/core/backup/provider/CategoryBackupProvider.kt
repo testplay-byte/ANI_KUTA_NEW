@@ -132,6 +132,34 @@ class CategoryBackupProvider(
                 }
             }
         }
+
+        // ── Phase 3: Ensure all restored anime have at least one category ──
+        // Anime without any category link should be assigned to the Default
+        // category (id=1) so they don't only show in the virtual "All" view.
+        // This handles anime that had no category in the backup, OR anime whose
+        // category links were skipped (e.g. category not found).
+        try {
+            val allAnime = database.animesQueries.selectAll(BackupMappers::mapAnime).executeAsList()
+            val linkedAnimeIds = database.anime_categoryQueries.selectAll { _, animeId, _, _ -> animeId }.executeAsList().toSet()
+            val unlinkedAnime = allAnime.filter { it._id !in linkedAnimeIds && it.favorite }
+            var defaultAdded = 0
+            database.anime_categoryQueries.transaction {
+                unlinkedAnime.forEach { anime ->
+                    database.anime_categoryQueries.insert(
+                        animeId = anime._id,
+                        categoryId = 1L, // Default category
+                        order = 0L,
+                    )
+                    defaultAdded++
+                }
+            }
+            if (defaultAdded > 0) {
+                Log.i(TAG, "Categories import: added $defaultAdded anime to Default category (no category link found)")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Categories import: failed to assign Default category to unlinked anime", e)
+        }
+
         Log.i(TAG, "Categories import: $categoriesImported categories, $linksImported links, $linksSkipped links skipped")
         categoriesImported > 0 || linksImported > 0
     }
