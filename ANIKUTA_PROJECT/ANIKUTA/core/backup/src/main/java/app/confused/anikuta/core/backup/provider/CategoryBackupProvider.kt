@@ -20,8 +20,13 @@ private const val TAG = "AnikutaBackup"
  * builds an old-id→new-id remap, then re-inserts anime–category links using
  * the remapped category IDs and resolved local anime IDs.
  *
- * Missing anime (not in the local DB) are skipped gracefully — their category
- * links are dropped but the categories themselves are still restored.
+ * **Anime ID resolution:** The backup may store either the local DB `_id`
+ * (for ANIKUTA backups) or the AniList ID (for Aniyomi-translated backups).
+ * This provider builds a comprehensive lookup table at the start of import:
+ * - `anilistId → localDbId` for all anime in the DB
+ * - Also tries direct `_id` match as a fallback
+ *
+ * This is more reliable than per-query lookups and handles both backup formats.
  */
 class CategoryBackupProvider(
     private val database: AnikutaDatabase,
@@ -49,7 +54,22 @@ class CategoryBackupProvider(
         require(entry is BackupEntry.Categories) { "Expected Categories entry, got ${entry.providerId}" }
         if (entry.categories.isEmpty() && entry.links.isEmpty()) return@withContext false
 
-        // Phase 1: upsert categories, build old-id → new-id remap
+        // ── Build a comprehensive anilistId → localDbId lookup table ──
+        // This is done ONCE at the start, before any link insertion.
+        // It handles both ANIKUTA backups (animeId = local _id) and
+        // Aniyomi-translated backups (animeId = anilistId).
+        val allAnime = database.animesQueries.selectAll(BackupMappers::mapAnime).executeAsList()
+        val anilistToLocalId = mutableMapOf<Long, Long>()
+        val localIdSet = mutableSetOf<Long>()
+        allAnime.forEach { anime ->
+            localIdSet.add(anime._id)
+            if (anime.anilistId != null) {
+                anilistToLocalId[anime.anilistId] = anime._id
+            }
+        }
+        Log.i(TAG, "Categories import: built lookup table — ${anilistToLocalId.size} anilistId mappings, ${localIdSet.size} local ids")
+
+        // ── Phase 1: upsert categories, build old-id → new-id remap ──
         val categoryIdRemap = mutableMapOf<Long, Long>()
         var categoriesImported = 0
         database.categoriesQueries.transaction {
@@ -58,13 +78,15 @@ class CategoryBackupProvider(
                     val newId = upsertCategory(database, cat)
                     categoryIdRemap[cat._id] = newId
                     categoriesImported++
+                    Log.d(TAG, "Categories import: upserted '${cat.name}' (oldId=${cat._id} → newId=$newId)")
                 } catch (e: Exception) {
                     Log.w(TAG, "Categories import: skipped '${cat.name}' — ${e.message}")
                 }
             }
         }
+        Log.i(TAG, "Categories import: categoryIdRemap = $categoryIdRemap")
 
-        // Phase 2: re-insert anime–category links with remapped IDs
+        // ── Phase 2: re-insert anime–category links with remapped IDs ──
         var linksImported = 0
         var linksSkipped = 0
         database.anime_categoryQueries.transaction {
@@ -72,28 +94,40 @@ class CategoryBackupProvider(
                 try {
                     val newCategoryId = categoryIdRemap[link.categoryId]
                     if (newCategoryId == null) {
+                        Log.w(TAG, "Categories import: link skipped — categoryId=${link.categoryId} not in remap (remap keys: ${categoryIdRemap.keys})")
                         linksSkipped++
                         return@forEach
                     }
-                    // Resolve the anime's local DB _id from the backup's animeId.
-                    // The backup may store either:
-                    // - The original local DB _id (for ANIKUTA backups), OR
-                    // - The AniList ID (for Aniyomi-translated backups, where the
-                    //   translator sets animeId = anilistId.toLong())
-                    // We try both: first by direct _id match, then by anilist_id.
-                    val localAnimeId = resolveLocalAnimeIdForLink(database, link.animeId)
+
+                    // Resolve the anime's local DB _id.
+                    // For ANIKUTA backups: link.animeId IS the local _id (check localIdSet).
+                    // For Aniyomi-translated backups: link.animeId is the anilistId (check anilistToLocalId).
+                    val localAnimeId = when {
+                        localIdSet.contains(link.animeId) -> link.animeId
+                        anilistToLocalId.containsKey(link.animeId) -> anilistToLocalId[link.animeId]!!
+                        else -> {
+                            // Last resort: try DB query (in case the anime was inserted after we built the map)
+                            resolveLocalAnimeIdForLink(database, link.animeId)
+                        }
+                    }
+
                     if (localAnimeId == null) {
-                        Log.w(TAG, "Categories import: could not resolve anime for link (animeId=${link.animeId}) — skipping")
+                        Log.w(TAG, "Categories import: could not resolve anime for link (animeId=${link.animeId}, " +
+                            "checked localIdSet=${localIdSet.contains(link.animeId)}, " +
+                            "anilistMap=${anilistToLocalId.containsKey(link.animeId)}) — skipping")
                         linksSkipped++
                         return@forEach
                     }
+
                     database.anime_categoryQueries.insert(
                         animeId = localAnimeId,
                         categoryId = newCategoryId,
                         order = link.order,
                     )
                     linksImported++
+                    Log.d(TAG, "Categories import: linked animeId=$localAnimeId → categoryId=$newCategoryId")
                 } catch (e: Exception) {
+                    Log.w(TAG, "Categories import: link failed (animeId=${link.animeId}, categoryId=${link.categoryId}) — ${e.message}")
                     linksSkipped++
                 }
             }

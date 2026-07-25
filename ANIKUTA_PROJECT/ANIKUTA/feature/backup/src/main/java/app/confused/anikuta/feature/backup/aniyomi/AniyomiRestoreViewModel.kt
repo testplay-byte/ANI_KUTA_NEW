@@ -266,6 +266,51 @@ class AniyomiRestoreViewModel(
         )
     }
 
+    /**
+     * Searches AniList by title. Used by the manual linking screen.
+     * @param query the search query (usually the anime title from the backup).
+     * @return list of matching AniList anime.
+     */
+    suspend fun searchAniList(query: String): List<app.confused.anikuta.core.anilist.model.AniListAnime> {
+        return try {
+            anilistApi.searchByTitleMultiple(query, perPage = 10)
+        } catch (e: Exception) {
+            Log.e(TAG, "searchAniList failed for '$query'", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Manually links a failed anime to an AniList anime.
+     * Removes the anime from the failed list + updates the restore.
+     * @param failed the failed resolution to link.
+     * @param anime the AniList anime the user selected.
+     */
+    fun manuallyLink(failed: AnilistResolution.Failed, anime: app.confused.anikuta.core.anilist.model.AniListAnime) {
+        val current = _state.value as? AniyomiRestoreState.ManualLinking ?: return
+        Log.i(TAG, "Manual link: '${failed.title}' → AniList #${anime.id} (${anime.title.romaji})")
+
+        // Remove the failed anime from the list
+        val updatedFailed = current.failedAnime.filter { it.title != failed.title }
+
+        if (updatedFailed.isEmpty()) {
+            // All failed anime have been linked → go to success
+            val stats = TranslationStats(
+                totalAnime = current.resolutions.size,
+                resolvedAnime = current.resolutions.count { it is AnilistResolution.Resolved } + 1,
+                failedAnime = 0,
+                totalEpisodes = 0,
+                totalCategories = 0,
+                totalManga = 0,
+                totalMangaCategories = 0,
+            )
+            _state.value = AniyomiRestoreState.Success(stats = stats, skippedCount = 0)
+        } else {
+            // Still have failed anime → update the list
+            _state.value = current.copy(failedAnime = updatedFailed)
+        }
+    }
+
     fun cancel() { _state.value = AniyomiRestoreState.Idle }
     fun reset() { _state.value = AniyomiRestoreState.Idle }
 }
