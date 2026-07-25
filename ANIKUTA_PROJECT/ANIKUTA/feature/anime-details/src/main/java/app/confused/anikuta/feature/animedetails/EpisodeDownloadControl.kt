@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 
 /**
@@ -90,7 +91,7 @@ fun EpisodeDownloadControl(
                         trackColor = MaterialTheme.colorScheme.surface,
                         modifier = Modifier
                             .size(width = 40.dp, height = 4.dp)
-                            .androidx_clip(RoundedCornerShape(2.dp)),
+                            .clip(RoundedCornerShape(2.dp)),
                     )
                 } else {
                     // Indeterminate (content-length unknown / connecting)
@@ -161,7 +162,3 @@ private fun CancelButton(onCancel: () -> Unit) {
         )
     }
 }
-
-// Small helper for clipping (avoids a long import chain inline)
-private fun Modifier.androidx_clip(shape: androidx.compose.ui.graphics.Shape): Modifier =
-    this.then(androidx.compose.ui.draw.clip(shape))
