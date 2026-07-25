@@ -62,7 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.backup.translation.AnilistResolution
 import app.confused.anikuta.core.backup.translation.TranslationStats
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 
 /** Lime red color for text/icons (NOT background — per owner: "red is for the text only"). */
