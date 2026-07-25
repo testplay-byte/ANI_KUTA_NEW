@@ -195,6 +195,86 @@ class BackupManager(
     }
 
     /**
+     * Restores a backup directly from a [BackupContainer] (no file I/O).
+     *
+     * Used by the Aniyomi translation flow: the translator builds a
+     * [BackupContainer] in memory, and this method restores it directly
+     * without needing to serialize→deserialize through a file.
+     *
+     * @param container the backup container to restore.
+     * @return [BackupResult.Success] with a [RestoreSummary], or [BackupResult.Error].
+     */
+    suspend fun restoreBackupFromContainer(container: BackupContainer): BackupResult<RestoreSummary> =
+        withContext(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "═══ Restoring from container ═══")
+                Log.i(TAG, "  Container: ${container.entries.size} entries")
+
+                val providerMap = providers.associateBy { it.id }
+                val categoryResults = mutableListOf<RestoreCategoryResult>()
+                var totalImported = 0
+                var totalSkipped = 0
+                var totalErrors = 0
+
+                container.entries.forEach { entry ->
+                    val category = BackupCategory.fromId(entry.providerId)
+                    val provider = providerMap[entry.providerId]
+
+                    if (provider == null) {
+                        Log.w(TAG, "  ✗ ${entry.providerId}: no provider — skipping")
+                        categoryResults.add(RestoreCategoryResult(
+                            category = category ?: BackupCategory.PREFERENCES,
+                            importedCount = 0, skippedCount = countItems(entry), errorCount = 0,
+                            note = "No provider for '${entry.providerId}'",
+                        ))
+                        totalSkipped += countItems(entry)
+                        return@forEach
+                    }
+
+                    try {
+                        val success = provider.import(entry)
+                        val itemCount = countItems(entry)
+                        if (success) {
+                            Log.i(TAG, "  ✓ ${entry.providerId}: restored ($itemCount items)")
+                            categoryResults.add(RestoreCategoryResult(
+                                category = category!!, importedCount = itemCount, skippedCount = 0, errorCount = 0,
+                            ))
+                            totalImported += itemCount
+                        } else {
+                            categoryResults.add(RestoreCategoryResult(
+                                category = category!!, importedCount = 0, skippedCount = itemCount, errorCount = 0,
+                                note = "Nothing to import",
+                            ))
+                            totalSkipped += itemCount
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "  ✗ ${entry.providerId}: import failed", e)
+                        val itemCount = countItems(entry)
+                        categoryResults.add(RestoreCategoryResult(
+                            category = category!!, importedCount = 0, skippedCount = 0, errorCount = itemCount,
+                            note = e.message,
+                        ))
+                        totalErrors += itemCount
+                    }
+                }
+
+                val summary = RestoreSummary(
+                    formatType = BackupFormatType.ANIKUTA,
+                    createdAt = container.createdAt,
+                    categoryResults = categoryResults,
+                    totalImported = totalImported,
+                    totalSkipped = totalSkipped,
+                    totalErrors = totalErrors,
+                )
+                Log.i(TAG, "═══ Restore complete: $totalImported imported ═══")
+                BackupResult.Success(summary)
+            } catch (e: Exception) {
+                Log.e(TAG, "Restore from container failed", e)
+                BackupResult.Error("Restore failed: ${e.message}", e)
+            }
+        }
+
+    /**
      * Restores a backup from an input stream.
      *
      * @param input the backup file stream (caller closes).

@@ -34,6 +34,7 @@ import kotlinx.serialization.protobuf.ProtoNumber
  */
 @Serializable
 data class AniyomiBackup(
+    @ProtoNumber(1) val backupManga: List<AniyomiMangaStub> = emptyList(),
     @ProtoNumber(2) val backupCategories: List<AniyomiBackupCategory> = emptyList(),
     @ProtoNumber(500) val isLegacy: Boolean = true,
     @ProtoNumber(501) val backupAnime: List<AniyomiBackupAnime> = emptyList(),
@@ -47,10 +48,20 @@ data class AniyomiBackup(
  */
 @Serializable
 data class AniyomiLegacyBackup(
+    @ProtoNumber(1) val backupManga: List<AniyomiMangaStub> = emptyList(),
     @ProtoNumber(2) val backupCategories: List<AniyomiBackupCategory> = emptyList(),
     @ProtoNumber(3) val backupAnime: List<AniyomiBackupAnime> = emptyList(),
     @ProtoNumber(4) val backupAnimeCategories: List<AniyomiBackupCategory> = emptyList(),
     @ProtoNumber(103) val backupAnimeSources: List<AniyomiBackupAnimeSource> = emptyList(),
+)
+
+/**
+ * Minimal stub for manga entries — we only count them (for the "manga not supported"
+ * warning), we don't process manga data.
+ */
+@Serializable
+data class AniyomiMangaStub(
+    @ProtoNumber(3) val title: String = "",
 )
 
 // ── Anime model (matches Aniyomi's BackupAnime exactly for declared fields) ──

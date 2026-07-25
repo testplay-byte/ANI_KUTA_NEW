@@ -120,6 +120,7 @@ class AniyomiBackupFormat : BackupFormat {
         Log.i(TAG, "Aniyomi backup: legacy format decoded — ${legacy.backupAnime.size} anime")
         // Convert legacy to modern structure
         return AniyomiBackup(
+            backupManga = legacy.backupManga,
             backupCategories = legacy.backupCategories,
             backupAnime = legacy.backupAnime,
             backupAnimeCategories = legacy.backupAnimeCategories,

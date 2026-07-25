@@ -22,6 +22,7 @@ android {
 dependencies {
     // Core modules
     implementation(projects.core.backup)
+    implementation(projects.core.anilist)     // AniListApi for Aniyomi translation
     implementation(projects.core.designsystem)
     implementation(projects.core.preferences)
     implementation(projects.core.common)

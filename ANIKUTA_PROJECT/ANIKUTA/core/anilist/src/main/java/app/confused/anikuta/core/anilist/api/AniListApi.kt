@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit
 class AniListApi(
     private val client: OkHttpClient = defaultClient(),
     private val localCache: LocalAniListCache? = null,
+    private val rateLimiter: AniListRateLimiter? = null,
 ) {
     // In-memory cache for anime details (5-minute TTL).
     private val detailCache = mutableMapOf<Int, Pair<Long, AniListAnime>>()
@@ -93,6 +94,80 @@ class AniListApi(
     /** Search anime by query (NOT cached — search results change with the query). */
     suspend fun searchAnime(query: String, page: Int = 1, perPage: Int = 20): List<AniListAnime> =
         queryList(SEARCH_QUERY, page, perPage, search = query)
+
+    /**
+     * Find an AniList anime by its MyAnimeList (MAL) ID.
+     *
+     * Used by the Aniyomi backup translator: Aniyomi tracking entries with
+     * `syncId == 1` (MAL) have a `mediaId` that is a MAL anime ID. This method
+     * queries AniList's `Media(idMal: $malId)` to resolve the AniList ID.
+     *
+     * @param malId the MAL anime ID.
+     * @return the AniList anime, or null if not found.
+     */
+    suspend fun searchByMalId(malId: Int): AniListAnime? = withContext(Dispatchers.IO) {
+        rateLimiter?.acquire()
+        try {
+            val variables = buildJsonObject {
+                put("idMal", malId)
+            }
+            val response = executeGraphQL(BY_MAL_ID_QUERY, variables)
+            val media = response["data"]?.jsonObject?.get("Media")
+            if (media != null) {
+                parseAnime(media)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "searchByMalId($malId) failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Search AniList by title and return the best match.
+     *
+     * Used by the Aniyomi backup translator for anime without tracker bindings.
+     * Tries to match by romaji/english/native title (case-insensitive exact match
+     * preferred). If no exact match, returns the first result.
+     *
+     * @param title the anime title to search for.
+     * @return the best-matching AniList anime, or null if no results.
+     */
+    suspend fun searchByTitle(title: String): AniListAnime? = withContext(Dispatchers.IO) {
+        rateLimiter?.acquire()
+        try {
+            val results = searchAnime(title, page = 1, perPage = 5)
+            if (results.isEmpty()) return@withContext null
+
+            // Try exact match (case-insensitive) on romaji/english/native
+            val titleLower = title.lowercase().trim()
+            val exactMatch = results.firstOrNull { anime ->
+                val romaji = anime.title.romaji?.lowercase()?.trim()
+                val english = anime.title.english?.lowercase()?.trim()
+                val native = anime.title.native?.lowercase()?.trim()
+                romaji == titleLower || english == titleLower || native == titleLower
+            }
+            exactMatch ?: results.first()
+        } catch (e: Exception) {
+            Log.w(TAG, "searchByTitle('$title') failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Search AniList by title and return multiple results.
+     *
+     * Used by the manual linking screen (where the user picks from candidates).
+     *
+     * @param title the anime title to search for.
+     * @param perPage how many results to return (default 10).
+     * @return list of matching AniList anime.
+     */
+    suspend fun searchByTitleMultiple(title: String, perPage: Int = 10): List<AniListAnime> = withContext(Dispatchers.IO) {
+        rateLimiter?.acquire()
+        searchAnime(title, page = 1, perPage = perPage)
+    }
 
     /**
      * Search anime with filters — used by the Search page's FilterSheet.
@@ -501,6 +576,34 @@ class AniListApi(
         }
     }
 
+    /** Executes a GraphQL query and returns the parsed JSON response. */
+    private suspend fun executeGraphQL(query: String, variables: JsonObject): JsonObject = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("query", query)
+            put("variables", variables)
+        }
+
+        val request = Request.Builder()
+            .url(API_URL)
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Accept", "application/json")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string() ?: return@withContext buildJsonObject {}
+        Json.parseToJsonElement(responseBody).jsonObject
+    }
+
+    /** Parses a single Media JSON element into an [AniListAnime]. */
+    private fun parseAnime(mediaElement: kotlinx.serialization.json.JsonElement): AniListAnime? {
+        return try {
+            Json.decodeFromJsonElement(AniListAnime.serializer(), mediaElement)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     companion object {
         private const val TAG = "AniListApi"
         private const val API_URL = "https://graphql.anilist.co"
@@ -576,6 +679,14 @@ class AniListApi(
         private const val BY_ID_QUERY = """
             query (${'$'}id: Int) {
               Media(id: ${'$'}id, type: ANIME) {
+                $ANIME_FIELDS
+              }
+            }
+        """
+
+        private const val BY_MAL_ID_QUERY = """
+            query (${'$'}idMal: Int) {
+              Media(idMal: ${'$'}idMal, type: ANIME) {
                 $ANIME_FIELDS
               }
             }

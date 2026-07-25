@@ -145,9 +145,14 @@ private fun AnikutaApp() {
     var showUpdates by remember { mutableStateOf(false) }
     // ── Agent 1: Backup & Restore ──
     var showBackup by remember { mutableStateOf(false) }
+    // Aniyomi restore flow (full-screen multi-step wizard)
+    var showAniyomiRestore by remember { mutableStateOf(false) }
     val anilistApi = remember {
         val prefStore = org.koin.core.context.GlobalContext.get().get<app.confused.anikuta.core.preferences.PreferenceStore>()
-        AniListApi(localCache = app.confused.anikuta.core.anilist.api.LocalAniListCache(prefStore))
+        AniListApi(
+            localCache = app.confused.anikuta.core.anilist.api.LocalAniListCache(prefStore),
+            rateLimiter = app.confused.anikuta.core.anilist.api.AniListRateLimiter(),
+        )
     }
     val extensionManager: AnimeExtensionManager = koinInject()
     val sourceMatcher: SourceMatcher = koinInject()
@@ -184,7 +189,7 @@ private fun AnikutaApp() {
 
     // Handle back gesture for sub-screens + resolver sheet + linking sheet + episode-settings sub-pages
     // ── Agent 1: History + Updates ── + ── Agent 2: Profile + Trackers ──
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || extensionDetailTarget != null || episodeSettingsPage != null || showHistory || showUpdates || showProfile || showTrackers || showBackup) {
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || extensionDetailTarget != null || episodeSettingsPage != null || showHistory || showUpdates || showProfile || showTrackers || showBackup || showAniyomiRestore) {
         when {
             watchTarget != null -> watchTarget = null
             resolverState !is VideoResolverState.Hidden -> resolverState = VideoResolverState.Hidden
@@ -200,6 +205,7 @@ private fun AnikutaApp() {
             showHistory -> showHistory = false
             showUpdates -> showUpdates = false
             // ── Agent 1: Backup & Restore ──
+            showAniyomiRestore -> showAniyomiRestore = false
             showBackup -> showBackup = false
             // ── Agent 2: Profile + Trackers ──
             showTrackers -> showTrackers = false
@@ -363,15 +369,35 @@ private fun AnikutaApp() {
             // MUST come before showSettings — opened from Settings, so showSettings
             // is still true when showBackup becomes true. If showSettings is checked
             // first, it shadows showBackup and the user sees nothing happen.
+            // ── Aniyomi restore flow (full-screen multi-step wizard) ──
+            // MUST come before showBackup — opened from the backup screen.
+            showAniyomiRestore -> {
+                app.confused.anikuta.feature.backup.aniyomi.AniyomiRestoreFlow(
+                    onCancel = {
+                        showAniyomiRestore = false
+                        showBackup = true
+                    },
+                    onComplete = {
+                        // After success auto-close → navigate to Library
+                        showAniyomiRestore = false
+                        showBackup = false
+                        showSettings = false
+                        currentRoute = "library"
+                    },
+                )
+            }
             showBackup -> {
                 app.confused.anikuta.feature.backup.BackupSettingsScreen(
                     onBack = { showBackup = false },
                     onRestoreComplete = {
                         // After restore completes + user clicks OK → navigate to Library.
-                        // Close all sub-screens and switch to the library tab.
                         showBackup = false
                         showSettings = false
                         currentRoute = "library"
+                    },
+                    onAniyomiRestore = {
+                        showBackup = false
+                        showAniyomiRestore = true
                     },
                 )
             }
