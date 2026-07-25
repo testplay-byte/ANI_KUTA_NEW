@@ -199,14 +199,29 @@ class DownloadQueue(
                     }
                     persistNow()
 
+                    // Per-task progress tracking state (for DynamicProgressTracker).
+                    // These are captured in the closure + updated on each tick.
+                    var prevTotal = 0L
+                    var prevEstimate = 0L
+
                     val completed = downloader.download(task) { downloaded, total ->
-                        val pct = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 99)
-                        else if (downloaded > 0) -1 else 0
+                        // ── Dynamic progress tracking ──
+                        // Handles unknown totals (-1), changing totals, and the
+                        // 90% cap (never shows 100% until the task is COMPLETED).
+                        val update = DynamicProgressTracker.compute(
+                            downloaded = downloaded,
+                            reportedTotal = total,
+                            previousTotal = prevTotal,
+                            previousEstimate = prevEstimate,
+                        )
+                        prevTotal = update.displayTotalBytes
+                        prevEstimate = update.updatedEstimate
+
                         mutateTask(task.id) {
                             it.copy(
-                                progress = if (pct < 0) it.progress else pct,
+                                progress = update.progress,
                                 downloadedBytes = downloaded,
-                                totalBytes = total,
+                                totalBytes = update.displayTotalBytes,
                                 updatedAt = now(),
                             )
                         }

@@ -238,5 +238,6 @@ private fun progressText(task: DownloadTask): String {
 private fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    else -> "${bytes / (1024 * 1024)} MB"
+    bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+    else -> "%.1f GB".format(bytes / (1024.0 * 1024 * 1024))
 }
