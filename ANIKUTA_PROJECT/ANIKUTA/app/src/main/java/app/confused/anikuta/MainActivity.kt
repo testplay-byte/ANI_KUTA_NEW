@@ -78,6 +78,7 @@ import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.koinInject
 
 class MainActivity : ComponentActivity() {
@@ -158,6 +159,34 @@ private fun AnikutaApp() {
     val downloadOrchestrator: app.confused.anikuta.download.DownloadOrchestrator = koinInject()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // ── Agent 2: Reactive download-state map for the episode rows ──
+    // Collects ALL download tasks once (not per row) + maps to the
+    // EpisodeDownloadState sealed type the anime-details feature expects.
+    // Keyed by episode URL (the anime-details side doesn't know anilistId).
+    val downloadTasksMap by downloadManager.episodeDownloadStates
+        .collectAsStateWithLifecycle(initialValue = emptyMap())
+    fun episodeDownloadState(episodeUrl: String): app.confused.anikuta.feature.animedetails.EpisodeDownloadState {
+        val anilistId = detailAnimeId ?: return app.confused.anikuta.feature.animedetails.EpisodeDownloadState.NotDownloaded
+        val task = downloadTasksMap["$anilistId:$episodeUrl"] ?: return app.confused.anikuta.feature.animedetails.EpisodeDownloadState.NotDownloaded
+        return when (task.status) {
+            app.confused.anikuta.core.download.DownloadStatus.QUEUED ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Queued
+            app.confused.anikuta.core.download.DownloadStatus.DOWNLOADING ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Downloading(task.progress)
+            app.confused.anikuta.core.download.DownloadStatus.PAUSED ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Paused
+            app.confused.anikuta.core.download.DownloadStatus.ERROR ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Error(task.errorMessage)
+            app.confused.anikuta.core.download.DownloadStatus.COMPLETED ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Downloaded
+            app.confused.anikuta.core.download.DownloadStatus.CANCELLED ->
+                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.NotDownloaded
+        }
+    }
+    fun downloadStateMap(episodeUrls: List<String>): Map<String, app.confused.anikuta.feature.animedetails.EpisodeDownloadState> {
+        return episodeUrls.associateWith { episodeDownloadState(it) }
+    }
 
     // Search-page stores (registered in searchModule + extensionModule)
     val recentsStore: RecentSearchesStore = koinInject()
@@ -373,6 +402,31 @@ private fun AnikutaApp() {
         }
     }
 
+    /**
+     * ── Agent 2: Download row actions ──
+     * Cancel/resume/retry/delete for the episode-row download controls.
+     * Looks up the task by (anilistId, episodeUrl) then calls the manager.
+     */
+    fun cancelDownload(anilistId: Int, episodeUrl: String) {
+        val task = downloadTasksMap["$anilistId:$episodeUrl"] ?: return
+        scope.launch { downloadManager.cancelDownload(task.id) }
+    }
+    fun resumeDownload(anilistId: Int, episodeUrl: String) {
+        val task = downloadTasksMap["$anilistId:$episodeUrl"] ?: return
+        scope.launch { downloadManager.resumeDownload(task.id) }
+    }
+    fun retryDownload(anilistId: Int, episodeUrl: String) {
+        val task = downloadTasksMap["$anilistId:$episodeUrl"] ?: return
+        scope.launch { downloadManager.retryDownload(task.id) }
+    }
+    fun deleteDownload(anilistId: Int, episodeUrl: String) {
+        val task = downloadTasksMap["$anilistId:$episodeUrl"] ?: return
+        scope.launch {
+            downloadManager.deleteDownload(task.id)
+            Toast.makeText(context, "Download deleted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -388,6 +442,27 @@ private fun AnikutaApp() {
             }
             // Detail screen (full screen, no bottom nav)
             detailAnimeId != null -> {
+                // Build the per-episode download-state map for this anime.
+                // Keyed by episode URL (stripped of the anilistId prefix) → state.
+                val currentDownloadStates = downloadTasksMap
+                    .filterKeys { it.startsWith("${detailAnimeId}:") }
+                    .mapKeys { (key, _) -> key.substringAfter(':') }
+                    .mapValues { (_, task) ->
+                        when (task.status) {
+                            app.confused.anikuta.core.download.DownloadStatus.QUEUED ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Queued
+                            app.confused.anikuta.core.download.DownloadStatus.DOWNLOADING ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Downloading(task.progress)
+                            app.confused.anikuta.core.download.DownloadStatus.PAUSED ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Paused
+                            app.confused.anikuta.core.download.DownloadStatus.ERROR ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Error(task.errorMessage)
+                            app.confused.anikuta.core.download.DownloadStatus.COMPLETED ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.Downloaded
+                            app.confused.anikuta.core.download.DownloadStatus.CANCELLED ->
+                                app.confused.anikuta.feature.animedetails.EpisodeDownloadState.NotDownloaded
+                        }
+                    }
                 AnimeDetailScreen(
                     animeId = detailAnimeId!!,
                     api = anilistApi,
@@ -404,6 +479,11 @@ private fun AnikutaApp() {
                     onDownloadEpisode = { episode, source, watchCtx ->
                         downloadEpisode(episode, source, watchCtx)
                     },
+                    downloadStates = currentDownloadStates,
+                    onDownloadCancel = { episodeUrl -> cancelDownload(detailAnimeId!!, episodeUrl) },
+                    onDownloadResume = { episodeUrl -> resumeDownload(detailAnimeId!!, episodeUrl) },
+                    onDownloadRetry = { episodeUrl -> retryDownload(detailAnimeId!!, episodeUrl) },
+                    onDownloadDelete = { episodeUrl -> deleteDownload(detailAnimeId!!, episodeUrl) },
                 )
             }
             // Repo settings sub-screen (from Extensions) — MUST come before showExtensions

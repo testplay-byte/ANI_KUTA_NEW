@@ -5,45 +5,62 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.OutputStream
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.coroutines.coroutineContext
 
 /**
  * The actual HTTP file downloader (the "DEFAULT" method — ADR-020).
  *
- * Downloads the video via OkHttp streaming (with a [ProgressReporter] so the
- * queue can emit progress ticks), then downloads ALL subtitle tracks alongside
- * (per DOWNLOADS-PLAN: subtitles are always downloaded, no user option), then
- * writes `data/metadata.json`.
+ * **Download pipeline (v2 — internal-cache-first + validation):**
+ *
+ * 1. **Download to internal cache** ([TempDownloadCache]) — fast, private, no
+ *    SAF per-byte overhead. The user's folder is NOT touched yet.
+ * 2. **Validate** the response via [VideoTypeDetector]:
+ *    - Reject HLS (.m3u8) / DASH (.mpd) — the default downloader has no ffmpeg.
+ *    - Reject HTML pages (resolver bugs that return a watch-page URL).
+ *    - Reject tiny files (< [MIN_VALID_VIDEO_BYTES]) — a real video is at
+ *      least hundreds of KB; a corrupt/playlist download is usually < 100KB.
+ * 3. **Download subtitles** to the temp cache (best-effort, skipped on failure).
+ * 4. **Write metadata.json** to the temp cache.
+ * 5. **Publish to SAF** via [DownloadStorageProvider.publishToUserFolder] —
+ *    copies the validated temp files to the user's folder. Only on success is
+ *    the task marked COMPLETED.
+ * 6. **Clean up** the temp dir regardless (success or failure).
+ *
+ * This pipeline ensures the user's folder NEVER contains partial/corrupt files.
+ * A "completed" task always has a real, validated video on disk.
  *
  * **Cancellation / pause.** This is a `suspend` function; the [DownloadQueue]
- * runs it in a child Job. Pausing or cancelling the task = cancelling that Job,
- * which throws `CancellationException` here (caught by the queue → moves the
- * task to PAUSED/CANCELLED). We cooperatively check [ensureActive] in the copy
- * loop so a large file cancels promptly.
+ * runs it in a child Job. Pausing/cancelling = cancelling that Job →
+ * `CancellationException` here (caught by the queue → PAUSED/CANCELLED). The
+ * copy loop checks [ensureActive] cooperatively so a large file cancels promptly.
  *
- * **All I/O on Dispatchers.IO** (Rule §9). The OkHttp client is shared (passed
- * in from the DI module — single instance, connection-pooled).
- *
- * **Errors.** Network/IO failures throw [DownloadException] with a human-readable
- * message; the queue catches it and moves the task to ERROR.
+ * **All I/O on Dispatchers.IO** (Rule §9).
  *
  * **Future 1DM method.** A future `OneDmDownloader` will implement multi-
- * threaded ranged downloads with resume; it will replace this class for the
- * ONEDM method. The [DownloadManager] interface stays the same.
+ * threaded ranged downloads with resume + HLS/ffmpeg support. It will replace
+ * this class for the ONEDM method. The [DownloadManager] interface stays the same.
+ *
+ * @param client Shared OkHttp client (connection-pooled, injected by DI).
+ * @param storage The SAF storage provider (publishes to the user's folder).
+ * @param tempCache The internal-cache temp-download manager.
  */
 class HttpDownloader(
     private val client: OkHttpClient,
     private val storage: DownloadStorageProvider,
+    private val tempCache: TempDownloadCache,
 ) {
 
     /**
-     * Downloads the video + all subtitles + metadata for [task].
+     * Downloads the video + subtitles + metadata, validates, and publishes to SAF.
      *
-     * @param task The task to download (must have a non-blank videoUrl).
+     * @param task The task to download.
      * @param onProgress Called on every progress tick with (downloadedBytes, totalBytes).
-     * @return The updated task with [DownloadTask.videoUri] + [DownloadTask.subtitleUris] set.
-     * @throws DownloadException on network/IO failure.
+     * @return The updated task with [DownloadTask.videoUri] + [DownloadTask.subtitleUris] set
+     *   + status COMPLETED.
+     * @throws DownloadException on any failure (network, validation, publish). The queue
+     *   catches it → ERROR with [DownloadException.message] shown to the user.
      * @throws kotlinx.coroutines.CancellationException on pause/cancel.
      */
     suspend fun download(
@@ -60,50 +77,77 @@ class HttpDownloader(
 
         DownloadLogger.i("Starting download: ${anime.title} EP ${episode.episodeNumber} ($videoUrl)")
 
-        val epDir = storage.ensureEpisodeDir(anime, episode)
-            ?: throw DownloadException("Download folder not configured or not writable")
+        try {
+            // ── 1. Download + validate the video to internal cache ──
+            val videoExt = inferVideoExtension(videoUrl)
+            val tempVideo = tempCache.videoFile(task.id, videoExt)
+            val downloadedBytes = downloadVideoToCache(
+                url = videoUrl,
+                headers = task.request.videoHeaders,
+                tempFile = tempVideo,
+                taskId = task.id,
+                onProgress = onProgress,
+            )
 
-        // ── 1. Download the video (streaming with progress) ──
-        val videoUri = downloadVideo(videoUrl, task.request.videoHeaders, epDir, onProgress)
-            ?: throw DownloadException("Failed to create/write the video file")
+            // ── 2. Validate the downloaded file ──
+            validateDownloadedFile(videoUrl, tempVideo, downloadedBytes)
 
-        // ── 2. Download ALL subtitle tracks ──
-        val subtitleUris = downloadSubtitles(task.request.subtitleTracks, epDir)
+            // ── 3. Download subtitles to temp cache (best-effort) ──
+            val tempSubsDir = tempCache.subtitlesDir(task.id)
+            downloadSubtitlesToCache(task.request.subtitleTracks, tempSubsDir)
 
-        // ── 3. Write metadata.json ──
-        storage.writeMetadata(epDir, EpisodeMetadataCache(
-            anilistId = anime.anilistId,
-            animeTitle = anime.title,
-            episodeNumber = episode.episodeNumber,
-            episodeName = episode.name,
-            videoUrl = videoUrl,
-            downloadedAt = System.currentTimeMillis(),
-            sourceId = task.request.sourceId,
-        ))
+            // ── 4. Write metadata.json to temp cache ──
+            val tempMeta = tempCache.metadataFile(task.id)
+            writeMetadataToCache(tempMeta, task)
 
-        DownloadLogger.i("Download complete: ${anime.title} EP ${episode.episodeNumber} " +
-            "(subs=${subtitleUris.size})")
-
-        task.copy(
-            status = DownloadStatus.COMPLETED,
-            progress = 100,
-            videoUri = videoUri,
-            subtitleUris = subtitleUris,
-            updatedAt = System.currentTimeMillis(),
-        )
+            // ── 5. Publish to the user's SAF folder ──
+            val publishResult = storage.publishToUserFolder(
+                anime = anime,
+                episode = episode,
+                tempVideoFile = tempVideo,
+                tempSubtitlesDir = tempSubsDir,
+                tempMetadataFile = tempMeta,
+                videoExtension = videoExt,
+            )
+            when (publishResult) {
+                is DownloadStorageProvider.PublishResult.Success -> {
+                    DownloadLogger.i("Download complete: ${anime.title} EP ${episode.episodeNumber} " +
+                        "(${publishResult.sizeBytes} bytes, ${publishResult.subtitleUris.size} subs)")
+                    task.copy(
+                        status = DownloadStatus.COMPLETED,
+                        progress = 100,
+                        videoUri = publishResult.videoUri,
+                        subtitleUris = publishResult.subtitleUris,
+                        downloadedBytes = publishResult.sizeBytes,
+                        totalBytes = publishResult.sizeBytes,
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                }
+                is DownloadStorageProvider.PublishResult.Error -> {
+                    throw DownloadException(publishResult.message)
+                }
+            }
+        } finally {
+            // Always clean up the temp dir (success or failure). The user's
+            // folder is the source of truth; the temp cache is disposable.
+            tempCache.cleanupTask(task.id)
+        }
     }
 
-    /** Streams the video to disk, reporting progress. Returns the video content URI. */
-    private suspend fun downloadVideo(
+    /**
+     * Streams the video to the internal cache file, reporting progress.
+     * Returns the total bytes downloaded.
+     */
+    private suspend fun downloadVideoToCache(
         url: String,
         headers: String?,
-        epDir: androidx.documentfile.provider.DocumentFile,
+        tempFile: File,
+        taskId: Long,
         onProgress: (Long, Long) -> Unit,
-    ): String? {
+    ): Long {
         val request = Request.Builder().url(url).apply {
             if (!headers.isNullOrBlank()) {
-                // Headers are stored as a single "Key: Value\nKey2: Value2" string
-                // (matches WatchRequest.videoHeaders / MPV http-header-fields format).
+                // Headers stored as "Key: Value\nKey2: Value2" (matches MPV format).
                 headers.split('\n').forEach { line ->
                     val sep = line.indexOf(':')
                     if (sep > 0) {
@@ -118,20 +162,28 @@ class HttpDownloader(
                 if (!response.isSuccessful) {
                     throw DownloadException("HTTP ${response.code} for video URL")
                 }
-                val total = response.body?.contentLength() ?: -1L
-                val out: OutputStream = storage.openVideoOutputStream(epDir, url)
-                    ?: return null
-                val videoFile = epDir.listFiles().firstOrNull {
-                    it.name?.startsWith("video.") == true
+
+                // ── Video-type detection ──
+                // Reject HLS/DASH/HTML before we waste bandwidth downloading
+                // a corrupt/playlist file. This is the fix for the "green screen"
+                // corrupt-download issue.
+                val videoType = VideoTypeDetector.detect(url, response)
+                if (!VideoTypeDetector.isDownloadable(videoType)) {
+                    val reason = VideoTypeDetector.unsupportedReason(videoType)
+                        ?: "Unsupported video type: $videoType"
+                    DownloadLogger.e("Rejected video (type=$videoType): $reason")
+                    throw DownloadException(reason)
                 }
 
-                out.use { os ->
+                val total = response.body?.contentLength() ?: -1L
+                DownloadLogger.i("Downloading (type=$videoType, contentLength=$total) → ${tempFile.name}")
+
+                FileOutputStream(tempFile).use { os ->
                     response.body?.byteStream()?.use { input ->
                         val buffer = ByteArray(BUFFER_SIZE)
                         var downloaded = 0L
                         while (true) {
-                            // Cooperative cancellation — pause/cancel throws here.
-                            coroutineContext.ensureActive()
+                            coroutineContext.ensureActive() // cooperative cancel/pause
                             val read = input.read(buffer)
                             if (read == -1) break
                             os.write(buffer, 0, read)
@@ -141,11 +193,10 @@ class HttpDownloader(
                         os.flush()
                     }
                 }
-                videoFile?.uri?.toString()
+                tempFile.length()
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
-            // Propagate cancellation (pause/cancel) — the queue handles cleanup.
-            DownloadLogger.d("Video download cancelled/paused")
+            DownloadLogger.d("Video download cancelled/paused (task $taskId)")
             throw e
         } catch (e: DownloadException) {
             throw e
@@ -154,17 +205,47 @@ class HttpDownloader(
         }
     }
 
-    /** Downloads every subtitle track. Best-effort: a failed subtitle is skipped (logged). */
-    private suspend fun downloadSubtitles(
+    /**
+     * Validates the downloaded temp file before publishing. Rejects:
+     *  - Empty/missing files
+     *  - Files smaller than [MIN_VALID_VIDEO_BYTES] (corrupt/playlist/error page)
+     *
+     * The video-type check already happened at the HTTP-response level; this is
+     * a second line of defense for the actual bytes on disk.
+     */
+    private fun validateDownloadedFile(url: String, tempFile: File, downloadedBytes: Long) {
+        if (!tempFile.exists() || tempFile.length() == 0L) {
+            throw DownloadException("Downloaded file is empty — the source returned no data.")
+        }
+        if (tempFile.length() < MIN_VALID_VIDEO_BYTES) {
+            DownloadLogger.e("Downloaded file too small: ${tempFile.length()} bytes (min=$MIN_VALID_VIDEO_BYTES)")
+            throw DownloadException(
+                "Downloaded file is only ${tempFile.length()} bytes — too small to be a real video. " +
+                "The source may have returned an error page or a playlist instead of the video file."
+            )
+        }
+        // Double-check the URL-based type (catches cases where the Content-Type
+        // header was generic but the URL clearly indicates HLS/HTML).
+        val urlType = VideoTypeDetector.detectFromUrl(url)
+        if (!VideoTypeDetector.isDownloadable(urlType)) {
+            val reason = VideoTypeDetector.unsupportedReason(urlType) ?: "Unsupported video type"
+            throw DownloadException(reason)
+        }
+    }
+
+    /** Downloads every subtitle track to the temp cache dir. Best-effort (failures skipped). */
+    private suspend fun downloadSubtitlesToCache(
         tracks: List<DownloadTrack>,
-        epDir: androidx.documentfile.provider.DocumentFile,
-    ): List<String> {
-        val uris = mutableListOf<String>()
+        tempSubsDir: File,
+    ) {
         tracks.forEachIndexed { index, track ->
             coroutineContext.ensureActive()
             try {
-                val out = storage.openSubtitleOutputStream(epDir, track, index) ?: return@forEachIndexed
-                out.use { os ->
+                val ext = subtitleExtension(track.url)
+                val safeLang = track.lang.ifBlank { "track" }
+                    .replace(Regex("[^A-Za-z0-9 ]"), " ").trim().ifBlank { "track" }
+                val tempSub = File(tempSubsDir, "${safeLang}_$index.$ext")
+                FileOutputStream(tempSub).use { os ->
                     client.newCall(Request.Builder().url(track.url).build()).execute().use { resp ->
                         if (!resp.isSuccessful) {
                             DownloadLogger.w("Subtitle $index (${track.lang}) HTTP ${resp.code} — skipped")
@@ -173,22 +254,47 @@ class HttpDownloader(
                         resp.body?.byteStream()?.use { it.copyTo(os) }
                     }
                 }
-                // Capture the URI we just wrote.
-                val subDir = epDir.findFile("data")?.findFile("subtitles")
-                val safeLang = track.lang.ifBlank { "track" }
-                    .replace(Regex("[^A-Za-z0-9 ]"), " ").trim().ifBlank { "track" }
-                subDir?.findFile("${safeLang}_$index.${subtitleExt(track.url)}")?.uri?.toString()
-                    ?.let { uris.add(it) }
-                DownloadLogger.d("Subtitle $index (${track.lang}) downloaded")
+                DownloadLogger.d("Subtitle $index (${track.lang}) downloaded (${tempSub.length()} bytes)")
             } catch (e: Exception) {
-                // A missing subtitle must NOT fail the whole download — skip it.
                 DownloadLogger.w("Subtitle $index (${track.lang}) failed — skipped", e)
             }
         }
-        return uris
     }
 
-    private fun subtitleExt(url: String): String {
+    private fun writeMetadataToCache(metaFile: File, task: DownloadTask) {
+        try {
+            val json = kotlinx.serialization.json.Json {
+                encodeDefaults = true
+                prettyPrint = true
+            }
+            val cache = EpisodeMetadataCache(
+                anilistId = task.request.anime.anilistId,
+                animeTitle = task.request.anime.title,
+                episodeNumber = task.request.episode.episodeNumber,
+                episodeName = task.request.episode.name,
+                videoUrl = task.request.videoUrl,
+                downloadedAt = System.currentTimeMillis(),
+                sourceId = task.request.sourceId,
+            )
+            metaFile.writeText(json.encodeToString(EpisodeMetadataCache.serializer(), cache))
+        } catch (e: Exception) {
+            DownloadLogger.w("Failed to write metadata.json (non-fatal)", e)
+        }
+    }
+
+    private fun inferVideoExtension(url: String): String {
+        val noQuery = url.substringBefore('?')
+        val path = noQuery.substringAfterLast('/')
+        val dot = path.lastIndexOf('.')
+        if (dot < 0 || dot == path.length - 1) return "mp4"
+        val ext = path.substring(dot + 1).lowercase()
+        return when (ext) {
+            "mp4", "mkv", "webm", "avi", "mov", "m4v", "ts" -> ext
+            else -> "mp4"
+        }
+    }
+
+    private fun subtitleExtension(url: String): String {
         val noQuery = url.substringBefore('?')
         val dot = noQuery.lastIndexOf('.')
         if (dot < 0) return "srt"
@@ -199,9 +305,13 @@ class HttpDownloader(
     }
 
     companion object {
-        private const val BUFFER_SIZE = 8 * 1024 // 8 KB — balance of throughput vs memory
+        private const val BUFFER_SIZE = 8 * 1024 // 8 KB
+        // A real video episode is at least hundreds of KB. Anything smaller is
+        // almost certainly an error page, a playlist, or a corrupt download.
+        // 500 KB is a conservative minimum (a 5-minute low-res episode is ~10+ MB).
+        private const val MIN_VALID_VIDEO_BYTES = 500L * 1024L
     }
 }
 
-/** Thrown when a download fails (network/IO/HTTP error). Carries a user-facing message. */
+/** Thrown when a download fails (network/IO/validation/HTTP error). Carries a user-facing message. */
 class DownloadException(message: String, cause: Throwable? = null) : Exception(message, cause)

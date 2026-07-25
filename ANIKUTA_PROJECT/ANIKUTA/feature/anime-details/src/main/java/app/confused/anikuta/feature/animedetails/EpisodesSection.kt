@@ -94,6 +94,12 @@ fun EpisodesSection(
     showMetadataLoading: Boolean = true,
     /** Agent 2 — Downloads: invoked when the user taps the download button on an episode row. */
     onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
+    /** Per-episode download states, keyed by episode URL (for the row UI). */
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     var showManualSearch by remember { mutableStateOf(false) }
 
@@ -214,6 +220,11 @@ fun EpisodesSection(
                 currentSource = currentMatch?.source,
                 onToggleWatched = onToggleWatched,
                 onDownloadEpisode = onDownloadEpisode,
+                downloadStates = downloadStates,
+                onDownloadCancel = onDownloadCancel,
+                onDownloadResume = onDownloadResume,
+                onDownloadRetry = onDownloadRetry,
+                onDownloadDelete = onDownloadDelete,
             )
             is EpisodeState.NoMatch -> NoSourcesState(
                 onSearchManually = { showManualSearch = true },
@@ -277,6 +288,11 @@ private fun EpisodeList(
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
     onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         episodes.forEachIndexed { index, episode ->
@@ -297,6 +313,11 @@ private fun EpisodeList(
                 onDownload = {
                     currentSource?.let { source -> onDownloadEpisode(episode, source) }
                 },
+                downloadState = downloadStates[episode.url] ?: EpisodeDownloadState.NotDownloaded,
+                onDownloadCancel = { onDownloadCancel(episode.url) },
+                onDownloadResume = { onDownloadResume(episode.url) },
+                onDownloadRetry = { onDownloadRetry(episode.url) },
+                onDownloadDelete = { onDownloadDelete(episode.url) },
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -352,6 +373,11 @@ private fun EpisodeRow(
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
     onDownload: () -> Unit = {},
+    downloadState: EpisodeDownloadState = EpisodeDownloadState.NotDownloaded,
+    onDownloadCancel: () -> Unit = {},
+    onDownloadResume: () -> Unit = {},
+    onDownloadRetry: () -> Unit = {},
+    onDownloadDelete: () -> Unit = {},
 ) {
     // Background matches the More screen button background (surfaceVariant@0.4f).
     val cardColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -528,21 +554,19 @@ private fun EpisodeRow(
                 Spacer(modifier = Modifier.weight(1f))
             }
 
-            // ── Download button (Agent 2 — Downloads & Offline Playback) ──
-            // Shown when the pref is on. Triggers [onDownload] which enqueues the
-            // episode for download via the DownloadOrchestrator (wired in MainActivity).
-            if (showDownloadBtn) {
-                IconButton(
-                    onClick = onDownload,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Download,
-                        contentDescription = "Download episode",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+            // ── Download control (Agent 2 — Downloads & Offline Playback) ──
+            // State-driven: download button / progress+cancel / checkmark+delete.
+            // Shown when the pref is on OR the episode is already downloaded/
+            // downloading (so the user can always see/manage the state).
+            if (showDownloadBtn || downloadState != EpisodeDownloadState.NotDownloaded) {
+                EpisodeDownloadControl(
+                    state = downloadState,
+                    onDownload = onDownload,
+                    onCancel = onDownloadCancel,
+                    onResume = onDownloadResume,
+                    onRetry = onDownloadRetry,
+                    onDelete = onDownloadDelete,
+                )
             }
         }
 

@@ -103,6 +103,8 @@ dependencies {
     // Lifecycle
     implementation(androidx.lifecycle.runtimektx)
     implementation(androidx.lifecycle.viewmodel.compose)
+    // lifecycle-runtime-compose — for collectAsStateWithLifecycle (download-state observation)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // Logging (ADR-033)
     implementation(libs.logcat)

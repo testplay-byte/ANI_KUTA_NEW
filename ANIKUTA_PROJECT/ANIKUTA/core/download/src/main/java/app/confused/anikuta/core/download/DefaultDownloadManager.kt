@@ -45,6 +45,7 @@ class DefaultDownloadManager(
     private val okHttp: OkHttpClient,
     private val preferences: DownloadPreferences,
     private val store: DownloadStore,
+    private val tempCache: TempDownloadCache,
     scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
             // Last-resort safety net: if anything slips past the per-callback
@@ -58,7 +59,7 @@ class DefaultDownloadManager(
 
     private val appContext = context.applicationContext
     private val storage = DownloadStorageProvider(appContext, preferences)
-    private val downloader = HttpDownloader(okHttp, storage)
+    private val downloader = HttpDownloader(okHttp, storage, tempCache)
     private val notifier = DownloadNotificationManager(appContext)
 
     private val queue = DownloadQueue(
@@ -102,6 +103,10 @@ class DefaultDownloadManager(
         queue.tasks.map { list -> list.filter { it.status == DownloadStatus.COMPLETED } }
 
     override val allDownloads: Flow<List<DownloadTask>> = queue.tasks
+
+    /** Reactive map keyed by `"$anilistId:$episodeUrl"` → task, for episode-row UI. */
+    override val episodeDownloadStates: Flow<Map<String, DownloadTask>> =
+        queue.tasks.map { list -> list.associateBy { it.key } }
 
     override suspend fun enqueueDownload(request: DownloadRequest): Long {
         if (request.videoUrl.isBlank()) {

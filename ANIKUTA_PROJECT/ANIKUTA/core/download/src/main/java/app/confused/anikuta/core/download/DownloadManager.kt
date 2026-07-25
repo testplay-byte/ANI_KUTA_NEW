@@ -103,4 +103,13 @@ interface DownloadManager {
 
     /** All completed episodes for an anime (for the Downloads screen grouping). */
     suspend fun getDownloadedEpisodes(anilistId: Int): List<DownloadedEpisode>
+
+    /**
+     * A reactive map of download state for ALL tasks, keyed by
+     * `"$anilistId:$episodeUrl"`. Used by the episode-row UI to show
+     * download/progress/downloaded state per episode without per-row queries.
+     *
+     * Collect this once per screen (not per row) and build a local lookup map.
+     */
+    val episodeDownloadStates: Flow<Map<String, DownloadTask>>
 }

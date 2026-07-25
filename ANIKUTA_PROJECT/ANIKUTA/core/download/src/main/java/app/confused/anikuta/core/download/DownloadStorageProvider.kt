@@ -128,6 +128,98 @@ class DownloadStorageProvider(
             ?.findFile(episodeFolderName(episode))
     }
 
+    /**
+     * Publishes a completed temp download from [TempDownloadCache] into the
+     * user's SAF folder. This is the "atomic move" step:
+     *
+     * 1. Ensures the episode folder structure exists.
+     * 2. Copies the temp video file → `Episode NNN/video.<ext>` in SAF.
+     * 3. Copies each temp subtitle → `Episode NNN/data/subtitles/<lang>_<i>.<ext>`.
+     * 4. Copies the temp metadata.json → `Episode NNN/data/metadata.json`.
+     *
+     * Returns [PublishResult] with the SAF content URIs (for offline playback +
+     * the task record). On any failure, the episode folder is left in a partial
+     * state — the caller should mark the task ERROR (the temp dir is cleaned up
+     * by [TempDownloadCache.cleanupTask] regardless).
+     *
+     * All I/O runs on `Dispatchers.IO` (callers must be in a coroutine).
+     */
+    fun publishToUserFolder(
+        anime: DownloadAnimeInfo,
+        episode: DownloadEpisodeInfo,
+        tempVideoFile: java.io.File,
+        tempSubtitlesDir: java.io.File,
+        tempMetadataFile: java.io.File,
+        videoExtension: String,
+    ): PublishResult {
+        val epDir = ensureEpisodeDir(anime, episode)
+            ?: return PublishResult.Error("Download folder not configured or not writable")
+
+        try {
+            // ── 1. Copy the video ──
+            val videoName = "video.$videoExtension"
+            epDir.findFile(videoName)?.delete() // overwrite if re-downloading
+            val videoTarget = epDir.createFile("video/*", videoName)
+                ?: return PublishResult.Error("Failed to create video file in SAF folder")
+            context.contentResolver.openOutputStream(videoTarget.uri, "w")?.use { out ->
+                tempVideoFile.inputStream().use { it.copyTo(out) }
+            } ?: return PublishResult.Error("Failed to open video output stream in SAF folder")
+
+            // ── 2. Copy subtitles ──
+            val subtitleUris = mutableListOf<String>()
+            val subDir = epDir.findFile("data")?.findFile("subtitles")
+            if (subDir != null && tempSubtitlesDir.exists()) {
+                tempSubtitlesDir.listFiles()?.forEach { tempSub ->
+                    if (!tempSub.isFile) return@forEach
+                    subDir.findFile(tempSub.name)?.delete()
+                    val target = subDir.createFile("application/octet-stream", tempSub.name)
+                    if (target != null) {
+                        context.contentResolver.openOutputStream(target.uri, "w")?.use { out ->
+                            tempSub.inputStream().use { it.copyTo(out) }
+                        }
+                        subtitleUris.add(target.uri.toString())
+                    }
+                }
+            }
+
+            // ── 3. Copy metadata.json ──
+            if (tempMetadataFile.exists()) {
+                val dataDir = epDir.findFile("data") ?: ensureDir(epDir, "data")
+                if (dataDir != null) {
+                    dataDir.findFile("metadata.json")?.delete()
+                    val metaTarget = dataDir.createFile("application/json", "metadata.json")
+                    if (metaTarget != null) {
+                        context.contentResolver.openOutputStream(metaTarget.uri, "w")?.use { out ->
+                            tempMetadataFile.inputStream().use { it.copyTo(out) }
+                        }
+                    }
+                }
+            }
+
+            val videoSize = tempVideoFile.length()
+            DownloadLogger.i("Published to SAF: ${anime.title} EP ${episode.episodeNumber} " +
+                "($videoSize bytes, ${subtitleUris.size} subs)")
+            return PublishResult.Success(
+                videoUri = videoTarget.uri.toString(),
+                subtitleUris = subtitleUris,
+                sizeBytes = videoSize,
+            )
+        } catch (e: Exception) {
+            DownloadLogger.e("Failed to publish download to SAF folder", e)
+            return PublishResult.Error("Failed to move download to folder: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /** The result of [publishToUserFolder]. */
+    sealed interface PublishResult {
+        data class Success(
+            val videoUri: String,
+            val subtitleUris: List<String>,
+            val sizeBytes: Long,
+        ) : PublishResult
+        data class Error(val message: String) : PublishResult
+    }
+
     // ── Output streams for the downloader ──
 
     /** Opens an [OutputStream] for the video file inside the episode dir. */

@@ -5,6 +5,7 @@ import app.confused.anikuta.core.download.DefaultDownloadManager
 import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadPreferences
 import app.confused.anikuta.core.download.DownloadStore
+import app.confused.anikuta.core.download.TempDownloadCache
 import app.confused.anikuta.core.preferences.PreferenceStore
 import okhttp3.OkHttpClient
 import org.koin.core.module.Module
@@ -19,6 +20,9 @@ import java.util.concurrent.TimeUnit
  *  - [DownloadPreferences] — backed by the shared [PreferenceStore].
  *  - [DownloadStore] — backed by the SAME [PreferenceStore] (so the queue's
  *    persisted state lives alongside other prefs).
+ *  - [TempDownloadCache] — the internal-cache manager for partial downloads
+ *    (v2 pipeline: download → validate → publish to SAF). Cleans up stale
+ *    temp dirs from a previous crash on first resolution.
  *  - A download-dedicated [OkHttpClient] (qualifier `"download"`) — long
  *    timeouts for large files, separate from the extension NetworkHelper
  *    client so a stuck download can't starve extension HTTP calls.
@@ -31,6 +35,9 @@ import java.util.concurrent.TimeUnit
 val downloadModule: Module = module {
     single { DownloadPreferences(get<PreferenceStore>()) }
     single { DownloadStore(get<PreferenceStore>()) }
+
+    // TempDownloadCache — clean up stale dirs from a previous crash on creation.
+    single { TempDownloadCache(get<Context>()).also { it.cleanupStale() } }
 
     single(named("download")) {
         OkHttpClient.Builder()
@@ -47,6 +54,7 @@ val downloadModule: Module = module {
             okHttp = get(named("download")),
             preferences = get(),
             store = get(),
+            tempCache = get(),
         )
     }
 }
