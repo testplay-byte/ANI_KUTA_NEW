@@ -359,6 +359,15 @@ private fun AnikutaApp() {
                     }
                 }
             }
+            // ── Agent 1: Backup & Restore ──
+            // MUST come before showSettings — opened from Settings, so showSettings
+            // is still true when showBackup becomes true. If showSettings is checked
+            // first, it shadows showBackup and the user sees nothing happen.
+            showBackup -> {
+                app.confused.anikuta.feature.backup.BackupSettingsScreen(
+                    onBack = { showBackup = false },
+                )
+            }
             // Settings sub-screen (from More)
             showSettings -> {
                 SettingsScreen(
@@ -366,12 +375,6 @@ private fun AnikutaApp() {
                     onOpenEpisodeSettings = { episodeSettingsPage = app.confused.anikuta.feature.episodesettings.EpisodeSettingsPage.Hub },
                     onOpenBackup = { showBackup = true },
                     onBack = { showSettings = false },
-                )
-            }
-            // ── Agent 1: Backup & Restore ──
-            showBackup -> {
-                app.confused.anikuta.feature.backup.BackupSettingsScreen(
-                    onBack = { showBackup = false },
                 )
             }
             // ── Agent 1: History + Updates ── (full-screen sub-pages from More)
