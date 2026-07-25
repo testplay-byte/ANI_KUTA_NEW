@@ -86,10 +86,17 @@ fun DownloadPreferencesSheet(
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
-            // Folder row
+            // Folder row — shows the readable folder name when set (per owner feedback).
+            val folderSubtitle = if (folderUri.isNotBlank()) {
+                val name = app.confused.anikuta.core.download.DownloadStorageProvider
+                    .folderDisplayName(folderUri)
+                if (!name.isNullOrBlank()) "Folder: $name" else "Folder selected"
+            } else {
+                "Not set — tap to choose"
+            }
             SettingsRow(
                 title = "Download folder",
-                subtitle = if (folderUri.isNotBlank()) "Folder selected" else "Not set — tap to choose",
+                subtitle = folderSubtitle,
                 onClick = { folderLauncher.launch(null) },
             )
 

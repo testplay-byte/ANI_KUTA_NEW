@@ -215,7 +215,10 @@ class DownloadQueue(
                     mutateTask(task.id) { completed }
                     persistNow()
                     DownloadLogger.i("Completed: id=${task.id}")
-                    onTaskCompleted?.invoke(completed)
+                    // Notify via callback — guarded so a notifier failure can't
+                    // fail the download job (the state is already persisted).
+                    try { onTaskCompleted?.invoke(completed) }
+                    catch (e: Exception) { DownloadLogger.w("onTaskCompleted callback failed (non-fatal)", e) }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Pause/cancel — the pause()/cancel() handlers already set the status.
@@ -227,7 +230,8 @@ class DownloadQueue(
                 if (errorTask != null) {
                     mutateTask(task.id) { errorTask }
                     persistNow()
-                    onTaskError?.invoke(errorTask)
+                    try { onTaskError?.invoke(errorTask) }
+                    catch (cb: Exception) { DownloadLogger.w("onTaskError callback failed (non-fatal)", cb) }
                 }
                 DownloadLogger.e("Download error: id=${task.id}", e)
             } catch (e: Exception) {
@@ -238,7 +242,8 @@ class DownloadQueue(
                 if (errorTask != null) {
                     mutateTask(task.id) { errorTask }
                     persistNow()
-                    onTaskError?.invoke(errorTask)
+                    try { onTaskError?.invoke(errorTask) }
+                    catch (cb: Exception) { DownloadLogger.w("onTaskError callback failed (non-fatal)", cb) }
                 }
                 DownloadLogger.e("Unexpected error: id=${task.id}", e)
             } finally {

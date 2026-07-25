@@ -290,6 +290,33 @@ class DownloadStorageProvider(
             else -> "srt"
         }
     }
+
+    companion object {
+        /**
+         * A best-effort readable name for a SAF tree URI string (no I/O — pure
+         * URI parsing, safe on the main thread). Used by the settings sheet to
+         * show the currently-selected folder name.
+         *
+         * SAF tree URIs look like:
+         * `content://com.android.externalstorage.documents/tree/primary%3AANIKUTA%20Downloads`
+         * `DocumentsContract.getTreeDocumentId` returns the decoded document ID
+         * (e.g. `primary:ANIKUTA Downloads`); we take the last segment after
+         * `:` or `/` as the display name. Returns null if the URI is blank or
+         * unparseable.
+         */
+        fun folderDisplayName(uriString: String): String? {
+            if (uriString.isBlank()) return null
+            return try {
+                val uri = Uri.parse(uriString)
+                val docId = DocumentsContract.getTreeDocumentId(uri)
+                val decoded = Uri.decode(docId)
+                decoded.substringAfterLast(':').substringAfterLast('/').ifBlank { decoded }
+            } catch (e: Exception) {
+                DownloadLogger.w("Failed to parse folder display name from URI", e)
+                null
+            }
+        }
+    }
 }
 
 /**

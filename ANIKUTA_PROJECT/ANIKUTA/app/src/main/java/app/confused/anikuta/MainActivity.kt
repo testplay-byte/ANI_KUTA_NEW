@@ -355,6 +355,11 @@ private fun AnikutaApp() {
             title = watchCtx.animeTitle.ifBlank { "Anime $anilistId" },
             coverUrl = watchCtx.coverUrl,
         )
+        // Instant feedback — the resolve+enqueue runs async (may take 1-3s for
+        // the source to return video URLs), so show a toast immediately so the
+        // user knows the tap registered.
+        Toast.makeText(context, "Starting download…", Toast.LENGTH_SHORT).show()
+        Log.i("AnikutaDownload", "Download requested: ${animeInfo.title} EP ${episode.episode_number}")
         scope.launch {
             val result = downloadOrchestrator.enqueueDownload(animeInfo, episode, source)
             when (result) {

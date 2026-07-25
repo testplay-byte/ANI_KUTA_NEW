@@ -35,75 +35,105 @@ class DownloadNotificationManager(
         ensureChannel()
     }
 
-    /** Show/update the active-download summary notification. */
+    /**
+     * Show/update the active-download summary notification.
+     *
+     * **Resilience.** This method MUST NEVER throw — it's called from a hot
+     * StateFlow collector in [DefaultDownloadManager]; an uncaught exception
+     * there crashes the app. Every operation is guarded:
+     *  - [firstOrNull] (not `first`) so a list with no DOWNLOADING task (e.g.
+     *    all QUEUED right after enqueue) doesn't throw `NoSuchElementException`.
+     *  - The whole body is wrapped in try/catch; failures are logged + swallowed.
+     *  - `notify()` is wrapped for `SecurityException` (POST_NOTIFICATIONS
+     *    denied on Android 13+) and generic `Exception` (some OEMs throw
+     *    on notification posting).
+     */
     fun updateProgress(active: List<DownloadTask>) {
-        if (active.isEmpty()) {
-            cancel(SUMMARY_ID)
-            return
-        }
-        val now = System.currentTimeMillis()
-        if (now - lastProgressAt < PROGRESS_THROTTLE_MS) return
-        lastProgressAt = now
-
-        val primary = active.first { it.status == DownloadStatus.DOWNLOADING } ?: active.first()
-        val title = if (active.size == 1) {
-            "${primary.request.anime.title} — EP ${primary.request.episode.episodeNumber.toInt()}"
-        } else {
-            "Downloading ${active.size} episodes"
-        }
-        val progressText = if (primary.totalBytes > 0) {
-            "${primary.progress}% • ${formatBytes(primary.downloadedBytes)} / ${formatBytes(primary.totalBytes)}"
-        } else {
-            "${primary.progress}% • ${formatBytes(primary.downloadedBytes)}"
-        }
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(title)
-            .setContentText(progressText)
-            .setProgress(100, primary.progress.coerceAtLeast(0), primary.progress <= 0)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setContentIntent(openAppIntent())
-
         try {
-            notificationManager.notify(SUMMARY_ID, builder.build())
-        } catch (e: SecurityException) {
-            // POST_NOTIFICATIONS not granted — fail silently (the in-app UI still works).
-            DownloadLogger.w("Cannot post download notification (permission denied)", e)
+            if (active.isEmpty()) {
+                cancel(SUMMARY_ID)
+                return
+            }
+            val now = System.currentTimeMillis()
+            if (now - lastProgressAt < PROGRESS_THROTTLE_MS) return
+            lastProgressAt = now
+
+            // Prefer a DOWNLOADING task for the progress bar; fall back to the
+            // first active task (e.g. when all are QUEUED waiting for a permit).
+            // firstOrNull (NOT first) — first{} throws NoSuchElementException
+            // when no task is DOWNLOADING yet, which was the enqueue-time crash.
+            val primary = active.firstOrNull { it.status == DownloadStatus.DOWNLOADING }
+                ?: active.first()
+            val title = if (active.size == 1) {
+                "${primary.request.anime.title} — EP ${primary.request.episode.episodeNumber.toInt()}"
+            } else {
+                "Downloading ${active.size} episodes"
+            }
+            val progressText = if (primary.totalBytes > 0) {
+                "${primary.progress}% • ${formatBytes(primary.downloadedBytes)} / ${formatBytes(primary.totalBytes)}"
+            } else {
+                "${primary.progress}% • ${formatBytes(primary.downloadedBytes)}"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(title)
+                .setContentText(progressText)
+                .setProgress(100, primary.progress.coerceAtLeast(0), primary.progress <= 0)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setSilent(true)
+                .setContentIntent(openAppIntent())
+
+            try {
+                notificationManager.notify(SUMMARY_ID, builder.build())
+            } catch (e: SecurityException) {
+                // POST_NOTIFICATIONS not granted — fail silently (in-app UI still works).
+                DownloadLogger.w("Cannot post download notification (permission denied)", e)
+            } catch (e: Exception) {
+                // Some OEMs throw on notification posting — never crash the engine.
+                DownloadLogger.w("Notification post failed (non-fatal)", e)
+            }
+        } catch (e: Exception) {
+            // Defense-in-depth: a notification update failure must NEVER crash
+            // the download engine. Log + swallow.
+            DownloadLogger.e("updateProgress failed (non-fatal)", e)
         }
     }
 
-    /** Post a one-shot completion notification. */
+    /** Post a one-shot completion notification. Never throws. */
     fun notifyCompleted(task: DownloadTask) {
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("Download complete")
-            .setContentText("${task.request.anime.title} — EP ${task.request.episode.episodeNumber.toInt()}")
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(openAppIntent())
         try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Download complete")
+                .setContentText("${task.request.anime.title} — EP ${task.request.episode.episodeNumber.toInt()}")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setContentIntent(openAppIntent())
             notificationManager.notify(task.id.toInt() + COMPLETION_OFFSET, builder.build())
         } catch (e: SecurityException) {
-            DownloadLogger.w("Cannot post completion notification", e)
+            DownloadLogger.w("Cannot post completion notification (permission denied)", e)
+        } catch (e: Exception) {
+            DownloadLogger.w("notifyCompleted failed (non-fatal)", e)
         }
     }
 
-    /** Post a one-shot error notification. */
+    /** Post a one-shot error notification. Never throws. */
     fun notifyError(task: DownloadTask) {
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("Download failed")
-            .setContentText("${task.request.anime.title} — ${task.errorMessage ?: "Unknown error"}")
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(openAppIntent())
         try {
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentTitle("Download failed")
+                .setContentText("${task.request.anime.title} — ${task.errorMessage ?: "Unknown error"}")
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openAppIntent())
             notificationManager.notify(task.id.toInt() + ERROR_OFFSET, builder.build())
         } catch (e: SecurityException) {
-            DownloadLogger.w("Cannot post error notification", e)
+            DownloadLogger.w("Cannot post error notification (permission denied)", e)
+        } catch (e: Exception) {
+            DownloadLogger.w("notifyError failed (non-fatal)", e)
         }
     }
 

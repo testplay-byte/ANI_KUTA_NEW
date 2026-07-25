@@ -3,12 +3,11 @@ package app.confused.anikuta.core.download
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -46,7 +45,15 @@ class DefaultDownloadManager(
     private val okHttp: OkHttpClient,
     private val preferences: DownloadPreferences,
     private val store: DownloadStore,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    scope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+            // Last-resort safety net: if anything slips past the per-callback
+            // try/catch guards, log it here instead of crashing the app. The
+            // download engine is best-effort — a background coroutine failure
+            // must NEVER take down the foreground UI.
+            DownloadLogger.e("Uncaught coroutine exception in download scope (suppressed)", e)
+        }
+    ),
 ) : DownloadManager {
 
     private val appContext = context.applicationContext
@@ -69,11 +76,22 @@ class DefaultDownloadManager(
     // (One-shot completion/error notifications are posted by the queue's job
     // completion handler via the notifier — kept out of this hot collector to
     // avoid re-posting on every state emission.)
+    //
+    // **Resilience.** The collector body is wrapped in try/catch so a
+    // notification/observer failure NEVER crashes the download engine. Without
+    // this, an uncaught exception in the collector propagates to the
+    // CoroutineExceptionHandler (none installed) → app crash. This was the
+    // path of the enqueue-time `first{}` crash; the guard is defense-in-depth
+    // on top of the notifier's own internal guards.
     private val observeJob = scope.launch {
         queue.tasks.collect { all ->
-            val active = all.filter { it.isInQueue }
-            notifier.updateProgress(active)
-            if (active.isEmpty()) notifier.cancelActive()
+            try {
+                val active = all.filter { it.isInQueue }
+                notifier.updateProgress(active)
+                if (active.isEmpty()) notifier.cancelActive()
+            } catch (e: Exception) {
+                DownloadLogger.e("Download state observer failed (non-fatal)", e)
+            }
         }
     }
 
