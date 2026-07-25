@@ -80,6 +80,7 @@ import org.koin.androidx.compose.koinViewModel
  * - Beautiful 5-second-minimum restore animation.
  * - Post-restore: redirected to Library page.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BackupSettingsScreen(
     onBack: () -> Unit,

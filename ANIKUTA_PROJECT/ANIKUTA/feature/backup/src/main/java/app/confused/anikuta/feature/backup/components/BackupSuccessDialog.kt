@@ -206,7 +206,7 @@ fun CategoryCountCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface2,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
         shape = RoundedCornerShape(8.dp),
         modifier = modifier,
     ) {

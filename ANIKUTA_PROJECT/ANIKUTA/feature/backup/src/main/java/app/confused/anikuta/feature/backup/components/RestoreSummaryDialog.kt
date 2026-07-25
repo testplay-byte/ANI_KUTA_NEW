@@ -113,7 +113,7 @@ fun RestoreSummaryDialog(
 
                 // ── "What will be restored" — whole section in a dedicated background ──
                 Surface(
-                    color = MaterialTheme.colorScheme.surface2,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
