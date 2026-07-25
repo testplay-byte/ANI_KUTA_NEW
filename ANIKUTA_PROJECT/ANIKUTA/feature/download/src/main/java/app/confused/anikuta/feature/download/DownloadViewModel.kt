@@ -6,6 +6,7 @@ import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadPreferences
 import app.confused.anikuta.core.download.DownloadStatus
 import app.confused.anikuta.core.download.DownloadTask
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,25 @@ class DownloadViewModel(
                     isLoading = false,
                 )
             }.collect { _state.value = it }
+        }
+
+        // ── Auto-clear completed entries after 10 seconds ──
+        // Per the owner's request: "after downloading, the entries automatically
+        // clear out after 10 seconds." This removes COMPLETED tasks from the
+        // active queue (the file stays on disk). Each completed task gets a
+        // 10-second delay before removal.
+        viewModelScope.launch {
+            manager.activeDownloads.collect { active ->
+                active.filter { it.status == DownloadStatus.COMPLETED }.forEach { task ->
+                    // Launch a coroutine per completed task that waits 10s then removes it.
+                    // The task ID is captured; if the task is already removed by then,
+                    // removeFromQueue is a no-op.
+                    launch {
+                        delay(10_000)
+                        manager.removeFromQueue(task.id)
+                    }
+                }
+            }
         }
     }
 

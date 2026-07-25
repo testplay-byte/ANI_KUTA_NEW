@@ -125,6 +125,14 @@ class DefaultDownloadManager(
     override suspend fun cancelDownload(taskId: Long) = queue.cancel(taskId)
     override suspend fun retryDownload(taskId: Long) = queue.retry(taskId)
 
+    override suspend fun removeFromQueue(taskId: Long) {
+        // Only remove if the task is COMPLETED (don't remove active/queued tasks).
+        val task = queue.tasks.value.firstOrNull { it.id == taskId } ?: return
+        if (task.status == DownloadStatus.COMPLETED) {
+            queue.removeCompleted(taskId)
+        }
+    }
+
     override fun setDownloadFolder(treeUriString: String) {
         storage.takeFolderPermission(android.net.Uri.parse(treeUriString))
     }

@@ -72,6 +72,13 @@ interface DownloadManager {
     /** Retry an errored task (moves it back to QUEUED). */
     suspend fun retryDownload(taskId: Long)
 
+    /**
+     * Removes a COMPLETED task from the queue (the file stays on disk).
+     * Used by the auto-clear-after-10s feature: completed entries disappear
+     * from the download queue but the downloaded file remains in the user's folder.
+     */
+    suspend fun removeFromQueue(taskId: Long)
+
     // ── Folder configuration ──
 
     /**
