@@ -32,11 +32,15 @@ sealed class AnilistResolution {
     data class Resolved(
         val anilistId: Int,
         val anilistAnime: AniListAnime?,
-        val method: String, // "tracker", "mal-lookup", "title-search"
+        val method: String, // "tracker", "mal-lookup", "title-search", "manual"
+        val originalTitle: String = "",
     ) : AnilistResolution()
 
     /** Failed to resolve — no AniList match found. */
     data class Failed(val title: String, val reason: String) : AnilistResolution()
+
+    /** Rate limited — the AniList API was temporarily unavailable. Can be retried. */
+    data class RateLimited(val title: String, val reason: String = "Rate limited") : AnilistResolution()
 }
 
 /**
@@ -116,11 +120,15 @@ class AniyomiBackupTranslator(
      */
     suspend fun translate(aniyomiBackup: AniyomiBackup): TranslationResult = withContext(Dispatchers.IO) {
         Log.i(TAG, "═══ Translating Aniyomi backup ═══")
-        Log.i(TAG, "  Anime: ${aniyomiBackup.backupAnime.size}")
+        Log.i(TAG, "  Total anime in backup: ${aniyomiBackup.backupAnime.size}")
+
+        // ── Only process FAVORITE anime (library entries) ──
+        // Non-favorite anime are not in the user's library, so we skip them.
+        val anime = aniyomiBackup.backupAnime.filter { it.favorite }
+        Log.i(TAG, "  Favorite (library) anime: ${anime.size}")
         Log.i(TAG, "  Categories: ${aniyomiBackup.backupAnimeCategories.size}")
         Log.i(TAG, "  Manga: ${aniyomiBackup.backupManga.size}")
 
-        val anime = aniyomiBackup.backupAnime
         val resolutions = mutableListOf<AnilistResolution>()
 
         // ── Phase 1: Resolve AniList IDs ──
@@ -140,12 +148,13 @@ class AniyomiBackupTranslator(
             val statusText = when (resolution) {
                 is AnilistResolution.Resolved -> "✓ AniList ${resolution.anilistId} (${resolution.method})"
                 is AnilistResolution.Failed -> "✗ ${resolution.reason}"
+                is AnilistResolution.RateLimited -> "⚠ ${resolution.reason}"
             }
             Log.i(TAG, "  [${index + 1}/${anime.size}] '${ani.title}' → $statusText")
         }
 
         // ── Phase 2: Build BackupContainer ──
-        val container = buildContainer(aniyomiBackup, resolutions)
+        val container = buildContainer(aniyomiBackup, resolutions, anime)
 
         val stats = TranslationStats(
             totalAnime = anime.size,
@@ -164,6 +173,55 @@ class AniyomiBackupTranslator(
     }
 
     /**
+     * Retries resolving AniList IDs for anime that were RateLimited.
+     *
+     * Called when the user clicks "Retry remaining" on the linking screen.
+     * Only retries RateLimited entries — Failed entries are left as-is.
+     *
+     * @param aniyomiBackup the original Aniyomi backup.
+     * @param previousResolutions the resolutions from the previous translate() call.
+     * @return updated translation result with retried resolutions.
+     */
+    suspend fun retryRateLimited(
+        aniyomiBackup: AniyomiBackup,
+        previousResolutions: List<AnilistResolution>,
+    ): TranslationResult = withContext(Dispatchers.IO) {
+        val anime = aniyomiBackup.backupAnime.filter { it.favorite }
+        val updatedResolutions = previousResolutions.toMutableList()
+
+        // Retry only RateLimited entries
+        previousResolutions.forEachIndexed { index, res ->
+            if (res is AnilistResolution.RateLimited) {
+                val ani = anime.getOrNull(index) ?: return@forEachIndexed
+                Log.i(TAG, "  Retrying: '${ani.title}'")
+                val newResolution = resolveAnilistId(ani)
+                updatedResolutions[index] = newResolution
+                Log.i(TAG, "    → ${
+                    when (newResolution) {
+                        is AnilistResolution.Resolved -> "✓ ${newResolution.anilistId}"
+                        is AnilistResolution.Failed -> "✗ ${newResolution.reason}"
+                        is AnilistResolution.RateLimited -> "⚠ still rate limited"
+                    }
+                }")
+            }
+        }
+
+        // Rebuild container with updated resolutions
+        val container = buildContainer(aniyomiBackup, updatedResolutions, anime)
+        val stats = TranslationStats(
+            totalAnime = anime.size,
+            resolvedAnime = updatedResolutions.count { it is AnilistResolution.Resolved },
+            failedAnime = updatedResolutions.count { it is AnilistResolution.Failed },
+            totalEpisodes = anime.sumOf { it.episodes.size },
+            totalCategories = aniyomiBackup.backupAnimeCategories.size,
+            totalManga = aniyomiBackup.backupManga.size,
+            totalMangaCategories = aniyomiBackup.backupCategories.size,
+        )
+        Log.i(TAG, "═══ Retry complete: ${stats.resolvedAnime}/${stats.totalAnime} resolved ═══")
+        TranslationResult(container, updatedResolutions, stats)
+    }
+
+    /**
      * Resolves the AniList ID for a single Aniyomi anime.
      *
      * Strategy (in priority order):
@@ -176,25 +234,35 @@ class AniyomiBackupTranslator(
         val anilistTrack = ani.tracking.firstOrNull { it.syncId == 2 && it.mediaId != 0L }
         if (anilistTrack != null) {
             val anilistId = anilistTrack.mediaId.toInt()
-            val anilistAnime = try { anilistApi.fetchById(anilistId) } catch (e: Exception) { null }
-            return AnilistResolution.Resolved(anilistId, anilistAnime, "tracker")
+            val anilistAnime = try { anilistApi.fetchById(anilistId) } catch (e: Exception) {
+                Log.w(TAG, "fetchById failed for AniList $anilistId: ${e.message}")
+                null
+            }
+            return AnilistResolution.Resolved(anilistId, anilistAnime, "tracker", ani.title)
         }
 
         // Strategy 2: MAL tracker binding → AniList lookup
         val malTrack = ani.tracking.firstOrNull { it.syncId == 1 && it.mediaId != 0L }
         if (malTrack != null) {
             val malId = malTrack.mediaId.toInt()
-            val anilistAnime = anilistApi.searchByMalId(malId)
+            val anilistAnime = try { anilistApi.searchByMalId(malId) } catch (e: Exception) {
+                Log.w(TAG, "searchByMalId failed for MAL $malId: ${e.message}")
+                null
+            }
             if (anilistAnime != null) {
-                return AnilistResolution.Resolved(anilistAnime.id, anilistAnime, "mal-lookup")
+                return AnilistResolution.Resolved(anilistAnime.id, anilistAnime, "mal-lookup", ani.title)
             }
         }
 
         // Strategy 3: Title search
         val title = ani.title.ifBlank { return AnilistResolution.Failed(ani.title, "Empty title") }
-        val anilistAnime = anilistApi.searchByTitle(title)
+        val anilistAnime = try { anilistApi.searchByTitle(title) } catch (e: Exception) {
+            // If the API call itself failed (rate limit, network error), mark as RateLimited
+            Log.w(TAG, "searchByTitle failed for '$title': ${e.message}")
+            return AnilistResolution.RateLimited(ani.title, "API error: ${e.message}")
+        }
         if (anilistAnime != null) {
-            return AnilistResolution.Resolved(anilistAnime.id, anilistAnime, "title-search")
+            return AnilistResolution.Resolved(anilistAnime.id, anilistAnime, "title-search", ani.title)
         }
 
         return AnilistResolution.Failed(ani.title, "No AniList match")
@@ -206,9 +274,9 @@ class AniyomiBackupTranslator(
     private fun buildContainer(
         aniyomi: AniyomiBackup,
         resolutions: List<AnilistResolution>,
+        anime: List<AniyomiBackupAnime>,
     ): BackupContainer {
         val entries = mutableListOf<BackupEntry>()
-        val anime = aniyomi.backupAnime
 
         // ── Library + Anime details (only resolved anime) ──
         val resolvedAnimeBackups = anime.mapIndexedNotNull { index, ani ->

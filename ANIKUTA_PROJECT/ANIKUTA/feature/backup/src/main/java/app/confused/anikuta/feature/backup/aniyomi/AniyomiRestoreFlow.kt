@@ -109,7 +109,14 @@ fun AniyomiRestoreFlow(
             ) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
         }
         is AniyomiRestoreState.FormatDetected -> FormatDetectionScreen(s,
-            onContinue = { viewModel.onContinueFromDetection(s.fileUri) },
+            onContinue = {
+                if (s.isSupported) {
+                    viewModel.onContinueFromDetection(s.fileUri)
+                } else {
+                    // Unsupported format → go back to Backup & Restore
+                    viewModel.cancel(); onCancel()
+                }
+            },
             onCancel = { viewModel.cancel(); onCancel() },
         )
         is AniyomiRestoreState.Processing -> ProcessingScreen(s.message)
@@ -121,12 +128,18 @@ fun AniyomiRestoreFlow(
             onNext = { viewModel.onNextFromLinking() },
             onCancel = { viewModel.cancel(); onCancel() },
             onMarkWrong = { resolved -> viewModel.markAsWrong(resolved) },
+            onRetry = { viewModel.onRetryRateLimited() },
         )
         is AniyomiRestoreState.ManualLinking -> ManualLinkingScreen(s,
-            onNext = { viewModel.onSkipManualLinking() },
+            onNext = { viewModel.onContinueFromManualLinking() },
             onCancel = { viewModel.cancel(); onCancel() },
             viewModel = viewModel,
         )
+        is AniyomiRestoreState.PreRestoreSummary -> PreRestoreSummaryScreen(s,
+            onRestore = { viewModel.onExecuteRestore() },
+            onCancel = { viewModel.cancel(); onCancel() },
+        )
+        is AniyomiRestoreState.Restoring -> ProcessingScreen("Restoring your data…")
         is AniyomiRestoreState.Success -> SuccessScreen(s,
             onAutoClose = { viewModel.reset(); onComplete() },
         )
@@ -307,12 +320,17 @@ private fun LinkingScreen(
     onNext: () -> Unit,
     onCancel: () -> Unit,
     onMarkWrong: (AnilistResolution.Resolved) -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     val progress = state.progress
     val allDone = state.allDone
+    val rateLimitedCount = state.resolutions.count { it is AnilistResolution.RateLimited }
 
     // State for the "Is this wrong?" confirmation dialog
     var wrongTarget by remember { mutableStateOf<AnilistResolution.Resolved?>(null) }
+
+    /** Orange color for rate-limited entries. */
+    val LimeOrange = Color(0xFFFF9800)
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(24.dp)) {
@@ -328,11 +346,32 @@ private fun LinkingScreen(
                     val total = progress?.total ?: state.resolutions.size
                     val completed = progress?.currentIndex ?: 0
                     val success = progress?.resolved ?: 0
-                    val failed = progress?.failed ?: 0
+                    val failed = state.resolutions.count { it is AnilistResolution.Failed }
+                    val rateLimited = rateLimitedCount
                     StatItem("Total", total, MaterialTheme.colorScheme.onSurface)
                     StatItem("Completed", completed, MaterialTheme.colorScheme.primary)
                     StatItem("Success", success, MaterialTheme.colorScheme.primary)
                     StatItem("Failed", failed, LimeRed)
+                    if (rateLimited > 0) {
+                        StatItem("Rate Limited", rateLimited, LimeOrange)
+                    }
+                }
+            }
+
+            // Rate-limited warning + retry button
+            if (allDone && rateLimitedCount > 0) {
+                Spacer(Modifier.height(12.dp))
+                Surface(color = LimeOrange.copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("$rateLimitedCount anime were rate-limited.",
+                            fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            color = LimeOrange, modifier = Modifier.weight(1f))
+                        Button(onRetry, shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LimeOrange, contentColor = Color.White)) {
+                            Text("Retry", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -341,7 +380,7 @@ private fun LinkingScreen(
                 Text("CURRENTLY LINKING", fontFamily = RobotoFamily, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.06.sp)
                 Spacer(Modifier.height(8.dp))
-                progress.resolution?.let { LinkingRow(it) }
+                progress.resolution?.let { LinkingRow(it, onMarkWrong = if (it is AnilistResolution.Resolved) ({ r -> wrongTarget = r }) else null) }
                 Spacer(Modifier.height(16.dp))
             } else if (allDone) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,7 +402,7 @@ private fun LinkingScreen(
             val completed = state.resolutions.take(progress?.currentIndex ?: 0).reversed()
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(completed) { res ->
-                    LinkingRow(res, onMarkWrong = { resolved -> wrongTarget = resolved })
+                    LinkingRow(res, onMarkWrong = if (res is AnilistResolution.Resolved) ({ r -> wrongTarget = r }) else null)
                 }
             }
 
@@ -387,7 +426,7 @@ private fun LinkingScreen(
             title = { Text("Is this wrong?", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) },
             text = {
                 Column {
-                    Text("Backup: ${resolved.anilistAnime?.title?.romaji ?: resolved.anilistAnime?.title?.english ?: "Unknown"}",
+                    Text("Backup: ${resolved.originalTitle}",
                         fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Matched to: ${resolved.anilistAnime?.title?.romaji ?: resolved.anilistAnime?.title?.english ?: "Unknown"}",
                         fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold,
@@ -430,26 +469,35 @@ private fun StatItem(label: String, value: Int, color: Color) {
 @Composable
 private fun LinkingRow(res: AnilistResolution, onMarkWrong: ((AnilistResolution.Resolved) -> Unit)? = null) {
     val isFailed = res is AnilistResolution.Failed
-    val bgColor = if (isFailed) LimeRedContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    val isRateLimited = res is AnilistResolution.RateLimited
+    val LimeOrange = Color(0xFFFF9800)
+    val bgColor = when {
+        isFailed -> LimeRedContainer
+        isRateLimited -> LimeOrange.copy(alpha = 0.15f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    }
 
     // Extract both names
     val backupName = when (res) {
-        is AnilistResolution.Resolved -> res.anilistAnime?.title?.romaji ?: res.anilistAnime?.title?.english ?: "Unknown"
+        is AnilistResolution.Resolved -> res.originalTitle.ifBlank { res.anilistAnime?.title?.romaji ?: res.anilistAnime?.title?.english ?: "Unknown" }
         is AnilistResolution.Failed -> res.title
+        is AnilistResolution.RateLimited -> res.title
     }
     val anilistName = when (res) {
         is AnilistResolution.Resolved -> res.anilistAnime?.title?.romaji ?: res.anilistAnime?.title?.english ?: "Unknown"
         is AnilistResolution.Failed -> null
+        is AnilistResolution.RateLimited -> null
     }
     val coverUrl = when (res) {
         is AnilistResolution.Resolved -> res.anilistAnime?.coverImage?.large
         is AnilistResolution.Failed -> null
+        is AnilistResolution.RateLimited -> null
     }
 
     Surface(
         color = bgColor, shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth().then(
-            if (!isFailed && onMarkWrong != null) Modifier.clickable { onMarkWrong(res as AnilistResolution.Resolved) }
+            if (res is AnilistResolution.Resolved && onMarkWrong != null) Modifier.clickable { onMarkWrong(res) }
             else Modifier
         ),
     ) {
@@ -463,20 +511,25 @@ private fun LinkingRow(res: AnilistResolution, onMarkWrong: ((AnilistResolution.
             }
             Spacer(Modifier.size(12.dp))
 
-            // Left: backup name (the name from the Aniyomi backup)
+            // Left: backup name
             Column(Modifier.weight(1f)) {
                 Text("Backup", fontFamily = RobotoFamily, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     letterSpacing = 0.06.sp)
                 Text(backupName, fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    color = if (isFailed) LimeRed else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                    color = when { isFailed -> LimeRed; isRateLimited -> LimeOrange; else -> MaterialTheme.colorScheme.onSurface },
+                    maxLines = 1)
             }
 
             // Middle: link icon
-            Icon(if (isFailed) Icons.Filled.Close else Icons.Filled.Link, null,
-                tint = if (isFailed) LimeRed else MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(
+                when { isFailed -> Icons.Filled.Close; isRateLimited -> Icons.Filled.Schedule; else -> Icons.Filled.Link },
+                null,
+                tint = when { isFailed -> LimeRed; isRateLimited -> LimeOrange; else -> MaterialTheme.colorScheme.primary },
+                modifier = Modifier.size(20.dp),
+            )
             Spacer(Modifier.size(12.dp))
 
-            // Right: AniList name only (NO AniList ID — the name is enough)
+            // Right: AniList name (no ID)
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                 if (anilistName != null) {
                     Text("AniList", fontFamily = RobotoFamily, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -484,8 +537,9 @@ private fun LinkingRow(res: AnilistResolution, onMarkWrong: ((AnilistResolution.
                     Text(anilistName, fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary, maxLines = 1, textAlign = TextAlign.End)
                 } else {
-                    Text("No match", fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                        color = LimeRed, textAlign = TextAlign.End)
+                    Text(when { isRateLimited -> "Rate limited"; else -> "No match" },
+                        fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                        color = when { isRateLimited -> LimeOrange; else -> LimeRed }, textAlign = TextAlign.End)
                 }
             }
         }
@@ -502,7 +556,7 @@ private fun ManualLinkingScreen(
     viewModel: AniyomiRestoreViewModel,
 ) {
     // State for the search sheet
-    var searchingForAnime by remember { mutableStateOf<AnilistResolution.Failed?>(null) }
+    var searchingForAnime by remember { mutableStateOf<AnilistResolution?>(null) }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Column(Modifier.fillMaxSize().padding(24.dp)) {
@@ -527,8 +581,9 @@ private fun ManualLinkingScreen(
                             }
                             Spacer(Modifier.size(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(failed.title, fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LimeRed)
-                                Text(failed.reason, fontFamily = RobotoFamily, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(when (failed) { is AnilistResolution.Failed -> failed.title; is AnilistResolution.RateLimited -> failed.title; else -> "Unknown" },
+                                    fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LimeRed)
+                                Text(when (failed) { is AnilistResolution.Failed -> failed.reason; is AnilistResolution.RateLimited -> failed.reason; else -> "" }, fontFamily = RobotoFamily, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Icon(Icons.Filled.Search, null, tint = LimeRed, modifier = Modifier.size(20.dp))
                         }
@@ -565,12 +620,17 @@ private fun ManualLinkingScreen(
  */
 @Composable
 private fun ManualSearchSheet(
-    failed: AnilistResolution.Failed,
+    failed: AnilistResolution,
     viewModel: AniyomiRestoreViewModel,
     onDismiss: () -> Unit,
     onLinked: () -> Unit,
 ) {
-    var query by remember { mutableStateOf(failed.title) }
+    val failedTitle = when (failed) {
+        is AnilistResolution.Failed -> failed.title
+        is AnilistResolution.RateLimited -> failed.title
+        is AnilistResolution.Resolved -> failed.originalTitle
+    }
+    var query by remember { mutableStateOf(failedTitle) }
     var results by remember { mutableStateOf<List<AniListAnime>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var hasSearched by remember { mutableStateOf(false) }
@@ -586,7 +646,7 @@ private fun ManualSearchSheet(
                 Column(Modifier.weight(1f)) {
                     Text("Link Anime", fontFamily = RobotoFamily, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onBackground)
-                    Text("Original: ${failed.title}", fontFamily = RobotoFamily, fontSize = 13.sp,
+                    Text("Original: $failedTitle", fontFamily = RobotoFamily, fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 TextButton(onDismiss) { Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) }
@@ -680,7 +740,93 @@ private fun ManualSearchSheet(
     }
 }
 
-// ═══ Step 6: Success — with Continue button ═══
+// ═══ Step 6: Pre-Restore Summary — final confirmation before actual restore ═══
+
+@Composable
+private fun PreRestoreSummaryScreen(
+    state: AniyomiRestoreState.PreRestoreSummary,
+    onRestore: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val resolved = state.resolutions.count { it is AnilistResolution.Resolved }
+    val skipped = state.resolutions.count { it is AnilistResolution.Failed || it is AnilistResolution.RateLimited }
+    val categories = state.aniyomiBackup.backupAnimeCategories
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        Column(Modifier.fillMaxSize().padding(24.dp)) {
+            Text("Restore Summary", fontFamily = RobotoFamily, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground)
+            Spacer(Modifier.height(8.dp))
+            Text("Review what will be restored. No changes have been made yet.",
+                fontFamily = RobotoFamily, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(24.dp))
+
+            // Stats grid
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryStatCard("Anime", resolved, true, Modifier.weight(1f))
+                SummaryStatCard("Categories", categories.size, false, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryStatCard("Episodes", state.translationResult.stats.totalEpisodes, false, Modifier.weight(1f))
+                if (skipped > 0) {
+                    SummaryStatCard("Skipped", skipped, false, Modifier.weight(1f))
+                } else {
+                    SummaryStatCard("Skipped", 0, false, Modifier.weight(1f))
+                }
+            }
+
+            // Category breakdown
+            if (categories.isNotEmpty()) {
+                Spacer(Modifier.height(24.dp))
+                Text("CATEGORY OVERVIEW", fontFamily = RobotoFamily, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.06.sp)
+                Spacer(Modifier.height(8.dp))
+
+                // Count anime per category from the backup
+                val animeByCategory = mutableMapOf<Long, Int>()
+                state.aniyomiBackup.backupAnime.filter { it.favorite }.forEach { ani ->
+                    ani.categories.forEach { catId ->
+                        animeByCategory[catId] = (animeByCategory[catId] ?: 0) + 1
+                    }
+                }
+
+                LazyColumn(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(categories) { cat ->
+                        val count = animeByCategory[cat.id] ?: 0
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(cat.name, fontFamily = RobotoFamily, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                Text("$count anime", fontFamily = RobotoFamily, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onCancel, Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                    Text("Cancel", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                }
+                Button(onRestore, Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                    Text("Restore Now", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+    }
+}
+
+// ═══ Step 7: Success — with Continue button ═══
 
 @Composable
 private fun SuccessScreen(state: AniyomiRestoreState.Success, onAutoClose: () -> Unit) {
