@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -177,7 +178,7 @@ fun CreateBackupAnimationOverlay(message: String = "Creating your backup…") {
                     modifier = Modifier.size(72.dp),
                 )
                 Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Filled.CloudUpload,
+                    imageVector = Icons.Filled.CloudUpload,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
