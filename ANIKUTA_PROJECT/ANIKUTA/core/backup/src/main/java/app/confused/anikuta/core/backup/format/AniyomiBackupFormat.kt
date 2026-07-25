@@ -66,6 +66,54 @@ class AniyomiBackupFormat : BackupFormat {
         throw UnsupportedOperationException("Aniyomi format is restore-only — ANIKUTA does not export in Aniyomi format")
     }
 
+    /**
+     * Decodes the raw Aniyomi protobuf backup (without mapping to BackupContainer).
+     *
+     * Used by [AniyomiBackupTranslator] which needs the raw [AniyomiBackup] to
+     * resolve AniList IDs before building a BackupContainer.
+     *
+     * @param input the backup file stream (caller closes).
+     * @return the decoded [AniyomiBackup].
+     */
+    suspend fun decodeRaw(input: InputStream): AniyomiBackup = withContext(Dispatchers.IO) {
+        try {
+            val rawBytes = input.readBytes()
+            Log.i(TAG, "Aniyomi backup: read ${rawBytes.size} raw bytes")
+
+            val protoBytes = if (isGzipped(rawBytes)) {
+                Log.d(TAG, "Aniyomi backup: gzip-compressed, decompressing...")
+                GZIPInputStream(rawBytes.inputStream()).use { it.readBytes() }
+            } else {
+                rawBytes
+            }
+            Log.d(TAG, "Aniyomi backup: ${protoBytes.size} bytes to decode")
+
+            // Try modern format first (anime at proto field 501)
+            try {
+                Log.d(TAG, "Aniyomi backup: trying modern format (Backup)...")
+                val modern = protoBuf.decodeFromByteArray(
+                    AniyomiBackup.serializer(),
+                    protoBytes,
+                )
+                if (modern.backupAnime.isNotEmpty()) {
+                    Log.i(TAG, "Aniyomi backup: modern format decoded — ${modern.backupAnime.size} anime")
+                    modern
+                } else {
+                    Log.d(TAG, "Aniyomi backup: modern format had 0 anime, trying legacy...")
+                    tryLegacy(protoBytes)
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Aniyomi backup: modern format failed (${e.message}), trying legacy...")
+                tryLegacy(protoBytes)
+            }
+        } catch (e: BackupException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode Aniyomi backup", e)
+            throw BackupException.CorruptFile("Aniyomi decode failed: ${e.message}", e)
+        }
+    }
+
     override suspend fun read(input: InputStream): BackupContainer = withContext(Dispatchers.IO) {
         try {
             // Read the full byte array (need to check for gzip magic first)

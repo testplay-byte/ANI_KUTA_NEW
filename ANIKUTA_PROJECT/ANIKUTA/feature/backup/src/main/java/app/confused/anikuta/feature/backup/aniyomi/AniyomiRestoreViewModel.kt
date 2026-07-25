@@ -84,7 +84,7 @@ class AniyomiRestoreViewModel(
                     return@launch
                 }
                 val aniyomiFormat = AniyomiBackupFormat()
-                val aniyomi = input.use { stream -> aniyomiFormat.read(stream) }
+                val aniyomi = input.use { stream -> aniyomiFormat.decodeRaw(stream) }
                 Log.i(TAG, "Decoded Aniyomi backup: ${aniyomi.backupAnime.size} anime, ${aniyomi.backupManga.size} manga")
 
                 val trans = AniyomiBackupTranslator(anilistApi)
