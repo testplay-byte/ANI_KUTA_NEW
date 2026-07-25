@@ -262,10 +262,16 @@ class AniyomiRestoreViewModel(
 
     fun manuallyLink(failed: AnilistResolution, anime: AniListAnime) {
         val current = _state.value as? AniyomiRestoreState.ManualLinking ?: return
-        val newResolved = AnilistResolution.Resolved(anime.id, anime, "manual", failed.title)
+        val failedTitle = when (failed) {
+            is AnilistResolution.Failed -> failed.title
+            is AnilistResolution.RateLimited -> failed.title
+            is AnilistResolution.Resolved -> failed.originalTitle
+        }
+        val newResolved = AnilistResolution.Resolved(anime.id, anime, "manual", failedTitle)
         val updatedResolutions = current.resolutions.map { res ->
-            if (res == failed || (res is AnilistResolution.Failed && res.title == failed.title) ||
-                (res is AnilistResolution.RateLimited && res.title == failed.title)) {
+            if (res == failed ||
+                (res is AnilistResolution.Failed && res.title == failedTitle) ||
+                (res is AnilistResolution.RateLimited && res.title == failedTitle)) {
                 newResolved
             } else { res }
         }
