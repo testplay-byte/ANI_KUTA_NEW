@@ -631,8 +631,19 @@ private fun AnikutaApp() {
             }
             // ── Agent 2: Download settings (full page, replaces bottom sheet) ──
             showDownloadSettings -> {
+                // Build the extension-source list from trusted extensions.
+                val extensionSources = extensionManager.getTrustedExtensions().flatMap { ext ->
+                    ext.sources.map { source ->
+                        app.confused.anikuta.feature.download.ExtensionSourceInfo(
+                            sourceId = source.id,
+                            sourceName = source.name,
+                            extensionName = ext.name,
+                        )
+                    }
+                }
                 app.confused.anikuta.feature.download.DownloadSettingsScreen(
                     onBack = { showDownloadSettings = false },
+                    extensionSources = extensionSources,
                 )
             }
             // ── Agent 2: Profile + Trackers — full-screen pages ──

@@ -8,6 +8,7 @@ import app.confused.anikuta.core.download.DownloadPreferences
 import app.confused.anikuta.core.download.DownloadRequest
 import app.confused.anikuta.core.download.DownloadTrack
 import app.confused.anikuta.core.download.FallbackStrategy
+import app.confused.anikuta.core.download.ServerDiscoveryStore
 import app.confused.anikuta.core.download.TrackKind
 import app.confused.anikuta.feature.videoresolver.ResolverResult
 import app.confused.anikuta.feature.videoresolver.ResolverServer
@@ -48,6 +49,7 @@ class DownloadOrchestrator(
     private val resolver: ResolverService,
     private val manager: DownloadManager,
     private val preferences: DownloadPreferences,
+    private val serverDiscovery: ServerDiscoveryStore,
 ) {
 
     /**
@@ -71,6 +73,11 @@ class DownloadOrchestrator(
             when (val result = resolver.resolve(source, episode)) {
                 is ResolverResult.Success -> {
                     if (result.servers.isEmpty()) return EnqueueResult.NoSources
+
+                    // ── Record discovered server names for this source ──
+                    // Passively builds the per-source server list so the user
+                    // can configure server preferences in Download Settings.
+                    serverDiscovery.recordServers(source.id, result.servers.map { it.name })
 
                     // If auto-download is OFF, always show the picker.
                     if (!preferences.autoDownload().get()) {

@@ -16,10 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -51,9 +47,11 @@ import org.koin.compose.koinInject
  * 2. **Auto-download** — toggle: when ON, the app auto-picks the best
  *    server/audio/quality based on the preference lists. When OFF, tapping
  *    download shows the video picker sheet.
- * 3. **Quality preferences** — priority-ordered list (reorderable). The top
+ * 3. **Quality preferences** — drag-and-drop reorderable list. The top
  *    quality is tried first; if unavailable, the next, etc. + fallback strategy.
- * 4. **Audio preferences** — priority-ordered list (reorderable) + fallback.
+ * 4. **Audio preferences** — drag-and-drop reorderable list + fallback.
+ * 5. **Server preferences** — per-extension: shows each trusted extension's
+ *    sources + their discovered servers. Drag-and-drop to reorder per source.
  *
  * **Design:** CollapsingHeader, surfaceVariant 0.4f cards, RobotoFamily,
  * #B1F256 accents. Follows the design language (principle #10: settings divided
@@ -62,7 +60,9 @@ import org.koin.compose.koinInject
 @Composable
 fun DownloadSettingsScreen(
     onBack: () -> Unit,
+    extensionSources: List<ExtensionSourceInfo> = emptyList(),
     preferences: DownloadPreferences = koinInject(),
+    serverDiscovery: app.confused.anikuta.core.download.ServerDiscoveryStore = koinInject(),
 ) {
     val lazyListState = rememberLazyListState()
     val collapsed = lazyListState.firstVisibleItemIndex > 0 ||
@@ -88,6 +88,7 @@ fun DownloadSettingsScreen(
     val audioFallback by preferences.audioFallback().changes()
         .collectAsState(initial = preferences.audioFallback().get())
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val folderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -96,8 +97,7 @@ fun DownloadSettingsScreen(
                 preferences.downloadFolderUri().set(uri.toString())
                 val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                androidx.compose.ui.platform.LocalContext.current.contentResolver
-                    .takePersistableUriPermission(uri, flags)
+                context.contentResolver.takePersistableUriPermission(uri, flags)
             } catch (e: Exception) {
                 // Non-fatal — the pref won't update.
             }
@@ -161,23 +161,15 @@ fun DownloadSettingsScreen(
             item {
                 SectionLabel("Quality preferences")
                 Text(
-                    text = "Top = highest priority. The app tries these in order when auto-download is ON.",
+                    text = "Top = highest priority. Drag the ≡ handle to reorder. The app tries these in order when auto-download is ON.",
                     fontFamily = RobotoFamily,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                 )
-                ReorderableList(
+                app.confused.anikuta.feature.download.components.DragReorderableList(
                     items = qualityPrefs,
-                    onMove = { from, to ->
-                        val mutable = qualityPrefs.toMutableList()
-                        val moved = mutable.removeAt(from)
-                        mutable.add(to, moved)
-                        preferences.qualityPreferences().set(mutable)
-                    },
-                    onAdd = { newQuality ->
-                        preferences.qualityPreferences().set(qualityPrefs + newQuality)
-                    },
+                    onReorder = { newOrder -> preferences.qualityPreferences().set(newOrder) },
                 )
                 FallbackRow(
                     title = "If preferred quality unavailable",
@@ -190,28 +182,54 @@ fun DownloadSettingsScreen(
             item {
                 SectionLabel("Audio preferences")
                 Text(
-                    text = "Top = preferred audio version (e.g. SUB before DUB).",
+                    text = "Top = preferred audio version (e.g. SUB before DUB). Drag the ≡ handle to reorder.",
                     fontFamily = RobotoFamily,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                 )
-                ReorderableList(
+                app.confused.anikuta.feature.download.components.DragReorderableList(
                     items = audioPrefs,
-                    onMove = { from, to ->
-                        val mutable = audioPrefs.toMutableList()
-                        val moved = mutable.removeAt(from)
-                        mutable.add(to, moved)
-                        preferences.audioPreferences().set(mutable)
-                    },
-                    onAdd = { newAudio ->
-                        preferences.audioPreferences().set(audioPrefs + newAudio)
-                    },
+                    onReorder = { newOrder -> preferences.audioPreferences().set(newOrder) },
                 )
                 FallbackRow(
                     title = "If preferred audio unavailable",
                     strategy = audioFallback,
                     onSelect = { preferences.audioFallback().set(it) },
+                )
+            }
+
+            // ── Server preferences (per-extension) ──
+            item {
+                SectionLabel("Server preferences")
+                Text(
+                    text = "Servers are auto-discovered as you browse anime. Drag the ≡ handle to set your preferred server order per source.",
+                    fontFamily = RobotoFamily,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+                )
+                if (extensionSources.isEmpty()) {
+                    Text(
+                        text = "No trusted extensions installed. Install an extension from Browse → Extensions to get started.",
+                        fontFamily = RobotoFamily,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+                    )
+                } else {
+                    extensionSources.forEach { extSource ->
+                        ServerPreferenceSection(
+                            extSource = extSource,
+                            serverDiscovery = serverDiscovery,
+                            preferences = preferences,
+                        )
+                    }
+                }
+                FallbackRow(
+                    title = "If preferred server unavailable",
+                    strategy = preferences.serverFallback().get(),
+                    onSelect = { preferences.serverFallback().set(it) },
                 )
             }
         }
@@ -279,63 +297,64 @@ private fun ToggleRow(
 }
 
 /**
- * A reorderable preference list. Each row shows the item + up/down arrows.
- * (Up/down arrows are used instead of drag-and-drop for reliability — a
- * full drag-and-drop implementation is a tracked future enhancement.)
+ * Per-extension server preference section. Shows the extension/source name +
+ * its discovered servers (drag-and-drop reorderable). The user's saved order
+ * is merged with discovered servers (saved order first, new servers appended).
  */
 @Composable
-private fun ReorderableList(
-    items: List<String>,
-    onMove: (from: Int, to: Int) -> Unit,
-    onAdd: (String) -> Unit,
+private fun ServerPreferenceSection(
+    extSource: ExtensionSourceInfo,
+    serverDiscovery: app.confused.anikuta.core.download.ServerDiscoveryStore,
+    preferences: DownloadPreferences,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        items.forEachIndexed { index, item ->
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "${index + 1}.",
-                        fontFamily = RobotoFamily,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(24.dp),
-                    )
-                    Text(
-                        text = item,
-                        fontFamily = RobotoFamily,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(
-                        onClick = { if (index > 0) onMove(index, index - 1) },
-                        modifier = Modifier.size(32.dp),
-                        enabled = index > 0,
-                    ) {
-                        Icon(Icons.Filled.ArrowUpward, "Move up",
-                            tint = if (index > 0) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(
-                        onClick = { if (index < items.size - 1) onMove(index, index + 1) },
-                        modifier = Modifier.size(32.dp),
-                        enabled = index < items.size - 1,
-                    ) {
-                        Icon(Icons.Filled.ArrowDownward, "Move down",
-                            tint = if (index < items.size - 1) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.size(18.dp))
-                    }
-                }
+    val serverMap by serverDiscovery.serverMap.collectAsState(initial = emptyMap())
+    val serverPrefs by preferences.serverPreferences().changes()
+        .collectAsState(initial = preferences.serverPreferences().get())
+
+    val discoveredServers = serverMap[extSource.sourceId.toString()] ?: emptyList()
+    val userOrder = serverPrefs[extSource.sourceId.toString()] ?: emptyList()
+
+    // Merge: user's saved order first (filtered to only known servers), then
+    // any discovered servers not in the user's list.
+    val mergedServers = (userOrder.filter { it in discoveredServers } +
+        discoveredServers.filter { it !in userOrder }).distinct()
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = extSource.extensionName,
+                fontFamily = RobotoFamily,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = extSource.sourceName,
+                fontFamily = RobotoFamily,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            if (mergedServers.isEmpty()) {
+                Text(
+                    text = "No servers discovered yet. Browse anime from this source to discover servers.",
+                    fontFamily = RobotoFamily,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                app.confused.anikuta.feature.download.components.DragReorderableList(
+                    items = mergedServers,
+                    onReorder = { newOrder ->
+                        val updated = serverPrefs.toMutableMap()
+                        updated[extSource.sourceId.toString()] = newOrder
+                        preferences.serverPreferences().set(updated)
+                    },
+                )
             }
         }
     }
