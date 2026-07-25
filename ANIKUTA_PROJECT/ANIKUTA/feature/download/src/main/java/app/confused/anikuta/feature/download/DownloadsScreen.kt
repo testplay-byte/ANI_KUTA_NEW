@@ -320,42 +320,62 @@ private fun EpisodeRow(task: DownloadTask, onMenu: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         // Left: episode info + progress
         Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 10.dp)) {
-            Text(task.request.episode.name, fontFamily = RobotoFamily, fontSize = 13.sp,
+            // Episode name (not just the number — the actual episode name)
+            val epName = task.request.episode.name.ifBlank {
+                "Episode ${task.request.episode.episodeNumber.toInt()}"
+            }
+            Text(epName, fontFamily = RobotoFamily, fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
 
-            // Info pills: server / audio / quality + percentage
+            // Info pills row: server / audio / quality / size / percentage / status
+            // All on ONE row (per owner's request: "queued text should show on
+            // the very right of the video server, the quality and such")
             Spacer(Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (task.request.videoServer.isNotBlank()) InfoPill(task.request.videoServer)
-                if (task.request.videoAudio.isNotBlank()) InfoPill(task.request.videoAudio.uppercase())
-                if (task.request.videoQuality.isNotBlank()) InfoPill(task.request.videoQuality)
-                Spacer(Modifier.weight(1f))
-                if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.PAUSED) {
-                    Surface(shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
-                        Text("${task.progress}%", fontFamily = RobotoFamily, fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                    }
+                // Server pill
+                if (task.request.videoServer.isNotBlank()) {
+                    InfoPill(task.request.videoServer)
                 }
-            }
-
-            // Progress bar + size
-            if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.PAUSED) {
-                Spacer(Modifier.height(6.dp))
-                Row(modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
+                // Audio pill
+                if (task.request.videoAudio.isNotBlank()) {
+                    InfoPill(task.request.videoAudio.uppercase())
+                }
+                // Quality pill
+                if (task.request.videoQuality.isNotBlank()) {
+                    InfoPill(task.request.videoQuality)
+                }
+                // Size pill (downloaded / total) — in a dedicated pill
+                if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.PAUSED) {
                     val sizeText = if (task.totalBytes > 0)
                         "${formatBytes(task.downloadedBytes)} / ${formatBytes(task.totalBytes)}"
                     else formatBytes(task.downloadedBytes)
-                    Text(sizeText, fontFamily = RobotoFamily, fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SizePill(sizeText)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.weight(1f))
+                // Right side: percentage or status text (in a pill)
+                when (task.status) {
+                    DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED -> {
+                        PercentagePill("${task.progress}%")
+                    }
+                    DownloadStatus.QUEUED -> {
+                        InfoPill("Queued")
+                    }
+                    DownloadStatus.ERROR -> {
+                        ErrorPill("Failed")
+                    }
+                    DownloadStatus.COMPLETED -> {
+                        InfoPill("Done", highlight = true)
+                    }
+                    else -> {}
+                }
+            }
+
+            // Progress bar (below the pills row)
+            if (task.status == DownloadStatus.DOWNLOADING || task.status == DownloadStatus.PAUSED) {
+                Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
                     progress = { (task.progress / 100f).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth().height(6.dp),
@@ -364,24 +384,14 @@ private fun EpisodeRow(task: DownloadTask, onMenu: () -> Unit) {
                 )
             }
 
-            // Status text
-            when (task.status) {
-                DownloadStatus.QUEUED -> {
+            // Error message (below the bar)
+            if (task.status == DownloadStatus.ERROR) {
+                task.errorMessage?.let {
                     Spacer(Modifier.height(4.dp))
-                    Text("Queued", fontFamily = RobotoFamily, fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(it, fontFamily = RobotoFamily, fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.error, maxLines = 2,
+                        overflow = TextOverflow.Ellipsis)
                 }
-                DownloadStatus.ERROR -> {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Failed", fontFamily = RobotoFamily, fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                    task.errorMessage?.let {
-                        Text(it, fontFamily = RobotoFamily, fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.error, maxLines = 2,
-                            overflow = TextOverflow.Ellipsis)
-                    }
-                }
-                else -> {}
             }
         }
 
@@ -398,6 +408,39 @@ private fun EpisodeRow(task: DownloadTask, onMenu: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** A size pill (downloaded / total) — in a dedicated surface. */
+@Composable
+private fun SizePill(text: String) {
+    Surface(shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surface) {
+        Text(text, fontFamily = RobotoFamily, fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/** A percentage pill — primary-tinted. */
+@Composable
+private fun PercentagePill(text: String) {
+    Surface(shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)) {
+        Text(text, fontFamily = RobotoFamily, fontSize = 10.sp,
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/** An error pill — error-tinted. */
+@Composable
+private fun ErrorPill(text: String) {
+    Surface(shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)) {
+        Text(text, fontFamily = RobotoFamily, fontSize = 10.sp,
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 
@@ -465,10 +508,16 @@ private fun MenuOption(label: String, icon: androidx.compose.ui.graphics.vector.
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun InfoPill(text: String) {
-    Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+private fun InfoPill(text: String, highlight: Boolean = false) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = if (highlight) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+        else MaterialTheme.colorScheme.surfaceVariant,
+    ) {
         Text(text, fontFamily = RobotoFamily, fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false,
+            color = if (highlight) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1, softWrap = false,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }

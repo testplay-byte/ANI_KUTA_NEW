@@ -97,6 +97,13 @@ class HttpDownloader(
             // ── 2. Validate the downloaded file ──
             validateDownloadedFile(videoUrl, tempVideo, downloadedBytes)
 
+            // ── 2b. Playability verification ──
+            // Check the file's magic bytes to verify it's a real video (not an
+            // HTML error page or a redirect). This prevents "downloaded but
+            // won't play" situations. MPV can't play an HTML file masquerading
+            // as a video.
+            verifyVideoMagicBytes(tempVideo)
+
             // ── 3. Download subtitles to temp cache (best-effort) ──
             val tempSubsDir = tempCache.subtitlesDir(task.id)
             downloadSubtitlesToCache(task.request.subtitleTracks, tempSubsDir)
@@ -282,6 +289,63 @@ class HttpDownloader(
                 "Downloaded file is only ${tempFile.length()} bytes — too small to be a real video. " +
                 "The source may have returned an error page or a redirect instead of the video file."
             )
+        }
+    }
+
+    /**
+     * Verifies the downloaded file's magic bytes to ensure it's a real video
+     * (not an HTML error page or a redirect that passed the size check).
+     *
+     * Checks the first few bytes for known video container signatures:
+     *  - MP4/M4V/MOV: `ftyp` at offset 4
+     *  - MKV/WebM: `1A 45 DF A3` (EBML)
+     *  - MPEG-TS: `47` (sync byte) at offset 0, 188, 376, ...
+     *  - FLV: `46 4C 56` ("FLV")
+     *  - AVI: `52 49 46 46` ("RIFF")
+     *
+     * If the file starts with `3C 21` (HTML `<!`) or `3C 68` (HTML `<h`), it's
+     * an HTML page → rejected.
+     */
+    private fun verifyVideoMagicBytes(tempFile: File) {
+        try {
+            val header = ByteArray(16)
+            java.io.FileInputStream(tempFile).use { it.read(header) }
+            val hex = header.joinToString(" ") { "%02X".format(it) }
+
+            // Check for HTML (error page masquerading as video)
+            if (header[0] == 0x3C.toByte() && (header[1] == 0x21.toByte() || header[1] == 0x68.toByte())) {
+                DownloadLogger.e("Downloaded file is HTML, not a video (magic: $hex)")
+                throw DownloadException(
+                    "The downloaded file is an HTML page, not a video. " +
+                    "The server may have returned an error page or a captcha. " +
+                    "Try a different server or quality."
+                )
+            }
+
+            // Check for known video magic bytes
+            val isMp4 = header.size > 7 &&
+                header[4] == 'f'.code.toByte() && header[5] == 't'.code.toByte() &&
+                header[6] == 'y'.code.toByte() && header[7] == 'p'.code.toByte()
+            val isMkv = header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
+                header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
+            val isTs = header[0] == 0x47.toByte() // MPEG-TS sync byte
+            val isFlv = header[0] == 'F'.code.toByte() && header[1] == 'L'.code.toByte() &&
+                header[2] == 'V'.code.toByte()
+            val isAvi = header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&
+                header[2] == 'F'.code.toByte() && header[3] == 'F'.code.toByte()
+
+            if (!isMp4 && !isMkv && !isTs && !isFlv && !isAvi) {
+                DownloadLogger.w("Downloaded file has unknown magic bytes: $hex — proceeding (may still be playable)")
+                // Don't reject — some video formats have non-standard headers.
+                // The size check + HTML check are the primary guards.
+            } else {
+                DownloadLogger.d("Downloaded file verified as valid video (magic: $hex)")
+            }
+        } catch (e: DownloadException) {
+            throw e
+        } catch (e: Exception) {
+            DownloadLogger.w("Magic byte check failed (non-fatal): ${e.message}")
+            // Non-fatal — don't block the download if we can't read the header.
         }
     }
 

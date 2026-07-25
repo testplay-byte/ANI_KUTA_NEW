@@ -204,20 +204,32 @@ class AdvancedHttpDownloader(
     }
 
     /**
-     * Probes the server with a HEAD request to get Content-Length + Accept-Ranges.
-     * Returns (totalBytes, supportsRange).
+     * Probes the server to get Content-Length + Accept-Ranges.
+     *
+     * Uses a GET request with `Range: bytes=0-0` (downloads just 1 byte) instead
+     * of HEAD — many servers reject HEAD (405) or return a different Content-Length
+     * than the GET. A Range GET returns 206 (Partial Content) if Range is supported,
+     * or 200 (OK) if not. The Content-Range header gives the total size.
      */
     private suspend fun probeServer(url: String, headers: String?): Pair<Long, Boolean> {
-        val request = buildRequest(url, headers).head().build()
+        val request = buildRequest(url, headers)
+            .header("Range", "bytes=0-0")
+            .build()
         return try {
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    throw DownloadException("HTTP ${response.code} probing server for Range support")
+                // 206 = Range supported; 200 = Range NOT supported (full response)
+                val supportsRange = response.code == 206
+                val total = if (supportsRange) {
+                    // Content-Range: bytes 0-0/TOTAL
+                    val contentRange = response.header("Content-Range") ?: ""
+                    val totalMatch = Regex("/(\\d+)$").find(contentRange)
+                    totalMatch?.groupValues?.get(1)?.toLongOrNull() ?: -1L
+                } else {
+                    // No Range support — use Content-Length (may be -1 for chunked)
+                    response.header("Content-Length")?.toLongOrNull() ?: -1L
                 }
-                val total = response.header("Content-Length")?.toLongOrNull() ?: -1L
-                val acceptRanges = response.header("Accept-Ranges")?.equals("bytes", ignoreCase = true) ?: false
-                DownloadLogger.i("Advanced probe: totalBytes=$total, acceptRanges=$acceptRanges")
-                total to acceptRanges
+                DownloadLogger.i("Advanced probe: totalBytes=$total, supportsRange=$supportsRange (code=${response.code})")
+                total to supportsRange
             }
         } catch (e: DownloadException) {
             throw e
