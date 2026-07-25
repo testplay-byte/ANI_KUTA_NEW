@@ -63,7 +63,7 @@ fun MaxBackupsSelector(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 14.dp),
+                        .padding(vertical = 10.dp),
                 )
             }
         }

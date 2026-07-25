@@ -93,7 +93,7 @@ private fun FrequencyRow(
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp, horizontal = 8.dp),
+                        .padding(vertical = 10.dp, horizontal = 8.dp),
                 )
             }
         }

@@ -54,19 +54,19 @@ enum class BackupCategory(
     ),
     SOURCE_LINKS(
         id = "source_links",
-        displayName = "AniList–extension links",
+        displayName = "Source links",
         description = "Source matches and extension links",
         defaultSelected = true,
     ),
     TRACKER(
         id = "tracker",
-        displayName = "Tracker tokens & bindings",
+        displayName = "Tracking",
         description = "AniList/MAL OAuth tokens + tracker bindings",
         defaultSelected = true,
     ),
     CATEGORIES(
         id = "categories",
-        displayName = "Categories",
+        displayName = "Library categories",
         description = "Custom categories and anime–category links",
         defaultSelected = true,
     ),

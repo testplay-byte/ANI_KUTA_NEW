@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Restore
@@ -35,16 +32,16 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Grid-based restore confirmation dialog (replaces the old bottom sheet).
+ * Restore confirmation dialog with highlighted sections.
  *
  * Shown after the user selects a backup file. Shows:
  * - Title with restore icon
- * - Format + date info
- * - Highlighted total stats (total items to restore)
- * - 2-column grid of per-category item counts
+ * - Format + date info in a dedicated highlighted card
+ * - Highlighted total items to restore
+ * - "What will be restored" section with a dedicated background wrapping all entries
  * - Restore + Cancel buttons
  *
- * Design: #B1F256 primary, RobotoFamily, grid layout for organized display.
+ * Design: #B1F256 primary, RobotoFamily, surface2 for contrast.
  */
 @Composable
 fun RestoreSummaryDialog(
@@ -83,12 +80,24 @@ fun RestoreSummaryDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // ── Format + date ──
+                // ── Format + date in a dedicated highlighted card ──
                 val dateStr = summary.createdAt?.let {
                     SimpleDateFormat("MMM d, yyyy 'at' HH:mm", Locale.getDefault()).format(Date(it))
                 } ?: "Unknown date"
-                InfoRow(label = "Format", value = summary.formatType.displayName)
-                InfoRow(label = "Created", value = dateStr)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        InfoRow(label = "Format", value = summary.formatType.displayName)
+                        InfoRow(label = "Created", value = dateStr)
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -102,30 +111,31 @@ fun RestoreSummaryDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ── Per-category grid ──
-                Text(
-                    text = "WHAT WILL BE RESTORED",
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 0.06.sp,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (summary.categoryResults.size > 4) 200.dp else 140.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // ── "What will be restored" — whole section in a dedicated background ──
+                Surface(
+                    color = MaterialTheme.colorScheme.surface2,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(summary.categoryResults) { result ->
-                        CategoryCountCard(
-                            name = result.category.displayName,
-                            count = result.skippedCount,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = "WHAT WILL BE RESTORED",
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            letterSpacing = 0.06.sp,
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Category entries inside the section background
+                        summary.categoryResults.forEach { result ->
+                            RestoreCategoryRow(result)
+                        }
                     }
                 }
             }

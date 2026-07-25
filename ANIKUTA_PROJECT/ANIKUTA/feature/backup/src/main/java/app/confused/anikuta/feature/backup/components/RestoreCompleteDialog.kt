@@ -8,14 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,15 +27,16 @@ import app.confused.anikuta.core.backup.RestoreSummary
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
- * Grid-based restore complete dialog.
+ * Restore complete dialog with list-based breakdown.
  *
  * Shown after a restore operation finishes. Shows:
  * - Title with check icon
  * - Highlighted total stats (imported / skipped / errors)
- * - 2-column grid of per-category results (imported count)
+ * - "BREAKDOWN" section in a dedicated background, with per-category
+ *   results displayed as a vertical list (not a grid)
  * - OK button
  *
- * Design: #B1F256 primary, RobotoFamily, grid layout.
+ * Design: #B1F256 primary, RobotoFamily, surface2 for contrast, list layout.
  */
 @Composable
 fun RestoreCompleteDialog(
@@ -96,30 +96,31 @@ fun RestoreCompleteDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ── Per-category grid ──
-                Text(
-                    text = "BREAKDOWN",
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 0.06.sp,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (summary.categoryResults.size > 4) 200.dp else 140.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // ── Breakdown as a list inside a dedicated background ──
+                Surface(
+                    color = MaterialTheme.colorScheme.surface2,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(summary.categoryResults) { result ->
-                        CategoryCountCard(
-                            name = result.category.displayName,
-                            count = result.importedCount,
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            text = "BREAKDOWN",
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            letterSpacing = 0.06.sp,
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Per-category list (not grid)
+                        summary.categoryResults.forEach { result ->
+                            RestoreCategoryRow(result, showImported = true)
+                        }
                     }
                 }
             }

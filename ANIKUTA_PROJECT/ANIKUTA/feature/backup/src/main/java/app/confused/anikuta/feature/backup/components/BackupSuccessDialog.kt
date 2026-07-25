@@ -38,12 +38,11 @@ import java.util.Locale
  * Layout:
  * - Title with check icon
  * - Highlighted total stats (items + categories) in a prominent card
- * - 2-column grid of per-category breakdowns (each cell shows category name + count)
- * - File name + date
+ * - 2-column grid of per-category breakdowns (auto-height, shows all items)
+ * - File info in a dedicated highlighted card
  * - OK button
  *
- * Design: #B1F256 primary, RobotoFamily, surfaceVariant cards, grid layout
- * for organized information display.
+ * Design: #B1F256 primary, RobotoFamily, surface2 cards for better contrast.
  */
 @Composable
 fun BackupSuccessDialog(
@@ -94,7 +93,7 @@ fun BackupSuccessDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ── Per-category grid ──
+                // ── Per-category grid — auto height (shows all items) ──
                 Text(
                     text = "BREAKDOWN",
                     fontFamily = RobotoFamily,
@@ -105,41 +104,60 @@ fun BackupSuccessDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Fixed-height grid (2 columns)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (summary.categories.size > 4) 200.dp else 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(summary.categories) { result ->
-                        CategoryCountCard(
-                            name = result.category.displayName,
-                            count = result.itemCount,
-                        )
+                // Use a non-lazy grid (FlowRow-style) so all items show without internal scroll.
+                // We build a 2-column layout manually with Rows of 2 items each.
+                val chunks = summary.categories.chunked(2)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    chunks.forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            rowItems.forEach { result ->
+                                CategoryCountCard(
+                                    name = result.category.displayName,
+                                    count = result.itemCount,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            // If odd number of items, fill the remaining space
+                            if (rowItems.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ── File info ──
+                // ── File info in a dedicated highlighted card ──
                 val dateStr = SimpleDateFormat("MMM d, yyyy 'at' HH:mm", Locale.getDefault())
                     .format(Date(summary.createdAt))
-                Text(
-                    text = summary.filePath,
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = dateStr,
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                    ) {
+                        Text(
+                            text = summary.filePath,
+                            fontFamily = RobotoFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = dateStr,
+                            fontFamily = RobotoFamily,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         },
     )
@@ -180,15 +198,17 @@ fun StatCard(
     }
 }
 
-/** A small card showing a category name + its item count. */
+/** A small card showing a category name + its item count. Uses surface2 for better contrast. */
 @Composable
 fun CategoryCountCard(
     name: String,
     count: Int,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        color = MaterialTheme.colorScheme.surface2,
         shape = RoundedCornerShape(8.dp),
+        modifier = modifier,
     ) {
         Row(
             modifier = Modifier

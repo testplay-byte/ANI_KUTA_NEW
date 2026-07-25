@@ -334,7 +334,7 @@ class BackupManager(
             is BackupEntry.WatchProgress -> entry.progress.entries.size
             is BackupEntry.SourceLinks -> entry.links.sourceLinks.size + entry.links.extensionLinks.size
             is BackupEntry.Tracker -> entry.data.bindings.size
-            is BackupEntry.Categories -> entry.categories.size + entry.links.size
+            is BackupEntry.Categories -> entry.categories.size
             is BackupEntry.Preferences -> entry.prefs.entries.size
             is BackupEntry.CoverImages -> entry.covers.size
         }

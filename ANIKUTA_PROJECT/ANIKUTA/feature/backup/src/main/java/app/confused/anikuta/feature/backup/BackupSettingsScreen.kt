@@ -3,6 +3,9 @@ package app.confused.anikuta.feature.backup
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -34,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,7 +54,6 @@ import app.confused.anikuta.core.backup.BackupCategory
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import app.confused.anikuta.feature.backup.components.AutoIncludeSheet
 import app.confused.anikuta.feature.backup.components.BackupCategoryList
 import app.confused.anikuta.feature.backup.components.BackupSectionLabel
 import app.confused.anikuta.feature.backup.components.BackupSuccessDialog
@@ -68,17 +71,14 @@ import org.koin.androidx.compose.koinViewModel
  * Three sections:
  * 1. **Backup & Restore** (combined) — Create backup + Restore from file buttons.
  * 2. **Auto-backup** — toggle in header, frequency 2x2 grid, max-backups, "what to include" button.
- * 3. **Storage** — folder selector + usage display.
+ * 3. **Storage** — folder selector + usage display (with friendlier path display).
  *
  * UI features:
- * - CollapsingHeader that shrinks on scroll (wired to LazyColumn scroll state).
- * - Bottom sheet backdrop dim + blur when Create Backup / Auto-include sheets open.
- * - Rich grid-based success/restore dialogs (not plain text).
+ * - CollapsingHeader that shrinks on scroll.
+ * - Bottom sheets fully expand (skipPartiallyExpanded=true) + smooth backdrop dim+blur animation.
+ * - Rich grid-based success dialog + list-based restore complete dialog.
  * - Beautiful 5-second-minimum restore animation.
- * - Post-restore: user clicks OK → redirected to Library page via [onRestoreComplete].
- *
- * Design: #B1F256 primary, RobotoFamily, surfaceVariant cards (alpha 0.4f),
- * CollapsingHeader, no drag handles on bottom sheets.
+ * - Post-restore: redirected to Library page.
  */
 @Composable
 fun BackupSettingsScreen(
@@ -95,41 +95,50 @@ fun BackupSettingsScreen(
     val folderUri by viewModel.folderUri.collectAsStateWithLifecycle()
     val storageUsage by viewModel.storageUsage.collectAsStateWithLifecycle()
 
-    // SAF folder picker
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri: Uri? ->
         if (uri != null) viewModel.setFolder(uri)
     }
 
-    // File picker (for restore)
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
         if (uri != null) viewModel.onSelectBackupFile(uri)
     }
 
-    // LazyColumn scroll state → drives the CollapsingHeader
     val listState = rememberLazyListState()
     val isCollapsed = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 20
 
-    // Bottom sheet states
     var showCreateBackupSheet by remember { mutableStateOf(false) }
     var showAutoIncludeSheet by remember { mutableStateOf(false) }
 
-    // Whether any sheet is open (for backdrop dim + blur)
-    val anySheetOpen = showCreateBackupSheet || showAutoIncludeSheet
+    // Whether any sheet or dialog is open (for backdrop dim + blur)
+    val anyOverlay = showCreateBackupSheet || showAutoIncludeSheet ||
+        state is BackupUiState.RestorePending
+
+    // Animate backdrop dim + blur smoothly
+    val dimAlpha by animateFloatAsState(
+        targetValue = if (anyOverlay) 0.6f else 0f,
+        animationSpec = tween(300),
+        label = "dimAlpha",
+    )
+    val blurAmount by animateDpAsState(
+        targetValue = if (anyOverlay) 8.dp else 0.dp,
+        animationSpec = tween(300),
+        label = "blurAmount",
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // ── Main content (dimmed + blurred when a sheet is open) ──
+        // ── Main content (dimmed + blurred when overlay is open) ──
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (anySheetOpen) {
+                    if (dimAlpha > 0f) {
                         Modifier
-                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
-                            .blur(8.dp)
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = dimAlpha))
+                            .blur(blurAmount)
                     } else {
                         Modifier
                     },
@@ -152,9 +161,8 @@ fun BackupSettingsScreen(
                     SectionCard(
                         icon = Icons.Filled.CloudUpload,
                         title = "Backup & Restore",
-                        subtitle = "Create a backup or restore from a file",
+                        subtitle = "Create or restore a backup",
                     ) {
-                        // Create backup button
                         Button(
                             onClick = { showCreateBackupSheet = true },
                             modifier = Modifier.fillMaxWidth(),
@@ -167,7 +175,6 @@ fun BackupSettingsScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        // Restore button
                         androidx.compose.material3.OutlinedButton(
                             onClick = { filePicker.launch(arrayOf("*/*")) },
                             modifier = Modifier.fillMaxWidth(),
@@ -188,7 +195,7 @@ fun BackupSettingsScreen(
                     SectionCard(
                         icon = Icons.Filled.Schedule,
                         title = "Automatic backups",
-                        subtitle = "Periodically back up your data in the background",
+                        subtitle = "Scheduled background backups",
                         toggle = {
                             Switch(
                                 checked = autoEnabled,
@@ -197,7 +204,6 @@ fun BackupSettingsScreen(
                         },
                     ) {
                         if (autoEnabled) {
-                            // Frequency 2x2 grid
                             Text(
                                 text = "FREQUENCY",
                                 fontFamily = RobotoFamily,
@@ -214,7 +220,6 @@ fun BackupSettingsScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // Max backups to keep
                             Text(
                                 text = "MAX BACKUPS TO KEEP",
                                 fontFamily = RobotoFamily,
@@ -231,7 +236,6 @@ fun BackupSettingsScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // What to include — behind a button
                             Button(
                                 onClick = { showAutoIncludeSheet = true },
                                 modifier = Modifier.fillMaxWidth(),
@@ -266,13 +270,36 @@ fun BackupSettingsScreen(
                         },
                     ) {
                         if (folderUri.isNotBlank()) {
-                            Text(
-                                text = Uri.decode(folderUri),
-                                fontFamily = RobotoFamily,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 12.dp),
-                            )
+                            // Friendlier path display — parse the SAF URI
+                            val friendlyPath = remember(folderUri) { parseFolderUri(folderUri) }
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Folder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(modifier = Modifier.size(8.dp))
+                                    Text(
+                                        text = friendlyPath,
+                                        fontFamily = RobotoFamily,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
                         Button(
                             onClick = { folderPicker.launch(null) },
@@ -291,27 +318,39 @@ fun BackupSettingsScreen(
         }
 
         // ── Create backup category-selection bottom sheet ──
+        // skipPartiallyExpanded = true → fully expands immediately
         if (showCreateBackupSheet) {
-            CreateBackupSheet(
-                categories = viewModel.categories,
-                selected = manualCategories,
-                onToggle = { viewModel.toggleManualCategory(it) },
-                onConfirm = {
-                    showCreateBackupSheet = false
-                    viewModel.createBackup()
-                },
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            AnikutaBottomSheet(
                 onDismiss = { showCreateBackupSheet = false },
-            )
+                sheetState = sheetState,
+            ) {
+                CreateBackupSheetContent(
+                    categories = viewModel.categories,
+                    selected = manualCategories,
+                    onToggle = { viewModel.toggleManualCategory(it) },
+                    onConfirm = {
+                        showCreateBackupSheet = false
+                        viewModel.createBackup()
+                    },
+                )
+            }
         }
 
         // ── Auto-include category-selection bottom sheet ──
         if (showAutoIncludeSheet) {
-            AutoIncludeSheet(
-                categories = viewModel.categories,
-                selected = autoCategories,
-                onToggle = { viewModel.toggleAutoCategory(it) },
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            AnikutaBottomSheet(
                 onDismiss = { showAutoIncludeSheet = false },
-            )
+                sheetState = sheetState,
+            ) {
+                AutoIncludeSheetContent(
+                    categories = viewModel.categories,
+                    selected = autoCategories,
+                    onToggle = { viewModel.toggleAutoCategory(it) },
+                    onDismiss = { showAutoIncludeSheet = false },
+                )
+            }
         }
 
         // ── State overlays ──
@@ -342,6 +381,35 @@ fun BackupSettingsScreen(
             )
             BackupUiState.Idle -> { /* no overlay */ }
         }
+    }
+}
+
+/**
+ * Parses a SAF tree URI into a friendlier display path.
+ *
+ * Example: `content://com.android.externalstorage.documents/tree/primary%3AANIKUTA%2Fbackups`
+ * → "Internal Storage › ANIKUTA › backups"
+ */
+private fun parseFolderUri(uriStr: String): String {
+    return try {
+        val uri = Uri.parse(uriStr)
+        // The path after "/tree/" contains the folder hierarchy
+        val treePath = uri.path?.substringAfter("/tree/") ?: uriStr
+        // URL-decode it (e.g. primary%3AANIKUTA → primary:ANIKUTA)
+        val decoded = Uri.decode(treePath)
+        // Split on ":" or "/" and build a friendly path
+        val parts = decoded.split(":", "/").filter { it.isNotBlank() }
+        // Replace "primary" with "Internal Storage"
+        val friendlyParts = parts.map { part ->
+            when (part.lowercase()) {
+                "primary" -> "Internal Storage"
+                "external" -> "SD Card"
+                else -> part
+            }
+        }
+        friendlyParts.joinToString(" › ")
+    } catch (e: Exception) {
+        uriStr
     }
 }
 
@@ -382,6 +450,8 @@ private fun SectionCard(
                         fontFamily = RobotoFamily,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (toggle != null) {
@@ -412,64 +482,110 @@ private fun ErrorDialog(message: String, onDismiss: () -> Unit) {
     )
 }
 
-/**
- * Bottom sheet for selecting which data categories to include in a manual backup.
- * Uses AnikutaBottomSheet (dragHandle = null per design principle #2).
- */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+// ── Sheet content composables (used inside AnikutaBottomSheet) ──
+
 @Composable
-private fun CreateBackupSheet(
+private fun CreateBackupSheetContent(
     categories: List<BackupCategory>,
     selected: Set<String>,
     onToggle: (String) -> Unit,
     onConfirm: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Select data to back up",
+            fontFamily = RobotoFamily,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${selected.size} of ${categories.size} categories selected",
+            fontFamily = RobotoFamily,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Category checkbox list — scrollable if long, full height available
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 500.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            BackupCategoryList(
+                categories = categories,
+                selected = selected,
+                onToggle = onToggle,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            enabled = selected.isNotEmpty(),
+        ) {
+            Text(
+                text = "Create backup",
+                fontFamily = RobotoFamily,
+                fontWeight = FontWeight.ExtraBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AutoIncludeSheetContent(
+    categories: List<BackupCategory>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AnikutaBottomSheet(onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "What to include",
+            fontFamily = RobotoFamily,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "${selected.size} of ${categories.size} categories selected",
+            fontFamily = RobotoFamily,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 500.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            BackupCategoryList(
+                categories = categories,
+                selected = selected,
+                onToggle = onToggle,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+        ) {
             Text(
-                text = "Select data to back up",
+                text = "Done",
                 fontFamily = RobotoFamily,
-                fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${selected.size} of ${categories.size} categories selected",
-                fontFamily = RobotoFamily,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Category checkbox list — scrollable if long
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                BackupCategoryList(
-                    categories = categories,
-                    selected = selected,
-                    onToggle = onToggle,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = onConfirm,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                enabled = selected.isNotEmpty(),
-            ) {
-                Text(
-                    text = "Create backup",
-                    fontFamily = RobotoFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-            }
         }
     }
 }
