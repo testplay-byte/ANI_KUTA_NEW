@@ -38,6 +38,9 @@ dependencies {
     // activity-compose (BackHandler)
     implementation("androidx.activity:activity-compose:1.10.1")
 
+    // Coil for cover images (Aniyomi restore linking screen)
+    implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+
     // Koin (for koinInject / koinViewModel)
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.core)

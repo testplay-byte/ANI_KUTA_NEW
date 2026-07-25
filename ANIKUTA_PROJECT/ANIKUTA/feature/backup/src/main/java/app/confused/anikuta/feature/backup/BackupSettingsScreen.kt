@@ -85,7 +85,7 @@ import org.koin.androidx.compose.koinViewModel
 fun BackupSettingsScreen(
     onBack: () -> Unit,
     onRestoreComplete: () -> Unit = {},
-    onAniyomiRestore: () -> Unit = {},
+    onAniyomiRestore: (Uri) -> Unit = {},
     viewModel: BackupViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -110,7 +110,7 @@ fun BackupSettingsScreen(
             // Detect format — if it's Aniyomi (.tachibk), open the Aniyomi restore flow
             val isAniyomi = uri.lastPathSegment?.endsWith(".tachibk", ignoreCase = true) == true
             if (isAniyomi) {
-                onAniyomiRestore()
+                onAniyomiRestore(uri)
             } else {
                 viewModel.onSelectBackupFile(uri)
             }

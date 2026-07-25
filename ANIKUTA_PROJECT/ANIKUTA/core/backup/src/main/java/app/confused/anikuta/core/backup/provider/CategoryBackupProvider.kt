@@ -75,13 +75,18 @@ class CategoryBackupProvider(
                         linksSkipped++
                         return@forEach
                     }
-                    // Resolve the anime's local DB id from the backup's anime id.
-                    // The backup stores anime_id as the original DB id — we need to
-                    // match by AniList ID or source+url. Since the link doesn't carry
-                    // that info, we skip links whose anime isn't resolvable.
-                    // (The Library/AnimeDetails provider restores the anime first;
-                    //  we match by the same DB id if the restore happened in order.)
-                    val localAnimeId = link.animeId // optimistic: same DB id if restored
+                    // Resolve the anime's local DB _id from the backup's animeId.
+                    // The backup may store either:
+                    // - The original local DB _id (for ANIKUTA backups), OR
+                    // - The AniList ID (for Aniyomi-translated backups, where the
+                    //   translator sets animeId = anilistId.toLong())
+                    // We try both: first by direct _id match, then by anilist_id.
+                    val localAnimeId = resolveLocalAnimeIdForLink(database, link.animeId)
+                    if (localAnimeId == null) {
+                        Log.w(TAG, "Categories import: could not resolve anime for link (animeId=${link.animeId}) — skipping")
+                        linksSkipped++
+                        return@forEach
+                    }
                     database.anime_categoryQueries.insert(
                         animeId = localAnimeId,
                         categoryId = newCategoryId,
@@ -126,4 +131,23 @@ internal fun upsertCategory(database: AnikutaDatabase, cat: CategoryBackup): Lon
         )
         queries.lastInsertedRowId().executeAsOne()
     }
+}
+
+/**
+ * Resolves a backup animeId to the local DB _id.
+ *
+ * For ANIKUTA backups: the animeId IS the local DB _id (direct match).
+ * For Aniyomi-translated backups: the animeId is the AniList ID (we need
+ * to look it up via selectIdByAnilistId).
+ *
+ * Tries direct _id first, then AniList ID lookup.
+ */
+internal fun resolveLocalAnimeIdForLink(database: AnikutaDatabase, animeId: Long): Long? {
+    val queries = database.animesQueries
+    // Try direct _id match (ANIKUTA backups)
+    queries.selectById(animeId) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
+        .executeAsOneOrNull()?.let { return it }
+    // Try AniList ID match (Aniyomi-translated backups)
+    queries.selectIdByAnilistId(animeId).executeAsOneOrNull()?.let { return it }
+    return null
 }

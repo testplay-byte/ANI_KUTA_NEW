@@ -10,7 +10,6 @@ import app.confused.anikuta.core.backup.BackupResult
 import app.confused.anikuta.core.backup.BackupStorage
 import app.confused.anikuta.core.backup.format.BackupFormatDetector
 import app.confused.anikuta.core.backup.format.AniyomiBackupFormat
-import app.confused.anikuta.core.backup.format.aniyomi.AniyomiBackup
 import app.confused.anikuta.core.backup.translation.AnilistResolution
 import app.confused.anikuta.core.backup.translation.AniyomiBackupTranslator
 import app.confused.anikuta.core.backup.translation.TranslationResult
@@ -25,25 +24,61 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "AniyomiRestoreVM"
 
+/** Minimum processing animation time (2 seconds per owner request). */
+private const val MIN_PROCESSING_MS = 2000L
+
 /**
  * UI state for the Aniyomi restore flow.
  */
 sealed class AniyomiRestoreState {
+    /** Initial — waiting for a file URI to be passed in. */
     object Idle : AniyomiRestoreState()
+
+    /** Step 1: Format detected — show the detection screen (red→green on button click). */
     data class FormatDetected(val isSupported: Boolean, val formatName: String, val fileUri: Uri) : AniyomiRestoreState()
+
+    /** Step 2: Processing (decoding + translating, 2 sec min). */
     data class Processing(val message: String = "Processing backup…") : AniyomiRestoreState()
-    data class Summary(val stats: TranslationStats, val resolutions: List<AnilistResolution>, val translationResult: TranslationResult, val fileUri: Uri) : AniyomiRestoreState()
-    data class Linking(val progress: TranslationProgress?, val resolutions: List<AnilistResolution>) : AniyomiRestoreState()
-    data class ManualLinking(val failedAnime: List<AnilistResolution.Failed>, val resolutions: List<AnilistResolution>, val translationResult: TranslationResult, val fileUri: Uri) : AniyomiRestoreState()
+
+    /** Step 3: Summary — show stats + Restore/Cancel. */
+    data class Summary(
+        val stats: TranslationStats,
+        val resolutions: List<AnilistResolution>,
+        val translationResult: TranslationResult,
+        val fileUri: Uri,
+    ) : AniyomiRestoreState()
+
+    /** Step 4: Linking — STAYS until user clicks "Next". Restore has already executed. */
+    data class Linking(
+        val progress: TranslationProgress?,
+        val resolutions: List<AnilistResolution>,
+        val allDone: Boolean,
+        val restoreSuccess: Boolean,
+    ) : AniyomiRestoreState()
+
+    /** Step 5: Manual linking — user picks matches for failed anime. */
+    data class ManualLinking(
+        val failedAnime: List<AnilistResolution.Failed>,
+        val resolutions: List<AnilistResolution>,
+        val translationResult: TranslationResult,
+        val fileUri: Uri,
+    ) : AniyomiRestoreState()
+
+    /** Step 6: Success — auto-close after 5 seconds. */
     data class Success(val stats: TranslationStats, val skippedCount: Int) : AniyomiRestoreState()
+
+    /** Error. */
     data class Error(val message: String) : AniyomiRestoreState()
 }
 
 /**
  * ViewModel for the Aniyomi restore flow (6-step multi-screen).
  *
- * Uses [AniyomiBackupTranslator] with [AniListRateLimiter] (80 req/min dynamic).
- * Min 5-second animation on processing step.
+ * Key behaviors:
+ * - File URI is passed in directly (no double file picker).
+ * - Processing animation: 2 sec min.
+ * - Linking screen STAYS until user clicks "Next" (doesn't auto-advance).
+ * - Rate limited via AniListRateLimiter (80 req/min dynamic).
  */
 class AniyomiRestoreViewModel(
     private val anilistApi: AniListApi,
@@ -54,6 +89,10 @@ class AniyomiRestoreViewModel(
     private val _state = MutableStateFlow<AniyomiRestoreState>(AniyomiRestoreState.Idle)
     val state: StateFlow<AniyomiRestoreState> = _state.asStateFlow()
 
+    /**
+     * Called directly with a file URI (no file picker — the caller already picked it).
+     * Reads the first bytes to detect the format.
+     */
     fun onFileSelected(uri: Uri) {
         viewModelScope.launch {
             try {
@@ -74,6 +113,10 @@ class AniyomiRestoreViewModel(
         }
     }
 
+    /**
+     * Step 1 → Step 2: User clicked "Continue" on the format detection screen.
+     * Starts processing (decode + translate) with a minimum 2-second animation.
+     */
     fun onContinueFromDetection(uri: Uri) {
         viewModelScope.launch {
             _state.value = AniyomiRestoreState.Processing()
@@ -89,7 +132,7 @@ class AniyomiRestoreViewModel(
 
                 val trans = AniyomiBackupTranslator(anilistApi)
                 val translationDeferred = async { trans.translate(aniyomi) }
-                val minDelayDeferred = async { delay(5000) }
+                val minDelayDeferred = async { delay(MIN_PROCESSING_MS) }
                 minDelayDeferred.await()
                 val result = translationDeferred.await()
 
@@ -106,12 +149,44 @@ class AniyomiRestoreViewModel(
         }
     }
 
+    /**
+     * Step 3 → Step 4: User clicked "Restore" on the summary screen.
+     * Executes the actual restore + animates the linking results.
+     * STAYS on the Linking screen until the user clicks "Next".
+     */
     fun onRestoreFromSummary(uri: Uri) {
         val current = _state.value as? AniyomiRestoreState.Summary ?: return
         viewModelScope.launch {
-            _state.value = AniyomiRestoreState.Linking(progress = null, resolutions = current.resolutions)
+            // Execute the actual restore FIRST (before animating)
+            var restoreSuccess = false
+            try {
+                val container = current.translationResult.container
+                when (val result = backupManager.restoreBackupFromContainer(container)) {
+                    is BackupResult.Success -> {
+                        restoreSuccess = true
+                        Log.i(TAG, "Restore completed: ${result.data.totalImported} imported")
+                    }
+                    is BackupResult.Error -> {
+                        Log.e(TAG, "Restore failed: ${result.message}")
+                        _state.value = AniyomiRestoreState.Error(result.message)
+                        return@launch
+                    }
+                    is BackupResult.InProgress -> {}
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Restore failed", e)
+                _state.value = AniyomiRestoreState.Error("Restore failed: ${e.message}")
+                return@launch
+            }
 
-            // Animate the linking results (300ms per anime)
+            // Now animate the linking results (300ms per anime)
+            _state.value = AniyomiRestoreState.Linking(
+                progress = null,
+                resolutions = current.resolutions,
+                allDone = false,
+                restoreSuccess = restoreSuccess,
+            )
+
             current.resolutions.forEachIndexed { index, res ->
                 delay(300)
                 _state.value = AniyomiRestoreState.Linking(
@@ -119,7 +194,7 @@ class AniyomiRestoreViewModel(
                         currentIndex = index + 1,
                         total = current.resolutions.size,
                         currentTitle = when (res) {
-                            is AnilistResolution.Resolved -> res.anilistAnime?.title?.romaji ?: ""
+                            is AnilistResolution.Resolved -> res.anilistAnime?.title?.romaji ?: res.anilistAnime?.title?.english ?: ""
                             is AnilistResolution.Failed -> res.title
                         },
                         resolved = current.resolutions.take(index + 1).count { it is AnilistResolution.Resolved },
@@ -127,36 +202,62 @@ class AniyomiRestoreViewModel(
                         resolution = res,
                     ),
                     resolutions = current.resolutions,
+                    allDone = (index + 1 >= current.resolutions.size),
+                    restoreSuccess = restoreSuccess,
                 )
             }
-
-            // Execute the actual restore
-            try {
-                val container = current.translationResult.container
-                when (val result = backupManager.restoreBackupFromContainer(container)) {
-                    is BackupResult.Success -> {
-                        val failed = current.resolutions.filterIsInstance<AnilistResolution.Failed>()
-                        if (failed.isEmpty()) {
-                            _state.value = AniyomiRestoreState.Success(stats = current.stats, skippedCount = 0)
-                        } else {
-                            _state.value = AniyomiRestoreState.ManualLinking(
-                                failedAnime = failed,
-                                resolutions = current.resolutions,
-                                translationResult = current.translationResult,
-                                fileUri = uri,
-                            )
-                        }
-                    }
-                    is BackupResult.Error -> _state.value = AniyomiRestoreState.Error(result.message)
-                    is BackupResult.InProgress -> {}
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Restore failed", e)
-                _state.value = AniyomiRestoreState.Error("Restore failed: ${e.message}")
-            }
+            // STAY on the Linking screen — user must click "Next" to proceed.
         }
     }
 
+    /**
+     * Step 4 → Step 5/6: User clicked "Next" on the linking screen.
+     * If there are failed anime → go to manual linking. Otherwise → success.
+     */
+    fun onNextFromLinking() {
+        val current = _state.value as? AniyomiRestoreState.Linking ?: return
+        val failed = current.resolutions.filterIsInstance<AnilistResolution.Failed>()
+        if (failed.isEmpty()) {
+            val stats = TranslationStats(
+                totalAnime = current.resolutions.size,
+                resolvedAnime = current.resolutions.count { it is AnilistResolution.Resolved },
+                failedAnime = 0,
+                totalEpisodes = 0,
+                totalCategories = 0,
+                totalManga = 0,
+                totalMangaCategories = 0,
+            )
+            _state.value = AniyomiRestoreState.Success(stats = stats, skippedCount = 0)
+        } else {
+            // Build a dummy TranslationResult for the ManualLinking state
+            val dummyResult = TranslationResult(
+                container = app.confused.anikuta.core.backup.model.BackupContainer(
+                    createdAt = System.currentTimeMillis(),
+                    entries = emptyList(),
+                ),
+                resolutions = current.resolutions,
+                stats = TranslationStats(
+                    totalAnime = current.resolutions.size,
+                    resolvedAnime = current.resolutions.count { it is AnilistResolution.Resolved },
+                    failedAnime = failed.size,
+                    totalEpisodes = 0,
+                    totalCategories = 0,
+                    totalManga = 0,
+                    totalMangaCategories = 0,
+                ),
+            )
+            _state.value = AniyomiRestoreState.ManualLinking(
+                failedAnime = failed,
+                resolutions = current.resolutions,
+                translationResult = dummyResult,
+                fileUri = Uri.EMPTY,
+            )
+        }
+    }
+
+    /**
+     * Step 5 → Step 6: User clicked "Skip & Continue" on the manual linking screen.
+     */
     fun onSkipManualLinking() {
         val current = _state.value as? AniyomiRestoreState.ManualLinking ?: return
         _state.value = AniyomiRestoreState.Success(

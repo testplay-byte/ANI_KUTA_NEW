@@ -147,6 +147,7 @@ private fun AnikutaApp() {
     var showBackup by remember { mutableStateOf(false) }
     // Aniyomi restore flow (full-screen multi-step wizard)
     var showAniyomiRestore by remember { mutableStateOf(false) }
+    var aniyomiFileUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val anilistApi = remember {
         val prefStore = org.koin.core.context.GlobalContext.get().get<app.confused.anikuta.core.preferences.PreferenceStore>()
         AniListApi(
@@ -373,13 +374,15 @@ private fun AnikutaApp() {
             // MUST come before showBackup — opened from the backup screen.
             showAniyomiRestore -> {
                 app.confused.anikuta.feature.backup.aniyomi.AniyomiRestoreFlow(
+                    fileUri = aniyomiFileUri,
                     onCancel = {
                         showAniyomiRestore = false
+                        aniyomiFileUri = null
                         showBackup = true
                     },
                     onComplete = {
-                        // After success auto-close → navigate to Library
                         showAniyomiRestore = false
+                        aniyomiFileUri = null
                         showBackup = false
                         showSettings = false
                         currentRoute = "library"
@@ -395,7 +398,8 @@ private fun AnikutaApp() {
                         showSettings = false
                         currentRoute = "library"
                     },
-                    onAniyomiRestore = {
+                    onAniyomiRestore = { uri ->
+                        aniyomiFileUri = uri
                         showBackup = false
                         showAniyomiRestore = true
                     },
