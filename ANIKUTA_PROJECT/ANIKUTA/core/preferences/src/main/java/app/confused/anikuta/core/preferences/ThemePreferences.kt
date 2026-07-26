@@ -1,8 +1,5 @@
 package app.confused.anikuta.core.preferences
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-
 /**
  * The theme mode — which surface tone scheme the app uses.
  *
@@ -29,6 +26,9 @@ enum class ThemeMode {
  *
  * **No blue/indigo presets** per the design rules (`RULES/ai-agent-rules.md`
  * §6 + owner preference). The presets are warm/green tones.
+ *
+ * [seedColorArgb] is the ARGB Int of the seed color. The UI layer converts
+ * it to a Compose `Color` — this module does NOT depend on Compose.
  */
 enum class AccentPreset(val displayName: String, val seedColorArgb: Int) {
     LIME("Lime", 0xFFB1F256.toInt()),
@@ -37,9 +37,6 @@ enum class AccentPreset(val displayName: String, val seedColorArgb: Int) {
     CORAL("Coral", 0xFFFF7043.toInt()),
     SAGE("Sage", 0xFF8BC34A.toInt()),
     CUSTOM("Custom", 0xFFB1F256.toInt()), // seedColorArgb is unused for CUSTOM; the actual color is in customAccentColor.
-
-    /** Compose [Color] for this preset's seed color. */
-    val seedColor: Color get() = Color(seedColorArgb.toLong() and 0xFFFFFFFF)
 }
 
 /**
@@ -53,8 +50,12 @@ enum class AccentPreset(val displayName: String, val seedColorArgb: Int) {
  * All preferences are reactive via `Preference.changes()`, so the app
  * recomposes live when the user changes a setting in the Appearance screen.
  *
+ * **No Compose dependency** — colors are stored as ARGB Int. The UI layer
+ * (`:core:designsystem` / `:feature:settings`) converts between Int and
+ * Compose `Color`.
+ *
  * Registered in [app.confused.anikuta.core.preferences.di.preferenceModule]
- * (or a dedicated module) as a Koin singleton.
+ * as a Koin singleton.
  */
 class ThemePreferences(
     private val store: PreferenceStore,
@@ -74,19 +75,19 @@ class ThemePreferences(
      */
     val customAccentColor: Preference<Int> = store.getInt("pref_theme_custom_accent", AccentPreset.LIME.seedColorArgb)
 
-    /** Convenience: the effective accent color (preset seed or custom). */
-    fun effectiveAccentColor(): Color {
+    /** Convenience: the effective accent color ARGB (preset seed or custom). */
+    fun effectiveAccentColorArgb(): Int {
         val preset = accentPreset.get()
         return if (preset == AccentPreset.CUSTOM) {
-            Color(customAccentColor.get().toLong() and 0xFFFFFFFF)
+            customAccentColor.get()
         } else {
-            preset.seedColor
+            preset.seedColorArgb
         }
     }
 
-    /** Convenience: set a custom accent color + switch to CUSTOM preset. */
-    fun setCustomAccent(color: Color) {
-        customAccentColor.set(color.toArgb())
+    /** Convenience: set a custom accent color (ARGB Int) + switch to CUSTOM preset. */
+    fun setCustomAccent(argb: Int) {
+        customAccentColor.set(argb)
         accentPreset.set(AccentPreset.CUSTOM)
     }
 }

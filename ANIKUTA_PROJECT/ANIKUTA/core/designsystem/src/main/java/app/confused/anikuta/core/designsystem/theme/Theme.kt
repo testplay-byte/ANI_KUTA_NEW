@@ -39,7 +39,7 @@ fun AnikutaTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     amoled: Boolean = false,
     accentPreset: AccentPreset = AccentPreset.LIME,
-    customAccentColor: Color = AccentPreset.LIME.seedColor,
+    customAccentColor: Color = Color(AccentPreset.LIME.seedColorArgb.toLong() and 0xFFFFFFFF),
     content: @Composable () -> Unit,
 ) {
     val isDark = when (themeMode) {

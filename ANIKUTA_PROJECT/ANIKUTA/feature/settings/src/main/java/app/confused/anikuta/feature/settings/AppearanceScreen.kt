@@ -116,7 +116,7 @@ fun AppearanceScreen(
                     currentPreset = accentPreset,
                     customColorArgb = customColorArgb,
                     onSelectPreset = { prefs.accentPreset.set(it) },
-                    onSetCustom = { color -> prefs.setCustomAccent(color) },
+                    onSetCustom = { color -> prefs.setCustomAccent(color.toArgb()) },
                 )
             }
 
@@ -260,7 +260,7 @@ private fun AccentColorCard(
             ) {
                 AccentPreset.entries.filter { it != AccentPreset.CUSTOM }.forEach { preset ->
                     AccentSwatch(
-                        color = preset.seedColor,
+                        color = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF),
                         isSelected = currentPreset == preset,
                         onClick = {
                             onSelectPreset(preset)

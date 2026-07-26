@@ -78,7 +78,11 @@ fun accentScheme(color: Color): AccentScheme {
 
 /** The [AccentScheme] for a given [AccentPreset] (or CUSTOM via [color]). */
 fun accentSchemeFor(preset: AccentPreset, color: Color? = null): AccentScheme {
-    val seed = if (preset == AccentPreset.CUSTOM && color != null) color else preset.seedColor
+    val seed = if (preset == AccentPreset.CUSTOM && color != null) {
+        color
+    } else {
+        Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF)
+    }
     return accentScheme(seed)
 }
 
