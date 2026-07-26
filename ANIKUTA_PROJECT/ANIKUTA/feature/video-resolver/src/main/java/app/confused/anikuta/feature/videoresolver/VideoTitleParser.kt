@@ -1,29 +1,49 @@
 package app.confused.anikuta.feature.videoresolver
 
+import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
 
 /**
- * Parses video titles to extract the server name, audio version (SUB/DUB/HSUB),
- * and quality/resolution, then groups videos into the 3-tier hierarchy
- * (Server → Audio → Quality) used by [VideoResolverSheet].
+ * Parses video titles to extract the audio version (SUB/DUB/HSUB) and quality,
+ * then groups videos into the 3-tier hierarchy (Server → Audio → Quality).
  *
- * Ported from the old ANIKUTA project's `VideoTitleParser.kt` with improvements:
- * - Uses [Video.resolution] (structured field) when available, falls back to regex.
- * - Handles the `"ServerName - SUB - 1080p"` format AND bare titles like `"1080p"`.
+ * **Smart detection** (per user requirements):
+ * - Audio versions (SUB, DUB, HSUB, H-SUB, A-DUB, SUBBED, DUBBED, HARDSUB) are
+ *   NEVER treated as server names. They are extracted from the title and used
+ *   as the audio version label.
+ * - Server names come from (in priority order):
+ *   1. The [Hoster.hosterName] (if available from the hoster-based API)
+ *   2. The text before `" - "` in the title IF it's not an audio version
+ *   3. Auto-generated names: "Server A", "Server B", "Server C", ... (per user:
+ *      "if it cannot detect the server name but it did actually detect the audio
+ *      versions, then what it will do is that it will name the servers A, B, C")
+ *   4. If NOTHING is detectable (no audio, no quality, no server) → returns null,
+ *      signaling the caller to use [RawResolverStrategy] instead.
  *
- * **Sorting** (per the design language `video-resolver.md` §6):
- * - Servers: alphabetical.
+ * **Sorting**:
+ * - Servers: preferred server first (if any), then alphabetical.
  * - Audio versions: SUB → DUB → HSUB → Unknown.
  * - Quality: highest first (descending).
  */
 object VideoTitleParser {
 
     private val QUALITY_REGEX = Regex("""\b(\d{3,4})p\b""", RegexOption.IGNORE_CASE)
-    private val AUDIO_REGEX = Regex("""\b(SUB|DUB|HSUB|HARDSUB|SUBBED|DUBBED)\b""", RegexOption.IGNORE_CASE)
+
+    /** All known audio version + language tokens (case-insensitive). These are NEVER treated as server names. */
+    private val AUDIO_TOKENS = setOf(
+        "SUB", "SUBBED", "HSUB", "HARDSUB", "H-SUB", "HARDSUBBED",
+        "DUB", "DUBBED", "A-DUB", "ADUB",
+        // Language names that extensions sometimes use as the "audio version" part
+        "JAPANESE", "ENGLISH", "SPANISH", "FRENCH", "GERMAN", "PORTUGUESE", "ITALIAN",
+        "KOREAN", "CHINESE", "RUSSIAN", "CHINESE",
+        "ENG", "JPN", "ESP", "FRA", "DEU", "POR", "ITA", "KOR", "CHI", "RUS",
+    )
+
+    /** Regex that matches any known audio token as a whole word. */
+    private val AUDIO_REGEX = Regex("""\b(SUB|DUB|HSUB|HARDSUB|H-SUB|HARDSUBBED|SUBBED|DUBBED|A-DUB|ADUB)\b""", RegexOption.IGNORE_CASE)
 
     /**
-     * The audio version of a video. Extensions encode this in the video title
-     * (e.g. `"Server - SUB - 1080p"`). The order here defines the sort priority
+     * The audio version of a video. The order here defines the sort priority
      * in the picker (SUB first, Unknown last).
      */
     enum class AudioVersion(val label: String) {
@@ -35,12 +55,16 @@ object VideoTitleParser {
         companion object {
             fun fromToken(token: String): AudioVersion = when (token.uppercase()) {
                 "SUB", "SUBBED" -> SUB
-                "DUB", "DUBBED" -> DUB
-                "HSUB", "HARDSUB" -> HSUB
+                "DUB", "DUBBED", "A-DUB", "ADUB" -> DUB
+                "HSUB", "HARDSUB", "H-SUB", "HARDSUBBED" -> HSUB
                 else -> UNKNOWN
             }
         }
     }
+
+    /** True if [text] is a known audio version token (case-insensitive). */
+    fun isAudioToken(text: String): Boolean =
+        text.uppercase() in AUDIO_TOKENS
 
     /** The result of parsing one [Video]'s title. */
     data class ParsedVideo(
@@ -53,38 +77,81 @@ object VideoTitleParser {
     /**
      * Parses [video]'s title into a [ParsedVideo].
      *
-     * - **Quality**: prefers [Video.resolution] (structured); falls back to regex
-     *   `\d{3,4}p` extraction from [Video.videoTitle].
-     * - **Audio**: regex-matches SUB/DUB/HSUB/HARDSUB/SUBBED/DUBBED.
-     * - **Server**: the substring before the first `" - "` separator (e.g.
-     *   `"VidPlay-1 - SUB - 360p"` → `"VidPlay-1"`). Falls back to the full
-     *   trimmed title if no `" - "` is present.
+     * - **Quality**: prefers [Video.resolution]; falls back to regex `\d{3,4}p`.
+     * - **Audio**: regex-matches known audio tokens. NOT used as server name.
+     * - **Server**: extracted from title parts that are NOT audio tokens or quality.
+     *   Returns "[UNPARSEABLE]" if no server name can be extracted.
      */
-    fun parse(video: Video): ParsedVideo {
+    fun parse(video: Video, hosterName: String? = null): ParsedVideo {
         val title = video.videoTitle.ifBlank { video.quality }
 
         val quality = video.resolution
             ?: QUALITY_REGEX.find(title)?.groupValues?.get(1)?.toIntOrNull()
 
-        val audio = AUDIO_REGEX.find(title)?.value?.let { AudioVersion.fromToken(it) }
+        val audioMatch = AUDIO_REGEX.find(title)
+        val audio = audioMatch?.value?.let { AudioVersion.fromToken(it) }
             ?: AudioVersion.UNKNOWN
 
-        val server = title.substringBefore(" - ").trim().ifBlank { "Unknown" }
+        // ── Server name extraction ──
+        // Priority 1: hosterName from the Hoster object
+        if (hosterName != null && hosterName.isNotBlank() && hosterName != Hoster.NO_HOSTER_LIST) {
+            return ParsedVideo(video, hosterName, audio, quality)
+        }
+
+        // Priority 2: split by " - " and take parts that are NOT audio tokens or quality
+        val parts = title.split(" - ").map { it.trim() }.filter { it.isNotBlank() }
+        val serverParts = parts.filter { part ->
+            !isAudioToken(part) &&
+            !QUALITY_REGEX.matches(part) &&
+            !part.all { it.isDigit() }
+        }
+
+        val server = serverParts.firstOrNull()?.ifBlank { null }
+            ?: return ParsedVideo(video, "[UNPARSEABLE]", audio, quality)
 
         return ParsedVideo(video, server, audio, quality)
     }
 
     /**
-     * Groups a flat list of [Video]s into the 3-tier hierarchy:
-     * `List<ResolverServer>` → each has `List<ResolverAudioVersion>` → each has
-     * `List<ResolverVideo>`.
+     * Groups a flat list of [Video]s into the 3-tier hierarchy.
+     * Uses [hosterNames] to map videos to their server names when available.
      *
-     * Servers are sorted alphabetically; audio versions in SUB→DUB→HSUB→Unknown
-     * order; quality descending (highest first).
+     * If ALL videos are unparseable (server="[UNPARSEABLE]"), returns an empty
+     * list, signaling the caller to fall back to [RawResolverStrategy].
+     *
+     * If SOME videos have server names and others don't, the unparseable ones
+     * get auto-named "Server A", "Server B", etc. per the user's request.
+     *
+     * @param hosterNames optional map of video index → hoster name (from the
+     *   Hoster.videoList ordering). If null, all server names come from title parsing.
      */
-    fun groupVideosByServer(videos: List<Video>): List<ResolverServer> {
-        val parsed = videos.map { parse(it) }
-        val byServer = parsed.groupBy { it.server }
+    fun groupVideosByServer(
+        videos: List<Video>,
+        hosterNames: Map<Int, String>? = null,
+    ): List<ResolverServer> {
+        val parsed = videos.mapIndexed { index, video ->
+            parse(video, hosterNames?.get(index))
+        }
+
+        // Check if ALL are unparseable → return empty (caller falls back to raw)
+        val allUnparseable = parsed.all { it.server == "[UNPARSEABLE]" }
+        if (allUnparseable) {
+            return emptyList()
+        }
+
+        // Auto-name unparseable servers: A, B, C, ...
+        val autoNamed = mutableListOf<ParsedVideo>()
+        var autoCounter = 0
+        for (pv in parsed) {
+            if (pv.server == "[UNPARSEABLE]") {
+                autoCounter++
+                autoNamed.add(pv.copy(server = "Server ${'A' + autoCounter - 1}"))
+            } else {
+                autoNamed.add(pv)
+            }
+        }
+
+        val byServer = autoNamed.groupBy { it.server }
         val audioOrder = listOf(
             AudioVersion.SUB, AudioVersion.DUB, AudioVersion.HSUB, AudioVersion.UNKNOWN,
         )
