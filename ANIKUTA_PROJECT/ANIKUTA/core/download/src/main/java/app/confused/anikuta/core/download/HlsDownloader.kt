@@ -152,7 +152,26 @@ class HlsDownloader(
         }
     }
 
-    /** Downloads a single segment and appends its bytes to [out]. */
+    /**
+     * Downloads a single segment, strips any PNG header (anti-scraping
+     * obfuscation used by some CDNs), and appends the cleaned bytes to [out].
+     *
+     * **Why PNG stripping is needed:** some CDNs (e.g. megaplay.buzz /
+     * kotocdn.site) prepend a PNG image header to each HLS segment to prevent
+     * direct downloading. The extension's LocalProxyServer strips this header
+     * before serving to MPV. Our downloader must do the same — otherwise the
+     * concatenated .ts file starts with PNG magic bytes and is rejected.
+     *
+     * The stripping logic mirrors the extension's `stripPngHeader`:
+     * 1. Check if the segment starts with PNG magic bytes (89 50 4E 47).
+     * 2. Find the "IEND" marker (end of the PNG data).
+     * 3. Skip 8 bytes after IEND.
+     * 4. Look for the MPEG-TS sync byte (0x47) at a position where 0x47 also
+     *    appears 188 bytes later (confirming it's a real sync byte).
+     * 5. Return everything from that sync byte onward.
+     *
+     * If the segment doesn't start with PNG, it's returned as-is.
+     */
     private fun downloadSegment(url: String, headers: String?, out: FileOutputStream) {
         val request = buildRequest(url, headers)
         try {
@@ -160,20 +179,52 @@ class HlsDownloader(
                 if (!response.isSuccessful) {
                     throw DownloadException("HTTP ${response.code} fetching segment: $url")
                 }
-                response.body?.byteStream()?.use { input ->
-                    val buffer = ByteArray(SEGMENT_BUFFER_SIZE)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read == -1) break
-                        out.write(buffer, 0, read)
-                    }
-                }
+                // Read the full segment into memory (segments are typically < 5MB).
+                val rawBytes = response.body?.bytes()
+                    ?: throw DownloadException("Empty segment response: $url")
+                // Strip PNG header if present.
+                val cleanBytes = stripPngHeader(rawBytes)
+                out.write(cleanBytes)
             }
         } catch (e: DownloadException) {
             throw e
         } catch (e: Exception) {
             throw DownloadException("Segment download failed: ${e.message ?: e.javaClass.simpleName}", e)
         }
+    }
+
+    /**
+     * Strips a PNG header from a segment if present.
+     * Mirrors the extension's LocalProxyServer.stripPngHeader logic.
+     */
+    private fun stripPngHeader(data: ByteArray): ByteArray {
+        if (data.size < 8) return data
+        // Check for PNG magic bytes (89 50 4E 47)
+        if (!(data[0] == 0x89.toByte() && data[1] == 'P'.code.toByte() &&
+                data[2] == 'N'.code.toByte() && data[3] == 'G'.code.toByte())) {
+            return data // Not a PNG — return as-is
+        }
+        // Find the IEND marker (end of PNG data)
+        var cut = -1
+        for (i in 0 until data.size - 4) {
+            if (data[i] == 'I'.code.toByte() && data[i + 1] == 'E'.code.toByte() &&
+                data[i + 2] == 'N'.code.toByte() && data[i + 3] == 'D'.code.toByte()) {
+                cut = i + 8 // skip 8 bytes after IEND (IEND + CRC)
+                break
+            }
+        }
+        if (cut < 0 || cut >= data.size) return data
+        // Look for the MPEG-TS sync byte (0x47) where 0x47 also appears 188 bytes later
+        val scanLimit = minOf(data.size - 188, cut + 400)
+        for (i in cut until scanLimit) {
+            if (data[i] == 0x47.toByte() && data[i + 188] == 0x47.toByte()) {
+                DownloadLogger.d("Stripped PNG header: ${cut} bytes → MPEG-TS starts at $i")
+                return data.copyOfRange(i, data.size)
+            }
+        }
+        // Fallback: just cut after IEND
+        DownloadLogger.d("Stripped PNG header (fallback): cut at $cut")
+        return data.copyOfRange(cut, data.size)
     }
 
     /** Builds an OkHttp request with the headers parsed from the "Key: Value\n" format. */

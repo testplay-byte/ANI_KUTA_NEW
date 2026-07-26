@@ -5,68 +5,92 @@ episodes for offline playback.
 
 **Module path:** `core/download`
 **Type:** Android library (no Compose — pure logic + SAF I/O + notifications)
-**Status:** Implemented (DEFAULT method). 1DM method is interface-ready (ADR-020).
+**Status:** Production-ready for unencrypted HLS + direct video. Encrypted HLS / DASH requires FFmpegKit (documented as next step).
 
 ## What it does
 
 - Downloads episodes (video + ALL subtitles + metadata) to a user-selected
   SAF folder in an AniList-first structure.
-- Manages a queue with active/pending/paused/completed/error states and a
-  configurable concurrency limit.
-- Persists the queue across app restarts.
+- Supports TWO download methods:
+  - **Normal**: single-threaded OkHttp streaming. Works for direct video + HLS.
+  - **Advanced**: multi-threaded Range-request download with resume + auto-retry.
+    Falls back to Normal for HLS + unsupported servers.
+- Handles HLS (.m3u8) streams: parses playlists, downloads segments, strips
+  PNG anti-scraping headers, concatenates into .ts.
+- Validates downloads: file-size check, magic-byte verification (rejects HTML
+  error pages + images masquerading as video).
+- Persists the queue across app restarts with resume capability (Advanced).
 - Posts Android notifications (progress, completion, error).
-- Exposes offline-playback queries (is the episode on disk? give me its URI).
 
 ## Architecture
 
 ```
-DownloadManager (interface)          ← pluggable contract (DEFAULT + future 1DM)
-└── DefaultDownloadManager           ← wires everything; implements the interface
+DownloadManager (interface)          ← pluggable contract
+└── DefaultDownloadManager           ← wires everything
     ├── DownloadQueue                ← state machine + Semaphore concurrency
-    │   └── HttpDownloader           ← OkHttp streaming download + subtitles
+    │   └── HttpDownloader           ← routes: Normal → streaming; Advanced → multi-threaded; HLS → HlsDownloader
+    │       ├── HlsDownloader        ← HLS playlist parsing + segment download + PNG stripping
+    │       └── AdvancedHttpDownloader ← multi-threaded Range requests + resume + retry
+    │           └── DownloadResumeManager ← per-chunk resume metadata
     ├── DownloadStore                ← persists the queue (PreferenceStore JSON)
-    ├── DownloadStorageProvider      ← SAF folder structure (AniList-first)
-    └── DownloadNotificationManager  ← Android notifications
+    ├── DownloadStorageProvider      ← SAF folder structure (AniList-first) + publish
+    ├── TempDownloadCache            ← internal cache for partial downloads
+    ├── DownloadPreferences          ← all download settings
+    ├── ServerDiscoveryStore         ← caches discovered server names per source
+    ├── DynamicProgressTracker       ← smart progress estimation (50MB-ahead, 90% cap)
+    ├── DownloadNotificationManager  ← Android notifications
+    └── DownloadLogger               ← uniform tag (AnikutaDownload)
 ```
 
-### Key design decisions
+## PNG Anti-Scraping (Critical Discovery)
 
-1. **Resolved-video input (not source/episode).** `enqueueDownload` takes a
-   `DownloadRequest` (already-resolved video URL + headers + subtitle tracks),
-   NOT a `(Anime, SEpisode, AnimeSource)`. This respects module boundaries:
-   `:core:download` cannot import `:feature:video-resolver` (Rule §14).
-   Resolution is orchestrated by `:app`'s `DownloadOrchestrator`.
+Some CDNs (e.g. megaplay.buzz / kotocdn.site) prepend PNG image headers to
+HLS segments to prevent direct downloading. The extension's LocalProxyServer
+strips these headers before serving to MPV. Our `HlsDownloader` does the same:
+`stripPngHeader()` finds the IEND marker, skips to the MPEG-TS sync byte,
+and writes only the clean video data. Without this, downloads would produce
+files starting with PNG magic bytes → falsely rejected as "corrupt."
 
-2. **AniList-first folder structure.** `<root>/ANIKUTA/downloads/anime/
-   <Anime Title [anilistId]>/Episode NNN/video.<ext>` + `data/subtitles/` +
-   `data/metadata.json` (per FOLDER-STRUCTURE-PLAN.md).
+## Download Flow
 
-3. **SAF (DocumentFile), not java.io.File.** The user picks the folder; we use
-   content:// URIs throughout. MPV plays these via `resolveUrlForMpv`
-   (`fd://` / real-path) — offline playback needs no file copying.
+1. User taps download → `DownloadOrchestrator` resolves video URL via
+   `ResolverService` → selects best server/audio/quality based on preferences
+2. `DownloadManager.enqueueDownload()` → `DownloadQueue` queues the task
+3. `HttpDownloader.download()`:
+   a. Download to internal cache (`TempDownloadCache`)
+   b. If file is small + starts with `#EXTM3U` → re-download via `HlsDownloader`
+   c. `HlsDownloader` parses playlist, downloads segments (stripping PNG headers),
+      concatenates into `.ts`
+   d. Validate: file-size check + magic-byte check (HTML/PNG/JPEG rejection)
+   e. Publish to SAF (`DownloadStorageProvider.publishToUserFolder`)
+   f. Clean up temp cache
+4. Progress tracked by `DynamicProgressTracker` (50MB-ahead estimate, 90% cap)
 
-4. **Pluggable method.** `DownloadPreferences.method()` selects DEFAULT (now)
-   or ONEDM (future). Swapping is a Koin binding change in `DownloadModule`.
+## Format Support
 
-5. **Wi-Fi-only aware.** The connectivity check honours the pref; tasks stay
-   QUEUED when off-Wi-Fi (if the pref is on).
-
-## Public API
-
-See `DownloadManager.kt` for the full interface. Key entry points:
-- `enqueueDownload(DownloadRequest): Long`
-- `pauseDownload / resumeDownload / cancelDownload / retryDownload / deleteDownload`
-- `isEpisodeDownloaded(anilistId, episodeUrl)`
-- `getDownloadedVideoUri(...)` / `getDownloadedSubtitleUris(...)` (for MPV)
-- `activeDownloads` / `completedDownloads` / `allDownloads` (Flows)
+| Format | Supported | How |
+|---|---|---|
+| Direct video (mp4/mkv/webm/etc.) | ✅ | OkHttp streaming (Normal) or Range requests (Advanced) |
+| HLS (.m3u8, unencrypted) | ✅ | `HlsDownloader` — segment parsing + concatenation + PNG stripping |
+| HLS (proxy URLs without .m3u8) | ✅ | Post-download `#EXTM3U` detection → re-download via HlsDownloader |
+| Encrypted HLS (AES-128) | ❌ | Needs FFmpegKit — documented as next step |
+| DASH (.mpd) | ❌ | Needs FFmpegKit — documented as next step |
+| HTML error pages | ❌ Rejected | Magic-byte check |
 
 ## Logging
 
-All logs route through `DownloadLogger` (tag `AnikutaDownload`).
-`adb logcat -s AnikutaDownload` shows the full download subsystem.
+All logs use the tag `AnikutaDownload`. Filter: `adb logcat -s AnikutaDownload:V`
+
+## Next Step: FFmpegKit
+
+Encrypted HLS + DASH support requires FFmpegKit (the owner approved the APK
+size increase). The plan is documented in `1DM-DOWNLOAD-ANALYSIS/`. The
+FFmpegKit integration would add a `FfmpegDownloadEngine` that uses a single
+FFmpeg call (`-c copy -f matroska`) to handle ALL formats — same approach as
+the OLD_ANIKUTA project + Aniyomi.
 
 ## Dependencies
 
-- `:core:preferences` (PreferenceStore), `:core:source-api` (SEpisode/Track + OkHttp)
+- `:core:preferences`, `:core:source-api`, `:core:common`
 - `androidx.documentfile` (SAF), `okhttp`, `kotlinx-serialization-json`,
-  `kotlinx-coroutines`, Koin.
+  `kotlinx-coroutines`, Koin

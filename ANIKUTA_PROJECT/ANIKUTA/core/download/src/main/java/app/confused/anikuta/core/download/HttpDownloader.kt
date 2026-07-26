@@ -389,19 +389,23 @@ class HttpDownloader(
             }
 
             // Check for PNG (corrupt HLS — segments were images, not video)
-            // BUT: some HLS streams have a poster/thumbnail as the first segment.
-            // So we check if the file has MPEG-TS sync bytes (0x47) at positions
-            // 0, 188, 376, ... — if ANY of them match, it's a valid .ts file
-            // with a non-standard first segment. Only reject if it's ALL PNG.
+            // BUT: some HLS streams have a poster/thumbnail as the first segment,
+            // AND some CDNs prepend PNG headers as anti-scraping (stripped by
+            // our HlsDownloader, but the first segment's stripped data may still
+            // have non-standard bytes). So we use TWO checks:
+            // 1. If the file is > 10MB, it's almost certainly a video (images
+            //    don't exceed 10MB). Skip the PNG/JPEG check entirely.
+            // 2. If the file is < 10MB AND starts with PNG AND has no MPEG-TS
+            //    sync bytes, reject it.
+            val isLargeFile = tempFile.length() > 10L * 1024 * 1024
             val isPng = header[0] == 0x89.toByte() && header[1] == 0x50.toByte() &&
                 header[2] == 0x4E.toByte() && header[3] == 0x47.toByte()
 
             // Check for MPEG-TS sync bytes at standard positions (0, 188, 376, ...)
-            // This is the reliable way to detect a .ts file — the sync byte 0x47
-            // appears every 188 bytes.
             val isTs = checkMpegTsSync(tempFile)
 
-            if (isPng && !isTs) {
+            // Only reject PNG if: file is small (< 10MB) AND is PNG AND is NOT a valid .ts
+            if (isPng && !isTs && !isLargeFile) {
                 DownloadLogger.e("Downloaded file is a PNG image, not a video (magic: $hex)")
                 throw DownloadException(
                     "The downloaded file is an image (PNG), not a video. " +
@@ -410,9 +414,9 @@ class HttpDownloader(
                 )
             }
 
-            // Check for JPEG (another non-video format) — only reject if NOT a valid .ts
+            // Check for JPEG (another non-video format) — only reject if small + NOT a valid .ts
             val isJpeg = header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()
-            if (isJpeg && !isTs) {
+            if (isJpeg && !isTs && !isLargeFile) {
                 DownloadLogger.e("Downloaded file is a JPEG image, not a video (magic: $hex)")
                 throw DownloadException(
                     "The downloaded file is an image (JPEG), not a video. " +
