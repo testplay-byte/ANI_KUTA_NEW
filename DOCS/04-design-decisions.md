@@ -760,7 +760,9 @@ All previously-open decisions are now resolved by ADRs 009–030:
     `navigator.push()`. No flags, no `when` branches, no `BackHandler` cases.
   - ✅ True LIFO back stack — back behavior is automatic via Voyager's
     built-in `BackHandler`.
-  - ✅ Slide transitions between screens (`SlideTransition`).
+  - ✅ Simple **fade** transition between screens (`FadeTransition`) — a clean
+    cross-fade rather than a slide animation, per owner preference. A dedicated
+    animation-polish session may revisit this later.
   - ✅ Business logic moved out of the composable into `AppController`
     (addresses Rule §3). A future refactor can split `AppController` into
     per-concern coordinators.

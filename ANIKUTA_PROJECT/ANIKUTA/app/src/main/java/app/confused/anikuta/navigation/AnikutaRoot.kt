@@ -22,7 +22,7 @@ import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import cafe.adriel.voyager.navigator.Navigator
-import cafe.adriel.voyager.transitions.SlideTransition
+import cafe.adriel.voyager.transitions.FadeTransition
 import org.koin.compose.koinInject
 
 /**
@@ -94,8 +94,10 @@ fun AnikutaRoot() {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // ── Screen content (with slide transition) ──
-            SlideTransition(navigator = navigator)
+            // ── Screen content (simple fade transition — no slide) ──
+            // Per owner preference: a clean cross-fade between screens rather
+            // than a slide animation. Smooth, simple, and good-looking.
+            FadeTransition(navigator = navigator)
 
             // ── Floating bottom nav (on top of content, below overlays) ──
             if (showBottomNav) {
@@ -127,7 +129,7 @@ private fun AppOverlays(appController: AppController) {
     // ── Back gesture for the resolver overlay ──
     // The VideoResolverSheet is a custom Box (NOT a ModalBottomSheet), so it
     // doesn't have built-in back handling. This BackHandler is composed AFTER
-    // the screen content (via SlideTransition), so it takes priority when the
+    // the screen content (via FadeTransition), so it takes priority when the
     // resolver is visible. The other two overlays (linking sheet, download
     // picker) are ModalBottomSheets and handle back themselves.
     val resolverVisible = appController.resolverState !is VideoResolverState.Hidden
