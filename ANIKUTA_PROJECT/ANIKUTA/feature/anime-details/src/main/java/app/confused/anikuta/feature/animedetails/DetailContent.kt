@@ -66,6 +66,14 @@ fun DetailContent(
     onManualSearch: suspend (Long, String) -> Unit,
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
+    /** Agent 2 — Downloads: enqueues a download for an episode. */
+    onDownloadEpisode: (SEpisode, AnimeSource, WatchEpisodeContext) -> Unit = { _, _, _ -> },
+    /** Per-episode download states keyed by episode URL (for the row UI). */
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     // Parse cover color for dynamic theming (hex → Compose Color)
     val coverColor = remember(anime) {
@@ -142,6 +150,14 @@ fun DetailContent(
                     onManualSearch = onManualSearch,
                     onLinkManual = onLinkManual,
                     onClearManualSearch = onClearManualSearch,
+                    onDownloadEpisode = { episode, source ->
+                        onDownloadEpisode(episode, source, watchCtx)
+                    },
+                    downloadStates = downloadStates,
+                    onDownloadCancel = onDownloadCancel,
+                    onDownloadResume = onDownloadResume,
+                    onDownloadRetry = onDownloadRetry,
+                    onDownloadDelete = onDownloadDelete,
                 )
             }
 

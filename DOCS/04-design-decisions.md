@@ -633,6 +633,39 @@ All previously-open decisions are now resolved by ADRs 009–030:
   - ⚠️ More code to maintain (hidden features still need to compile + work).
     Accepted — this is the cost of flexibility.
 
+## ADR-035 — Modular DownloadManager + resolved-video input + auto-pick quality
+
+- **Date:** Phase 7 (Agent 2 — Downloads & Offline Playback).
+- **Context:** Downloads need (a) a pluggable method (standard HTTP now,
+  multi-threaded 1DM-style future — ADR-020), (b) to respect module boundaries
+  (`:core:download` cannot import `:feature:video-resolver` — Rule §14), and
+  (c) a single-tap download button on episode rows (no per-episode quality
+  picker for the MVP — that would make batch downloads tedious).
+- **Decision:**
+  - `DownloadManager` is an **interface** in `:core:download`; `DefaultDownloadManager`
+    (OkHttp) implements it now; a future `OneDmDownloadManager` will swap in via a
+    Koin binding change (gated on `DownloadPreferences.method()`).
+  - `enqueueDownload` takes an **already-resolved** `DownloadRequest` (video URL +
+    headers + ALL subtitle tracks) — NOT a `(Anime, SEpisode, AnimeSource)`. Video
+    URL resolution is orchestrated by `:app`'s `DownloadOrchestrator`, which depends
+    on both `:feature:video-resolver` and `:core:download`. This keeps the engine
+    decoupled + lets the 1DM method swap in without touching resolution logic.
+  - The orchestrator **auto-picks the best video** (highest numeric resolution;
+    fallback first) so the download button is a single tap. A future enhancement
+    could surface a quality picker.
+  - `DownloadAnimeInfo` is a minimal DTO (anilistId, title, coverUrl) — NOT a
+    domain `Anime` model — so `:core:download` stays decoupled from any specific
+    data layer (the prompt's `Anime` type doesn't exist as a single shared model).
+  - Offline playback plays the SAF content:// URI directly via MPV's
+    `resolveUrlForMpv` (fd:// / real-path) — no file copying.
+- **Consequences:**
+  - ✅ Swapping the download method is trivial (one Koin binding).
+  - ✅ `:core:download` has zero `:feature:*` imports (clean module boundary).
+  - ✅ Single-tap downloads; queue is visible on the Downloads screen.
+  - ⚠️ No quality picker for downloads (MVP). Acceptable — auto-pick best quality.
+  - ⚠️ Per-episode download STATE (checkmark/progress on the row) is deferred —
+    the Downloads screen is the source of truth for progress. Follow-up.
+
 ---
 
 ## ADR-035 — Backup format: gzipped JSON in a zip container (refines ADR-028)

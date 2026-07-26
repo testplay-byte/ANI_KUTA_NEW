@@ -67,7 +67,7 @@ Follows `RULES/ai-agent-rules.md` §4 (modularity): `:feature:*`, `:core`, `:dat
 │   ├── :core:source-api                ← the source/extension contract (KMP, Aniyomi-compatible)
 │   ├── :core:source-local              ← local-files-as-source
 │   ├── :core:player                    ← MPV wrapper, controls, PiP (single instance)
-│   ├── :core:download                  ← download manager, queue, storage
+│   ├── :core:download                  ← download manager, queue, storage (ADR-020, ADR-031)
 │   ├── :core:notification              ← notification channels, schedulers (ADR-014)
 │   └── :core:backup                    ← backup/restore engine (gzipped protobuf)
 ├── :data
@@ -93,7 +93,8 @@ Follows `RULES/ai-agent-rules.md` §4 (modularity): `:feature:*`, `:core`, `:dat
 │   ├── :feature:extensions-settings    ← Extensions management (3-category, ADR-016)
 │   ├── :feature:settings               ← Settings (with simple mode, ADR-018)
 │   ├── :feature:trackers               ← Tracker login/binding
-│   └── :feature:backup                 ← Backup/restore UI
+│   ├── :feature:backup                 ← Backup/restore UI
+│   └── :feature:download               ← Downloads UI (queue + library + settings)
 └── :i18n                               ← Moko Resources strings (English-only initially, ADR-027)
 ```
 
@@ -175,6 +176,38 @@ The dual manga/anime schema pattern (per ADR-009) follows the reference: separat
 - Subtitle track management is careful — the old project had subtitle issues
   from improper MPV state handling. We handle lifecycle + track selection
   explicitly. See `DESIGN_LANGUAGE/04-screens/player.md`.
+
+---
+
+## 6.5. Downloads & offline playback (ADR-020, ADR-031)
+
+A modular download system with a pluggable `DownloadManager` interface.
+
+- **`:core:download`** — the engine (no Compose). `DownloadManager` interface →
+  `DefaultDownloadManager` (standard OkHttp HTTP download; a future
+  `OneDmDownloadManager` implements the same interface for multi-threaded
+  downloads — ADR-020). Contains `DownloadQueue` (state machine + Semaphore
+  concurrency), `HttpDownloader` (streaming + ALL subtitles + metadata.json),
+  `DownloadStorageProvider` (SAF, AniList-first folders), `DownloadStore`
+  (persisted queue), `DownloadPreferences`, `DownloadNotificationManager`.
+- **`:feature:download`** — the UI. `DownloadsScreen` (queue + downloaded
+  library + settings), `DownloadViewModel`, `DownloadsMoreEntries` (More screen
+  entry), `DownloadPreferencesSheet` (`dragHandle = null`).
+- **`:app` `DownloadOrchestrator`** — bridges `:feature:video-resolver` +
+  `:core:download` (lives in `:app` because `:core:download` cannot import
+  `:feature:video-resolver` — Rule §14). Resolves the video URL (same flow as
+  watching), auto-picks the best quality, and enqueues.
+- **Offline playback.** `MainActivity.resolveEpisode` checks
+  `DownloadManager.isEpisodeDownloaded` before resolving; if a copy is on disk,
+  it builds a `WatchRequest` with the local content:// URI + local subtitle
+  URIs. MPV plays these via `resolveUrlForMpv` (fd:// / real-path) — no file
+  copying needed.
+- **Folder structure (SAF, AniList-first).**
+  `<USER_FOLDER>/ANIKUTA/downloads/anime/Anime Title [anilistId]/Episode NNN/video.<ext>`
+  + `data/subtitles/` + `data/metadata.json` (per
+  `BACKUP-AND-RESTORE-AND-DOWNLOADING-PLANING/FOLDER-STRUCTURE-PLAN.md`).
+- **Logging.** All download logs route through `DownloadLogger` (tag
+  `AnikutaDownload`); `adb logcat -s AnikutaDownload` shows the full subsystem.
 
 ---
 

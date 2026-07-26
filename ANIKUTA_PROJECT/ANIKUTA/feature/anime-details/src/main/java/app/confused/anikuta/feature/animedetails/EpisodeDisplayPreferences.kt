@@ -96,4 +96,12 @@ class EpisodeDisplayPreferences(
     /** Whether the synopsis gets a dedicated background container. */
     fun showSynopsisBackground(): Preference<Boolean> =
         store.getBoolean("pref_ep_show_synopsis_bg", true)
+
+    /**
+     * Whether the download button is shown on episode rows (default true).
+     * Toggled from the Downloads settings sheet. The button enqueues a
+     * download for the episode (Agent 2 — Downloads & Offline Playback).
+     */
+    fun showDownloadButton(): Preference<Boolean> =
+        store.getBoolean("pref_ep_show_download_button", true)
 }

@@ -19,11 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -90,6 +92,14 @@ fun EpisodesSection(
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
     showMetadataLoading: Boolean = true,
+    /** Agent 2 — Downloads: invoked when the user taps the download button on an episode row. */
+    onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
+    /** Per-episode download states, keyed by episode URL (for the row UI). */
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     var showManualSearch by remember { mutableStateOf(false) }
 
@@ -209,6 +219,12 @@ fun EpisodesSection(
                 onOpenEpisode = onOpenEpisode,
                 currentSource = currentMatch?.source,
                 onToggleWatched = onToggleWatched,
+                onDownloadEpisode = onDownloadEpisode,
+                downloadStates = downloadStates,
+                onDownloadCancel = onDownloadCancel,
+                onDownloadResume = onDownloadResume,
+                onDownloadRetry = onDownloadRetry,
+                onDownloadDelete = onDownloadDelete,
             )
             is EpisodeState.NoMatch -> NoSourcesState(
                 onSearchManually = { showManualSearch = true },
@@ -271,6 +287,12 @@ private fun EpisodeList(
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
     currentSource: AnimeSource?,
     onToggleWatched: (String) -> Unit,
+    onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         episodes.forEachIndexed { index, episode ->
@@ -288,6 +310,14 @@ private fun EpisodeList(
                     }
                 },
                 onToggleWatched = { onToggleWatched(episode.url) },
+                onDownload = {
+                    currentSource?.let { source -> onDownloadEpisode(episode, source) }
+                },
+                downloadState = downloadStates[episode.url] ?: EpisodeDownloadState.NotDownloaded,
+                onDownloadCancel = { onDownloadCancel(episode.url) },
+                onDownloadResume = { onDownloadResume(episode.url) },
+                onDownloadRetry = { onDownloadRetry(episode.url) },
+                onDownloadDelete = { onDownloadDelete(episode.url) },
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -342,6 +372,12 @@ private fun EpisodeRow(
     displayPrefs: EpisodeDisplayPrefs? = null,
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
+    onDownload: () -> Unit = {},
+    downloadState: EpisodeDownloadState = EpisodeDownloadState.NotDownloaded,
+    onDownloadCancel: () -> Unit = {},
+    onDownloadResume: () -> Unit = {},
+    onDownloadRetry: () -> Unit = {},
+    onDownloadDelete: () -> Unit = {},
 ) {
     // Background matches the More screen button background (surfaceVariant@0.4f).
     val cardColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -360,6 +396,7 @@ private fun EpisodeRow(
     val showDateBg = displayPrefs?.showDateBackground ?: true
     val showAudioBg = displayPrefs?.showAudioBackground ?: true
     val showSynopsisBg = displayPrefs?.showSynopsisBackground ?: true
+    val showDownloadBtn = displayPrefs?.showDownloadButton ?: true
 
     // Use metadata title if available, otherwise parse the extension title
     val displayTitle = metadata?.title
@@ -515,6 +552,21 @@ private fun EpisodeRow(
             } else if (thumbnailUrl != null || showNumber) {
                 // No title and no meta — fill remaining space so thumbnail keeps natural size
                 Spacer(modifier = Modifier.weight(1f))
+            }
+
+            // ── Download control (Agent 2 — Downloads & Offline Playback) ──
+            // State-driven: download button / progress+cancel / checkmark+delete.
+            // Shown when the pref is on OR the episode is already downloaded/
+            // downloading (so the user can always see/manage the state).
+            if (showDownloadBtn || downloadState != EpisodeDownloadState.NotDownloaded) {
+                EpisodeDownloadControl(
+                    state = downloadState,
+                    onDownload = onDownload,
+                    onCancel = onDownloadCancel,
+                    onResume = onDownloadResume,
+                    onRetry = onDownloadRetry,
+                    onDelete = onDownloadDelete,
+                )
             }
         }
 
@@ -809,11 +861,12 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
     val showDateBg by prefs.showDateBackground().changes().collectAsState(initial = prefs.showDateBackground().get())
     val showAudioBg by prefs.showAudioBackground().changes().collectAsState(initial = prefs.showAudioBackground().get())
     val showSynopsisBg by prefs.showSynopsisBackground().changes().collectAsState(initial = prefs.showSynopsisBackground().get())
+    val showDownloadBtn by prefs.showDownloadButton().changes().collectAsState(initial = prefs.showDownloadButton().get())
 
     return remember(
         showNumber, showTitles, showSummaries, showThumbnails, showDates, showAudioPills,
         thumbPos, titlePos, synopsisPos, datePos, epNumPos, thumbSize, titleLines, synopsisLines,
-        showTitleBg, showDateBg, showAudioBg, showSynopsisBg,
+        showTitleBg, showDateBg, showAudioBg, showSynopsisBg, showDownloadBtn,
     ) {
         EpisodeDisplayPrefs(
             showThumbnails = showThumbnails,
@@ -834,6 +887,7 @@ private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): Ep
             showDateBackground = showDateBg,
             showAudioBackground = showAudioBg,
             showSynopsisBackground = showSynopsisBg,
+            showDownloadButton = showDownloadBtn,
         )
     }
 }
@@ -869,6 +923,8 @@ data class EpisodeDisplayPrefs(
     val showDateBackground: Boolean = true,
     val showAudioBackground: Boolean = true,
     val showSynopsisBackground: Boolean = true,
+    /** Whether the download button is shown on the row (Agent 2 — Downloads). */
+    val showDownloadButton: Boolean = true,
 )
 
 /** Formats an episode number: 5.0f → "5", 5.5f → "5.5", -1f → "?". */

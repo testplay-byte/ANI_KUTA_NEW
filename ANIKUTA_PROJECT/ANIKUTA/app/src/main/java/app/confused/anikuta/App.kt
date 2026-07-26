@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import app.confused.anikuta.di.databaseModule
+import app.confused.anikuta.di.downloadAppModule
 import app.confused.anikuta.di.extensionModule
 import app.confused.anikuta.di.repositoryModule
 import app.confused.anikuta.feature.history.di.historyModule
@@ -100,6 +101,8 @@ class App : Application() {
                 app.confused.anikuta.core.backup.di.backupModule,
                 app.confused.anikuta.feature.backup.di.backupFeatureModule,
                 app.confused.anikuta.feature.backup.di.aniyomiRestoreModule,
+                // ── Agent 2: Downloads & Offline Playback ──
+                downloadAppModule,
             )
         }
 

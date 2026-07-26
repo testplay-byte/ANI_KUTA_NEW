@@ -57,6 +57,14 @@ fun AnimeDetailScreen(
     extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit = { _, _, _, _ -> },
+    /** Agent 2 — Downloads: enqueues a download for an episode (from the episode row button). */
+    onDownloadEpisode: (SEpisode, AnimeSource, WatchEpisodeContext) -> Unit = { _, _, _ -> },
+    /** Agent 2 — Downloads: per-episode download states keyed by episode URL. */
+    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
+    onDownloadCancel: (String) -> Unit = {},
+    onDownloadResume: (String) -> Unit = {},
+    onDownloadRetry: (String) -> Unit = {},
+    onDownloadDelete: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -141,6 +149,12 @@ fun AnimeDetailScreen(
                 onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
                 onLinkManual = vm::linkManual,
                 onClearManualSearch = vm::clearManualSearch,
+                onDownloadEpisode = onDownloadEpisode,
+                downloadStates = downloadStates,
+                onDownloadCancel = onDownloadCancel,
+                onDownloadResume = onDownloadResume,
+                onDownloadRetry = onDownloadRetry,
+                onDownloadDelete = onDownloadDelete,
             )
         }
     }

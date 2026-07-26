@@ -79,6 +79,7 @@ include(":feature:extensions-settings")
 include(":feature:settings")
 include(":feature:trackers")
 include(":feature:backup")
+include(":feature:download")
 
 // ── :i18n ──
 include(":i18n")
