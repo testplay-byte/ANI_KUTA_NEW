@@ -269,9 +269,12 @@ private fun AnikutaApp() {
             showHistory -> showHistory = false
             showUpdates -> showUpdates = false
             // ── Agent 2: Downloads ──
-            showDownloads -> showDownloads = false
+            // Sub-pages MUST come BEFORE showDownloads — otherwise the first
+            // back press closes showDownloads (not the sub-page), requiring
+            // two back presses to exit the sub-page.
             showDownloadSettings -> { showDownloadSettings = false; showDownloads = true }
             showDownloadedFiles -> { showDownloadedFiles = false; showDownloads = true }
+            showDownloads -> showDownloads = false
             // ── Agent 2: Profile + Trackers ──
             showTrackers -> showTrackers = false
             showProfile -> showProfile = false

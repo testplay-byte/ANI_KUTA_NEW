@@ -84,12 +84,18 @@ object DynamicProgressTracker {
         }
 
         // ── Case 2: total is unknown (-1) or too small to be real — estimate ──
-        // Grow the estimate so the bar advances slowly toward 90%. If the
-        // downloaded bytes exceed 90% of the estimate, grow the estimate.
-        var estimate = if (previousEstimate > 0) previousEstimate else INITIAL_ESTIMATE_BYTES
-        // If downloaded exceeds 90% of the estimate, grow the estimate by 50%.
-        while (downloaded > estimate * 0.9) {
-            estimate = (estimate * 1.5).toLong()
+        // Use the owner's "50MB ahead" strategy: the displayed total is always
+        // 50MB ahead of the current downloaded bytes. This way:
+        // - The user sees real downloaded bytes (accurate)
+        // - The total grows as the download progresses (never stuck)
+        // - The progress bar advances (downloaded / (downloaded + 50MB))
+        // - When the download completes, the tracker stops + the queue sets 100%
+        val aheadBytes = 50L * 1024 * 1024 // 50MB ahead
+        val estimate = if (previousEstimate > 0) {
+            // Use the previous estimate, but ensure it's always at least 50MB ahead
+            maxOf(previousEstimate, downloaded + aheadBytes)
+        } else {
+            downloaded + aheadBytes
         }
         val ratio = (downloaded.toDouble() / estimate).coerceIn(0.0, 0.9)
         val progress = (ratio * MAX_INCOMPLETE_PROGRESS).toInt().coerceIn(0, MAX_INCOMPLETE_PROGRESS)

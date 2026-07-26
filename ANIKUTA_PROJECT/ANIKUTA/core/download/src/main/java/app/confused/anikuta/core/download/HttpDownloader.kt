@@ -287,6 +287,32 @@ class HttpDownloader(
     }
 
     /**
+     * Checks if a file is a valid MPEG-TS stream by looking for sync bytes
+     * (0x47) at positions 0, 188, 376, 564, ... (every 188 bytes).
+     * Returns true if at least 2 sync bytes are found at the expected positions.
+     * This is the reliable way to detect a .ts file — even if the first segment
+     * is a PNG poster (some HLS streams do this), the rest of the file is valid .ts.
+     */
+    private fun checkMpegTsSync(file: File): Boolean {
+        return try {
+            val checkPositions = listOf(0L, 188L, 376L, 564L, 752L)
+            var syncCount = 0
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                for (pos in checkPositions) {
+                    if (pos < file.length()) {
+                        raf.seek(pos)
+                        val b = raf.readByte()
+                        if (b == 0x47.toByte()) syncCount++
+                    }
+                }
+            }
+            syncCount >= 2 // at least 2 sync bytes = valid .ts
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Checks if the file is an HLS playlist by reading the first few bytes.
      * HLS playlists start with `#EXTM3U` (case-insensitive).
      */
@@ -363,9 +389,19 @@ class HttpDownloader(
             }
 
             // Check for PNG (corrupt HLS — segments were images, not video)
+            // BUT: some HLS streams have a poster/thumbnail as the first segment.
+            // So we check if the file has MPEG-TS sync bytes (0x47) at positions
+            // 0, 188, 376, ... — if ANY of them match, it's a valid .ts file
+            // with a non-standard first segment. Only reject if it's ALL PNG.
             val isPng = header[0] == 0x89.toByte() && header[1] == 0x50.toByte() &&
                 header[2] == 0x4E.toByte() && header[3] == 0x47.toByte()
-            if (isPng) {
+
+            // Check for MPEG-TS sync bytes at standard positions (0, 188, 376, ...)
+            // This is the reliable way to detect a .ts file — the sync byte 0x47
+            // appears every 188 bytes.
+            val isTs = checkMpegTsSync(tempFile)
+
+            if (isPng && !isTs) {
                 DownloadLogger.e("Downloaded file is a PNG image, not a video (magic: $hex)")
                 throw DownloadException(
                     "The downloaded file is an image (PNG), not a video. " +
@@ -374,9 +410,9 @@ class HttpDownloader(
                 )
             }
 
-            // Check for JPEG (another non-video format)
+            // Check for JPEG (another non-video format) — only reject if NOT a valid .ts
             val isJpeg = header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()
-            if (isJpeg) {
+            if (isJpeg && !isTs) {
                 DownloadLogger.e("Downloaded file is a JPEG image, not a video (magic: $hex)")
                 throw DownloadException(
                     "The downloaded file is an image (JPEG), not a video. " +
@@ -390,7 +426,6 @@ class HttpDownloader(
                 header[6] == 'y'.code.toByte() && header[7] == 'p'.code.toByte()
             val isMkv = header[0] == 0x1A.toByte() && header[1] == 0x45.toByte() &&
                 header[2] == 0xDF.toByte() && header[3] == 0xA3.toByte()
-            val isTs = header[0] == 0x47.toByte() // MPEG-TS sync byte
             val isFlv = header[0] == 'F'.code.toByte() && header[1] == 'L'.code.toByte() &&
                 header[2] == 'V'.code.toByte()
             val isAvi = header[0] == 'R'.code.toByte() && header[1] == 'I'.code.toByte() &&

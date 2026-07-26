@@ -89,6 +89,23 @@ fun DownloadsScreen(
     val collapsed = lazyListState.firstVisibleItemIndex > 0 ||
         lazyListState.firstVisibleItemScrollOffset > 20
 
+    // ── Request POST_NOTIFICATIONS permission (Android 13+) ──
+    // Per the owner's request: request notification permission when the user
+    // opens the Downloads page, so download progress notifications work.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { _ -> }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            val granted = context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     // Derive status counts from the queue
     val queue = state.queue
     val downloading = queue.count { it.status == DownloadStatus.DOWNLOADING }

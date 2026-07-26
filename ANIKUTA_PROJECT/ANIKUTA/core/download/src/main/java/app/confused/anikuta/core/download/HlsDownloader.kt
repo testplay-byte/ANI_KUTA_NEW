@@ -54,7 +54,9 @@ class HlsDownloader(
      * @param m3u8Url The `.m3u8` playlist URL.
      * @param headers HTTP headers (newline-separated "Key: Value" format).
      * @param tempFile The output file (will be overwritten).
-     * @param onProgress Called with (segmentsDownloaded, totalSegments).
+     * @param onProgress Called with (downloadedBytes, totalBytes). totalBytes is
+     *   -1 (unknown) since HLS segment sizes aren't known until downloaded.
+     *   The caller's DynamicProgressTracker handles the -1 case by estimating.
      * @return The total bytes written.
      * @throws DownloadException on any failure (encrypted, no segments, network).
      */
@@ -62,7 +64,7 @@ class HlsDownloader(
         m3u8Url: String,
         headers: String?,
         tempFile: File,
-        onProgress: (downloadedSegments: Long, totalSegments: Long) -> Unit,
+        onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit,
     ): Long = withContext(Dispatchers.IO) {
         DownloadLogger.i("HLS download starting: $m3u8Url")
 
@@ -104,22 +106,26 @@ class HlsDownloader(
             (if (initSegmentUrl != null) " + init segment" else ""))
 
         // ── 5. Download + concatenate ──
-        val totalToDownload: Long = (segments.size + (if (initSegmentUrl != null) 1 else 0)).toLong()
-        var downloaded = 0L
+        // Report progress as ACTUAL BYTES (file size), not segment counts.
+        // totalBytes = -1 (unknown) — the DynamicProgressTracker will estimate.
         FileOutputStream(tempFile).use { out ->
             // Write the init segment first (for fMP4/.m4s streams).
             if (initSegmentUrl != null) {
                 coroutineContext.ensureActive()
                 downloadSegment(initSegmentUrl, headers, out)
-                downloaded++
-                onProgress(downloaded, totalToDownload)
+                out.flush()
+                onProgress(tempFile.length(), -1L)
             }
             // Download each media segment.
-            for (segUrl in segments) {
+            for ((i, segUrl) in segments.withIndex()) {
                 coroutineContext.ensureActive()
                 downloadSegment(segUrl, headers, out)
-                downloaded++
-                onProgress(downloaded, totalToDownload)
+                out.flush()
+                // Report actual file size after each segment
+                onProgress(tempFile.length(), -1L)
+                if (i % 5 == 0) {
+                    DownloadLogger.d("HLS progress: segment ${i+1}/${segments.size}, ${tempFile.length()/1024}KB")
+                }
             }
             out.flush()
         }
