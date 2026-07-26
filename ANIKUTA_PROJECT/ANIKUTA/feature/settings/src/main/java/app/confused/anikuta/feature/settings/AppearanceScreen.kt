@@ -1,6 +1,6 @@
-package app.confused.anikuta.feature.settings
-
 @file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
+package app.confused.anikuta.feature.settings
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -80,11 +80,11 @@ fun AppearanceScreen(
     val prefs = koinInject<ThemePreferences>()
 
     // Observe preferences reactively — the app theme updates live.
-    val themeMode by prefs.themeMode.changes().collectAsState(initial = prefs.themeMode.get())
-    val amoled by prefs.amoled.changes().collectAsState(initial = prefs.amoled.get())
-    val accentPreset by prefs.accentPreset.changes().collectAsState(initial = prefs.accentPreset.get())
+    val themeMode by prefs.themeMode.changes().collectAsStateWithLifecycle(initial = prefs.themeMode.get())
+    val amoled by prefs.amoled.changes().collectAsStateWithLifecycle(initial = prefs.amoled.get())
+    val accentPreset by prefs.accentPreset.changes().collectAsStateWithLifecycle(initial = prefs.accentPreset.get())
     val customColorArgb by prefs.customAccentColor.changes()
-        .collectAsState(initial = prefs.customAccentColor.get())
+        .collectAsStateWithLifecycle(initial = prefs.customAccentColor.get())
 
     val scrollState = rememberScrollState()
 
