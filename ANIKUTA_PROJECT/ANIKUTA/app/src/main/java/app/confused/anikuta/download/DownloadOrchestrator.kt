@@ -104,15 +104,28 @@ class DownloadOrchestrator(
                             }
                         }
                         is Selection.NoMatch -> {
-                            // Fallback ASK → show the picker.
-                            if (preferences.qualityFallback().get() == FallbackStrategy.ASK ||
-                                preferences.audioFallback().get() == FallbackStrategy.ASK) {
-                                EnqueueResult.ShowPicker(result.servers, anime, episode, source)
-                            } else if (preferences.qualityFallback().get() == FallbackStrategy.DO_NOT_DOWNLOAD) {
-                                EnqueueResult.Error("No video matching your quality preferences. " +
-                                    "Adjust your download settings or switch to manual mode.")
-                            } else {
-                                EnqueueResult.NoSources
+                            // Check WHY there was no match:
+                            val audioFallback = preferences.audioFallback().get()
+                            val qualityFallback = preferences.qualityFallback().get()
+                            when {
+                                // ASK → show the picker so the user can choose manually
+                                audioFallback == FallbackStrategy.ASK || qualityFallback == FallbackStrategy.ASK -> {
+                                    Log.d(TAG, "No preferred match → showing picker (ASK)")
+                                    EnqueueResult.ShowPicker(result.servers, anime, episode, source)
+                                }
+                                // DO_NOT_DOWNLOAD → tell the user their prefs weren't met
+                                audioFallback == FallbackStrategy.DO_NOT_DOWNLOAD -> {
+                                    EnqueueResult.Error("No audio version matching your preferences " +
+                                        "(${preferences.audioPreferences().get()}). " +
+                                        "Adjust your download settings or switch to manual mode.")
+                                }
+                                qualityFallback == FallbackStrategy.DO_NOT_DOWNLOAD -> {
+                                    EnqueueResult.Error("No quality matching your preferences " +
+                                        "(${preferences.qualityPreferences().get()}). " +
+                                        "Adjust your download settings or switch to manual mode.")
+                                }
+                                // TRY_NEXT but nothing was available at all
+                                else -> EnqueueResult.NoSources
                             }
                         }
                     }
@@ -159,39 +172,88 @@ class DownloadOrchestrator(
 
     /**
      * Selects the best (server, audio, quality) from [servers] based on the
-     * user's preference lists. Pure logic (no I/O) — inline because it depends
-     * on `ResolverServer` (which can't be imported by `:core:download`).
+     * user's preference lists + fallback strategies.
+     *
+     * **Algorithm (respects preferences + fallbacks):**
+     *
+     * 1. **Try preferred audio + preferred quality**: iterate servers (by
+     *    preference order), then audios (by preference order), then qualities
+     *    (by preference order). For each audio that IS in the user's audio
+     *    preference list, check if any quality IS in the user's quality
+     *    preference list. First match → Selected.
+     *
+     * 2. **If no preferred audio+quality match**: check the fallback strategies:
+     *    - **Audio fallback**:
+     *      - TRY_NEXT → proceed to step 3 (try preferred quality with ANY audio)
+     *      - ASK → return NoMatch (the caller will show the picker)
+     *      - DO_NOT_DOWNLOAD → return NoMatch (the caller will show an error)
+     *    - **Quality fallback**:
+     *      - TRY_NEXT → proceed to step 3 (try preferred audio with ANY quality)
+     *      - ASK → return NoMatch (the caller will show the picker)
+     *      - DO_NOT_DOWNLOAD → return NoMatch (the caller will show an error)
+     *
+     * 3. **Fallback (TRY_NEXT for both)**: pick the first available server /
+     *    audio / quality (best-effort). This is the "just download something"
+     *    behavior.
+     *
+     * 4. If nothing is available at all → NoMatch.
      */
     private fun selectBestVideo(sourceId: Long, servers: List<ResolverServer>): Selection {
         val qualityPrefs = preferences.qualityPreferences().get()
         val audioPrefs = preferences.audioPreferences().get()
         val serverPrefs = preferences.serverPreferences().get()[sourceId.toString()] ?: emptyList()
+        val audioFallback = preferences.audioFallback().get()
+        val qualityFallback = preferences.qualityFallback().get()
+
+        Log.d(TAG, "selectBestVideo: qualityPrefs=$qualityPrefs, audioPrefs=$audioPrefs, " +
+            "audioFallback=$audioFallback, qualityFallback=$qualityFallback")
 
         val orderedServers = orderByName(servers, serverPrefs) { it.name }
+
+        // ── Step 1: Try preferred audio + preferred quality ──
         for (server in orderedServers) {
             val orderedAudios = orderByName(server.audioVersions, audioPrefs) { it.label }
             for (audio in orderedAudios) {
+                // Only consider audios that are in the user's preference list.
+                if (!matchesAudio(audio.label, audioPrefs)) continue
+
                 val orderedVideos = orderByQuality(audio.videos, qualityPrefs)
                 val match = orderedVideos.firstOrNull { matchesQuality(it, qualityPrefs) }
                 if (match != null) {
-                    Log.d(TAG, "Auto-picked: ${server.name} / ${audio.label} / ${match.quality}")
+                    Log.d(TAG, "Auto-picked (preferred): ${server.name} / ${audio.label} / ${match.quality}")
                     return Selection.Selected(match, server.name, audio.label)
                 }
             }
         }
-        // Fallback: TRY_NEXT → pick the first available.
-        if (preferences.qualityFallback().get() == FallbackStrategy.TRY_NEXT) {
-            val first = orderedServers.firstOrNull()?.let { s ->
-                val a = s.audioVersions.firstOrNull()
-                val v = a?.videos?.firstOrNull()
-                if (v != null) Triple(s, a, v) else null
-            }
-            if (first != null) {
-                val (s, a, v) = first
-                Log.d(TAG, "Fallback (TRY_NEXT): ${s.name} / ${a.label} / ${v.quality}")
-                return Selection.Selected(v, s.name, a.label)
+
+        // ── Step 2: No preferred audio+quality match — check fallbacks ──
+        // If EITHER fallback is ASK → show the picker.
+        if (audioFallback == FallbackStrategy.ASK || qualityFallback == FallbackStrategy.ASK) {
+            Log.d(TAG, "No preferred match + fallback=ASK → showing picker")
+            return Selection.NoMatch
+        }
+        // If EITHER fallback is DO_NOT_DOWNLOAD → don't download.
+        if (audioFallback == FallbackStrategy.DO_NOT_DOWNLOAD ||
+            qualityFallback == FallbackStrategy.DO_NOT_DOWNLOAD) {
+            Log.d(TAG, "No preferred match + fallback=DO_NOT_DOWNLOAD → not downloading")
+            return Selection.NoMatch
+        }
+
+        // ── Step 3: Fallback TRY_NEXT — pick the first available ──
+        // (both audio + quality fallbacks must be TRY_NEXT to reach here)
+        for (server in orderedServers) {
+            val orderedAudios = orderByName(server.audioVersions, audioPrefs) { it.label }
+            for (audio in orderedAudios) {
+                val orderedVideos = orderByQuality(audio.videos, qualityPrefs)
+                val first = orderedVideos.firstOrNull()
+                if (first != null) {
+                    Log.d(TAG, "Fallback (TRY_NEXT): ${server.name} / ${audio.label} / ${first.quality}")
+                    return Selection.Selected(first, server.name, audio.label)
+                }
             }
         }
+
+        Log.d(TAG, "No video available at all → NoMatch")
         return Selection.NoMatch
     }
 
@@ -210,6 +272,12 @@ class DownloadOrchestrator(
     private fun matchesQuality(video: ResolverVideo, qualityPrefs: List<String>): Boolean {
         if (qualityPrefs.isEmpty()) return true
         return qualityPrefs.any { it.equals(video.quality, ignoreCase = true) }
+    }
+
+    /** True if the audio label is in the user's preference list (case-insensitive). */
+    private fun matchesAudio(audioLabel: String, audioPrefs: List<String>): Boolean {
+        if (audioPrefs.isEmpty()) return true // no prefs = accept any
+        return audioPrefs.any { it.equals(audioLabel, ignoreCase = true) }
     }
 
     private fun buildRequest(

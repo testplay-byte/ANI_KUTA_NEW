@@ -673,7 +673,6 @@ private fun AnikutaApp() {
             // Without this ordering, the showDownloads branch wins and the
             // settings screen never appears.
             showDownloadSettings -> {
-                // Build the extension-source list from trusted extensions.
                 val extensionSources = extensionManager.getTrustedExtensions().flatMap { ext ->
                     ext.sources.map { source ->
                         app.confused.anikuta.feature.download.ExtensionSourceInfo(
@@ -688,23 +687,25 @@ private fun AnikutaApp() {
                     extensionSources = extensionSources,
                 )
             }
-            // ── Agent 2: Downloads — full-screen page ──
-            showDownloads -> {
-                app.confused.anikuta.feature.download.DownloadsScreen(
-                    onBack = { showDownloads = false },
-                    onOpenSettings = { showDownloadSettings = true },
-                    onOpenDownloaded = { showDownloadedFiles = true },
-                )
-            }
             // ── Agent 2: Downloaded files page ──
+            // MUST come BEFORE showDownloads — when the user taps the
+            // "Downloaded" icon, showDownloadedFiles becomes true but
+            // showDownloads is still true. Same ordering bug as the settings gear.
             showDownloadedFiles -> {
                 app.confused.anikuta.feature.download.DownloadedFilesScreen(
                     onBack = { showDownloadedFiles = false },
                     onPlayEpisode = { anilistId, episodeUrl ->
                         showDownloadedFiles = false
                         detailAnimeId = anilistId
-                        // The resolveEpisode flow will check for offline playback.
                     },
+                )
+            }
+            // ── Agent 2: Downloads — full-screen page ──
+            showDownloads -> {
+                app.confused.anikuta.feature.download.DownloadsScreen(
+                    onBack = { showDownloads = false },
+                    onOpenSettings = { showDownloadSettings = true },
+                    onOpenDownloaded = { showDownloadedFiles = true },
                 )
             }
             // ── Agent 2: Profile + Trackers — full-screen pages ──
