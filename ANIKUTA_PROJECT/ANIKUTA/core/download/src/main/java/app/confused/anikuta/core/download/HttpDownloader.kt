@@ -362,6 +362,28 @@ class HttpDownloader(
                 )
             }
 
+            // Check for PNG (corrupt HLS — segments were images, not video)
+            val isPng = header[0] == 0x89.toByte() && header[1] == 0x50.toByte() &&
+                header[2] == 0x4E.toByte() && header[3] == 0x47.toByte()
+            if (isPng) {
+                DownloadLogger.e("Downloaded file is a PNG image, not a video (magic: $hex)")
+                throw DownloadException(
+                    "The downloaded file is an image (PNG), not a video. " +
+                    "The HLS segments may be corrupt or the server returned images instead of video. " +
+                    "Try a different server or quality."
+                )
+            }
+
+            // Check for JPEG (another non-video format)
+            val isJpeg = header[0] == 0xFF.toByte() && header[1] == 0xD8.toByte() && header[2] == 0xFF.toByte()
+            if (isJpeg) {
+                DownloadLogger.e("Downloaded file is a JPEG image, not a video (magic: $hex)")
+                throw DownloadException(
+                    "The downloaded file is an image (JPEG), not a video. " +
+                    "Try a different server or quality."
+                )
+            }
+
             // Check for known video magic bytes
             val isMp4 = header.size > 7 &&
                 header[4] == 'f'.code.toByte() && header[5] == 't'.code.toByte() &&
@@ -377,7 +399,7 @@ class HttpDownloader(
             if (!isMp4 && !isMkv && !isTs && !isFlv && !isAvi) {
                 DownloadLogger.w("Downloaded file has unknown magic bytes: $hex — proceeding (may still be playable)")
                 // Don't reject — some video formats have non-standard headers.
-                // The size check + HTML check are the primary guards.
+                // The size check + HTML/PNG/JPEG checks are the primary guards.
             } else {
                 DownloadLogger.d("Downloaded file verified as valid video (magic: $hex)")
             }

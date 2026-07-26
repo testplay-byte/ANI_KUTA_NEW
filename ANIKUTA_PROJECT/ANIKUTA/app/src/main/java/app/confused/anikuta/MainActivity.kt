@@ -270,8 +270,8 @@ private fun AnikutaApp() {
             showUpdates -> showUpdates = false
             // ── Agent 2: Downloads ──
             showDownloads -> showDownloads = false
-            showDownloadSettings -> showDownloadSettings = false
-            showDownloadedFiles -> showDownloadedFiles = false
+            showDownloadSettings -> { showDownloadSettings = false; showDownloads = true }
+            showDownloadedFiles -> { showDownloadedFiles = false; showDownloads = true }
             // ── Agent 2: Profile + Trackers ──
             showTrackers -> showTrackers = false
             showProfile -> showProfile = false

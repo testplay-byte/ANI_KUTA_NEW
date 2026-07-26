@@ -176,27 +176,33 @@ class DownloadOrchestrator(
      *
      * **Algorithm (respects preferences + fallbacks):**
      *
-     * 1. **Try preferred audio + preferred quality**: iterate servers (by
-     *    preference order), then audios (by preference order), then qualities
-     *    (by preference order). For each audio that IS in the user's audio
-     *    preference list, check if any quality IS in the user's quality
-     *    preference list. First match → Selected.
+     * 1. **Check if the TOP-preferred audio is available**: iterate all servers
+     *    + audios. If the #1 preferred audio (e.g. DUB) is available on any
+     *    server, proceed to step 2. If it's NOT available, the audio fallback
+     *    strategy applies:
+     *    - ASK → return NoMatch (the caller shows the picker)
+     *    - DO_NOT_DOWNLOAD → return NoMatch (the caller shows an error)
+     *    - TRY_NEXT → proceed (the next preferred audio will be tried)
      *
-     * 2. **If no preferred audio+quality match**: check the fallback strategies:
-     *    - **Audio fallback**:
-     *      - TRY_NEXT → proceed to step 3 (try preferred quality with ANY audio)
-     *      - ASK → return NoMatch (the caller will show the picker)
-     *      - DO_NOT_DOWNLOAD → return NoMatch (the caller will show an error)
-     *    - **Quality fallback**:
-     *      - TRY_NEXT → proceed to step 3 (try preferred audio with ANY quality)
-     *      - ASK → return NoMatch (the caller will show the picker)
-     *      - DO_NOT_DOWNLOAD → return NoMatch (the caller will show an error)
+     * 2. **Check if the TOP-preferred quality is available** (within the
+     *    preferred audio): if the #1 preferred quality (e.g. 360p) is not
+     *    available, the quality fallback applies:
+     *    - ASK → return NoMatch
+     *    - DO_NOT_DOWNLOAD → return NoMatch
+     *    - TRY_NEXT → try the next preferred quality, then the next, etc.
      *
-     * 3. **Fallback (TRY_NEXT for both)**: pick the first available server /
-     *    audio / quality (best-effort). This is the "just download something"
-     *    behavior.
+     * 3. **Try all preferred audio + preferred quality combinations** (in
+     *    priority order): iterate servers (by preference), audios (by
+     *    preference, filtered to only preferred ones), qualities (by
+     *    preference, filtered to only preferred ones). First match → Selected.
      *
-     * 4. If nothing is available at all → NoMatch.
+     * 4. **If no preferred combination matches**: if BOTH fallbacks are
+     *    TRY_NEXT, pick the first available (best-effort). Otherwise NoMatch.
+     *
+     * **Key insight:** the fallback strategy applies when the TOP preference
+     * isn't available, NOT when none of the preferences are available. The
+     * preference list IS a fallback chain for TRY_NEXT, but if the fallback
+     * is ASK or DO_NOT_DOWNLOAD, only the TOP preference is tried.
      */
     private fun selectBestVideo(sourceId: Long, servers: List<ResolverServer>): Selection {
         val qualityPrefs = preferences.qualityPreferences().get()
@@ -210,7 +216,61 @@ class DownloadOrchestrator(
 
         val orderedServers = orderByName(servers, serverPrefs) { it.name }
 
-        // ── Step 1: Try preferred audio + preferred quality ──
+        // ── Step 1: Check if the TOP-preferred audio is available ──
+        val topAudioPref = audioPrefs.firstOrNull()
+        if (topAudioPref != null) {
+            val topAudioAvailable = servers.any { server ->
+                server.audioVersions.any { it.label.equals(topAudioPref, ignoreCase = true) }
+            }
+            if (!topAudioAvailable) {
+                Log.d(TAG, "Top audio pref '$topAudioPref' not available — fallback=$audioFallback")
+                when (audioFallback) {
+                    FallbackStrategy.ASK -> {
+                        Log.d(TAG, "→ showing picker (ASK)")
+                        return Selection.NoMatch
+                    }
+                    FallbackStrategy.DO_NOT_DOWNLOAD -> {
+                        Log.d(TAG, "→ not downloading (DO_NOT_DOWNLOAD)")
+                        return Selection.NoMatch
+                    }
+                    FallbackStrategy.TRY_NEXT -> {
+                        Log.d(TAG, "→ trying next preferred audio (TRY_NEXT)")
+                        // Continue to step 2 — try remaining preferred audios
+                    }
+                }
+            }
+        }
+
+        // ── Step 2: Check if the TOP-preferred quality is available ──
+        // (within any preferred audio)
+        val topQualityPref = qualityPrefs.firstOrNull()
+        if (topQualityPref != null) {
+            val topQualityAvailable = servers.any { server ->
+                server.audioVersions.any { audio ->
+                    matchesAudio(audio.label, audioPrefs) &&
+                    audio.videos.any { it.quality.equals(topQualityPref, ignoreCase = true) }
+                }
+            }
+            if (!topQualityAvailable) {
+                Log.d(TAG, "Top quality pref '$topQualityPref' not available — fallback=$qualityFallback")
+                when (qualityFallback) {
+                    FallbackStrategy.ASK -> {
+                        Log.d(TAG, "→ showing picker (ASK)")
+                        return Selection.NoMatch
+                    }
+                    FallbackStrategy.DO_NOT_DOWNLOAD -> {
+                        Log.d(TAG, "→ not downloading (DO_NOT_DOWNLOAD)")
+                        return Selection.NoMatch
+                    }
+                    FallbackStrategy.TRY_NEXT -> {
+                        Log.d(TAG, "→ trying next preferred quality (TRY_NEXT)")
+                        // Continue to step 3
+                    }
+                }
+            }
+        }
+
+        // ── Step 3: Try all preferred audio + preferred quality combinations ──
         for (server in orderedServers) {
             val orderedAudios = orderByName(server.audioVersions, audioPrefs) { it.label }
             for (audio in orderedAudios) {
@@ -226,29 +286,18 @@ class DownloadOrchestrator(
             }
         }
 
-        // ── Step 2: No preferred audio+quality match — check fallbacks ──
-        // If EITHER fallback is ASK → show the picker.
-        if (audioFallback == FallbackStrategy.ASK || qualityFallback == FallbackStrategy.ASK) {
-            Log.d(TAG, "No preferred match + fallback=ASK → showing picker")
-            return Selection.NoMatch
-        }
-        // If EITHER fallback is DO_NOT_DOWNLOAD → don't download.
-        if (audioFallback == FallbackStrategy.DO_NOT_DOWNLOAD ||
-            qualityFallback == FallbackStrategy.DO_NOT_DOWNLOAD) {
-            Log.d(TAG, "No preferred match + fallback=DO_NOT_DOWNLOAD → not downloading")
-            return Selection.NoMatch
-        }
-
-        // ── Step 3: Fallback TRY_NEXT — pick the first available ──
-        // (both audio + quality fallbacks must be TRY_NEXT to reach here)
-        for (server in orderedServers) {
-            val orderedAudios = orderByName(server.audioVersions, audioPrefs) { it.label }
-            for (audio in orderedAudios) {
-                val orderedVideos = orderByQuality(audio.videos, qualityPrefs)
-                val first = orderedVideos.firstOrNull()
-                if (first != null) {
-                    Log.d(TAG, "Fallback (TRY_NEXT): ${server.name} / ${audio.label} / ${first.quality}")
-                    return Selection.Selected(first, server.name, audio.label)
+        // ── Step 4: No preferred combination matched ──
+        // If BOTH fallbacks are TRY_NEXT, pick the first available (best-effort).
+        if (audioFallback == FallbackStrategy.TRY_NEXT && qualityFallback == FallbackStrategy.TRY_NEXT) {
+            for (server in orderedServers) {
+                val orderedAudios = orderByName(server.audioVersions, audioPrefs) { it.label }
+                for (audio in orderedAudios) {
+                    val orderedVideos = orderByQuality(audio.videos, qualityPrefs)
+                    val first = orderedVideos.firstOrNull()
+                    if (first != null) {
+                        Log.d(TAG, "Fallback (TRY_NEXT): ${server.name} / ${audio.label} / ${first.quality}")
+                        return Selection.Selected(first, server.name, audio.label)
+                    }
                 }
             }
         }
