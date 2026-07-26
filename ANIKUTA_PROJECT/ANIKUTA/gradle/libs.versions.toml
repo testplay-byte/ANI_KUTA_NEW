@@ -64,6 +64,7 @@ sqldelight-android-paging = { module = "app.cash.sqldelight:androidx-paging3-ext
 sqldelight-dialects-sql = { module = "app.cash.sqldelight:sqlite-3-38-dialect", version.ref = "sqldelight" }
 
 # Voyager navigation
+voyager-core = { module = "cafe.adriel.voyager:voyager-core", version.ref = "voyager" }
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }
 voyager-screenmodel = { module = "cafe.adriel.voyager:voyager-screenmodel", version.ref = "voyager" }
 voyager-tab-navigator = { module = "cafe.adriel.voyager:voyager-tab-navigator", version.ref = "voyager" }
@@ -103,5 +104,5 @@ sqlite = ["sqlite-framework", "sqlite-ktx", "sqlite-android"]
 koin = ["koin-core", "koin-android", "koin-androidx-compose"]
 coil = ["coil-core", "coil-gif", "coil-compose", "coil-network-okhttp"]
 sqldelight = ["sqldelight-android-driver", "sqldelight-coroutines", "sqldelight-android-paging"]
-voyager = ["voyager-navigator", "voyager-screenmodel", "voyager-tab-navigator", "voyager-transitions"]
+voyager = ["voyager-core", "voyager-navigator", "voyager-screenmodel", "voyager-tab-navigator", "voyager-transitions"]
 test = ["junit", "kotest-assertions", "mockk"]
