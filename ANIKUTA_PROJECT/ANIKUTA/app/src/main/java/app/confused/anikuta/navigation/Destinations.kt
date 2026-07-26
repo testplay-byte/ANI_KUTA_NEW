@@ -373,8 +373,23 @@ object SettingsDestination : Screen {
         val navigator = LocalNavigator.currentOrThrow
         SettingsScreen(
             onOpenExtensions = { navigator.push(ExtensionsDestination) },
-            onOpenEpisodeSettings = { navigator.push(EpisodeSettingsHubDestination) },
+            onOpenAppearance = { navigator.push(AppearanceDestination) },
             onOpenBackup = { navigator.push(BackupDestination) },
+            onBack = { navigator.pop() },
+        )
+    }
+}
+
+/**
+ * The Appearance / UI Customization page — hosts theme mode, accent colors,
+ * custom palette, AND the episode settings link (moved here from root Settings).
+ */
+object AppearanceDestination : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        app.confused.anikuta.feature.settings.AppearanceScreen(
+            onOpenEpisodeSettings = { navigator.push(EpisodeSettingsHubDestination) },
             onBack = { navigator.pop() },
         )
     }

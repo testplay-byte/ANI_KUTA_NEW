@@ -22,7 +22,7 @@ It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 [`ANIKUTA_PROJECT/ANIKUTA/`](ANIKUTA_PROJECT/ANIKUTA/).
 
 See [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) for the full
-ADR log (ADRs 001–037).
+ADR log (ADRs 001–038).
 
 ---
 
@@ -287,7 +287,7 @@ living source of truth and is kept up to date as the project evolves.
 - ❌ Manga reader (anime-first; manga deferred per ADR-009)
 - ❌ Episode-release notifications (ADR-014 — `:core:notification` is a stub)
 - ❌ General settings page (theme, about, data management — `:feature:settings` is a stub)
-- ❌ Dark/light theme toggle (currently hardcoded to dark)
+- ✅ ~~Dark/light theme toggle~~ (DONE — ADR-038, Phase 9 Session 1 — light/dark/system + accent presets + custom colors + AMOLED)
 - ❌ Watch page control sheets (audio/speed/server/more — TODO buttons)
 - ❌ Dynamic cover-color theming (Palette extraction)
 - ❌ WorkManager background update-checking (UpdateChecker is manual-only)
@@ -301,7 +301,7 @@ See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full roadmap and
 
 ## 12. References
 
-- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–037.
+- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–038.
 - [`DESIGN_LANGUAGE/`](DESIGN_LANGUAGE/) — the UI/UX spec.
 - [`PLANNING/`](PLANNING/) — detailed specs + phased plan.
 - [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) — the 14-section ruleset.

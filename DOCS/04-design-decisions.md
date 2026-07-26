@@ -781,6 +781,58 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
+## ADR-038 — Theme system: user-selectable mode + accent + custom colors
+
+- **Date:** Phase 9 (Session 1 — theme + appearance).
+- **Context:** The app was hardcoded to `AnikutaTheme(darkTheme = true)` with
+  no user control. The design language (`DESIGN_LANGUAGE/03-themes/`) already
+  specified a two-axis model (mode + palette) but it wasn't implemented. The
+  owner wants users to pick light/dark mode, accent colors, and custom palettes.
+- **Decision:**
+  - **Two axes** (per the design spec):
+    1. **Mode** — Light / Dark / System (3-way segmented toggle). System
+       follows the OS dark-mode setting.
+    2. **Accent** — a curated set of presets (Lime, Amber, Rose, Coral, Sage)
+       + a Custom option with a hex color picker + quick-pick palette.
+  - **AMOLED** is a separate toggle (only enabled in dark mode) — pure-black
+    surfaces for OLED battery savings.
+  - **`ThemePreferences`** (in `:core:preferences`) persists all three axes
+    via `PreferenceStore`. Reactive — the app recomposes live when changed.
+  - **`AnikutaTheme`** (in `:core:designsystem`) accepts `themeMode` +
+    `accentPreset` + `customAccentColor` and builds the correct `ColorScheme`.
+    The accent overrides the primary-family roles; the surface/background/
+    secondary/tertiary roles stay as the curated base ANIKUTA palette.
+  - **Accent derivation** (`AccentColors.kt`): for custom colors, the primary-
+    family roles are derived from the seed color via HSL manipulation (darken
+    for light-mode primary, lighten for containers, etc.). This isn't a full
+    HCT tonal palette but produces harmonious, readable results.
+  - **Appearance screen** (`:feature:settings/AppearanceScreen.kt`): reached
+    from Settings → Appearance. Hosts the theme mode toggle, AMOLED switch,
+    accent swatches + custom color picker, AND the episode settings link
+    (moved here from the root Settings page per owner spec).
+  - **MainActivity** wires `AnikutaTheme` to read `ThemePreferences` reactively
+    via `collectAsStateWithLifecycle` — no restart needed on theme change.
+- **Consequences:**
+  - ✅ Users can switch light/dark/system mode — live, no restart.
+  - ✅ Users can pick from 5 accent presets or define a custom hex color.
+  - ✅ AMOLED mode for OLED battery savings.
+  - ✅ Episode settings consolidated under Appearance (cleaner Settings root).
+  - ✅ `:feature:settings` stub is now a real module with the Appearance screen.
+  - ⚠️ `:core:designsystem` now depends on `:core:preferences` (for the
+    `ThemeMode`/`AccentPreset` enums). No circular dependency —
+    `:core:preferences` doesn't depend on `:core:designsystem`.
+  - ⚠️ The accent derivation is HSL-based, not a full Material You HCT tonal
+    palette. A future enhancement could use the `materialkolor` library or
+    Android's dynamic color API for richer palette generation.
+  - 📌 Cover-color dynamic theming (per-screen Palette extraction) is NOT part
+    of this ADR — it's a separate future feature (per `DESIGN_LANGUAGE/03-themes/` §6).
+  - 📌 The `MoreScreen` and `SettingsScreen` composables still live in `:app`
+    (not `:feature:settings`) because they compose entries from multiple
+    feature modules (Rule §14). Only the `AppearanceScreen` lives in
+    `:feature:settings`.
+
+---
+
 ## How to add a new ADR
 
 1. Use the next free `ADR-NNN` number.

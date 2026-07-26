@@ -17,8 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -96,15 +96,18 @@ fun MoreScreen(
 /**
  * Settings screen — a sub-screen from More.
  *
- * Per user requirement: the episode settings are reached via a SINGLE "Episode
- * settings" row that navigates to a full-page hub (NOT a bottom sheet). The hub
- * then links to Display / Layout / Metadata sub-pages. See
- * `:feature:episode-settings` for the screens.
+ * Per owner spec (Session 1): the episode settings row has been moved into the
+ * Appearance page. This root Settings screen now has:
+ * - General: Extensions, Appearance (NEW — opens the UI customization page)
+ * - Data: Backup & Restore
+ *
+ * The Appearance page hosts theme mode, accent colors, custom palette, AND the
+ * episode settings link.
  */
 @Composable
 fun SettingsScreen(
     onOpenExtensions: () -> Unit,
-    onOpenEpisodeSettings: () -> Unit,
+    onOpenAppearance: () -> Unit,
     onOpenBackup: () -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -126,12 +129,11 @@ fun SettingsScreen(
                 )
             }
             item {
-                SettingsSectionLabel("Episode List")
                 MoreRow(
-                    icon = Icons.Filled.Tune,
-                    title = "Episode settings",
-                    subtitle = "Display, layout, and metadata fetching for the episode list",
-                    onClick = onOpenEpisodeSettings,
+                    icon = Icons.Filled.Palette,
+                    title = "Appearance",
+                    subtitle = "Theme mode, accent colors, episode display",
+                    onClick = onOpenAppearance,
                 )
             }
             // Backup & Restore

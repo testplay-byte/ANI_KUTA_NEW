@@ -6,51 +6,68 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import app.confused.anikuta.core.preferences.AccentPreset
+import app.confused.anikuta.core.preferences.ThemeMode
 
 /**
  * ANIKUTA theme — the single entry point for theming the app.
  *
- * Per `DESIGN_LANGUAGE/03-themes/`:
- * - Dark theme is the default (per owner preference — `darkTheme` defaults to true).
- * - Primary color: #B1F256 (lime green).
- * - Surface tonal tiers (surface1–5).
- * - AMOLED mode forces pure black background + near-black surface ramp.
+ * Per `DESIGN_LANGUAGE/03-themes/themes-and-colors.md`:
+ * - Two independent axes: [themeMode] (Light/Dark/System) + [accentPreset]
+ *   (the primary color family).
+ * - [amoled] forces pure-black surfaces when the resolved mode is Dark.
+ * - [customAccentColor] is used when [accentPreset] is [AccentPreset.CUSTOM].
+ *
+ * The accent overrides the primary-family roles in the base ANIKUTA palette;
+ * the surface, background, and secondary/tertiary roles stay as the curated
+ * base palette. This keeps the design language cohesive across accents.
  *
  * Status bar appearance is handled by `enableEdgeToEdge()` in the Activity
  * (the modern API 35+ approach — `window.statusBarColor` is deprecated).
  * Here we only set the system bar icon appearance (light/dark icons).
  *
- * Usage:
- * ```kotlin
- * AnikutaTheme {
- *     // your composables
- * }
- * ```
- *
- * @param darkTheme If true, uses the dark color scheme. Default: true (owner preference).
- * @param amoled If true, overrides the dark scheme with pure-black surfaces.
+ * @param themeMode The theme mode (Light / Dark / System). Default: [ThemeMode.SYSTEM].
+ * @param amoled If true + resolved mode is Dark, forces pure-black surfaces.
+ * @param accentPreset The accent palette preset. Default: [AccentPreset.LIME].
+ * @param customAccentColor Used when [accentPreset] is [AccentPreset.CUSTOM].
  */
 @Composable
 fun AnikutaTheme(
-    darkTheme: Boolean = true,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     amoled: Boolean = false,
+    accentPreset: AccentPreset = AccentPreset.LIME,
+    customAccentColor: Color = AccentPreset.LIME.seedColor,
     content: @Composable () -> Unit,
 ) {
+    val isDark = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    val accent = accentSchemeFor(
+        preset = accentPreset,
+        color = if (accentPreset == AccentPreset.CUSTOM) customAccentColor else null,
+    )
+
     val colorScheme = when {
-        darkTheme && amoled -> DarkColorSchemeAmoled
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        isDark && amoled -> buildDarkColorScheme(accent).copy(
+            background = BgAmoled,
+            surface = Surface1Amoled,
+            surfaceVariant = Surface3Amoled,
+        )
+        isDark -> buildDarkColorScheme(accent)
+        else -> buildLightColorScheme(accent)
     }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as android.app.Activity).window
-            // Modern approach: only control icon appearance, not the color.
-            // enableEdgeToEdge() in the Activity handles the transparent system bars.
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
         }
     }
 
@@ -62,11 +79,12 @@ fun AnikutaTheme(
     )
 }
 
-private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryDark,
-    onPrimary = PrimaryFgDark,
-    primaryContainer = PrimaryContainerDark,
-    onPrimaryContainer = OnPrimaryContainerDark,
+/** Builds the dark color scheme with the accent's primary-family roles overridden. */
+private fun buildDarkColorScheme(accent: AccentScheme) = darkColorScheme(
+    primary = accent.darkPrimary,
+    onPrimary = accent.darkOnPrimary,
+    primaryContainer = accent.darkPrimaryContainer,
+    onPrimaryContainer = accent.darkOnPrimaryContainer,
     secondary = SecondaryDark,
     secondaryContainer = SecondaryContainerDark,
     tertiary = TertiaryDark,
@@ -83,21 +101,18 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = OutlineVariantDark,
 )
 
-private val DarkColorSchemeAmoled = DarkColorScheme.copy(
-    background = BgAmoled,
-    surface = Surface1Amoled,
-    surfaceVariant = Surface3Amoled,
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
-    onPrimary = PrimaryFgLight,
-    primaryContainer = PrimaryContainerLight,
-    onPrimaryContainer = OnPrimaryContainerLight,
+/** Builds the light color scheme with the accent's primary-family roles overridden. */
+private fun buildLightColorScheme(accent: AccentScheme) = lightColorScheme(
+    primary = accent.lightPrimary,
+    onPrimary = accent.lightOnPrimary,
+    primaryContainer = accent.lightPrimaryContainer,
+    onPrimaryContainer = accent.lightOnPrimaryContainer,
     secondary = SecondaryLight,
     secondaryContainer = SecondaryContainerLight,
     tertiary = TertiaryLight,
     tertiaryContainer = TertiaryContainerLight,
+    error = Color(0xFFBA1A1A),
+    errorContainer = Color(0xFFFFDAD6),
     background = BgLight,
     onBackground = TextLight,
     surface = Surface1Light,
