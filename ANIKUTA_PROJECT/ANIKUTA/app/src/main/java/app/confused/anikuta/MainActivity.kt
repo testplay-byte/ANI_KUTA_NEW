@@ -38,13 +38,13 @@ class MainActivity : ComponentActivity() {
             // Observe theme preferences reactively — the app theme updates live.
             val themePrefs = koinInject<ThemePreferences>()
             val themeMode by themePrefs.themeMode.changes()
-                .collectAsStateWithLifecycle(initial = themePrefs.themeMode.get())
+                .collectAsStateWithLifecycle(initialValue = themePrefs.themeMode.get())
             val amoled by themePrefs.amoled.changes()
-                .collectAsStateWithLifecycle(initial = themePrefs.amoled.get())
+                .collectAsStateWithLifecycle(initialValue = themePrefs.amoled.get())
             val accentPreset by themePrefs.accentPreset.changes()
-                .collectAsStateWithLifecycle(initial = themePrefs.accentPreset.get())
+                .collectAsStateWithLifecycle(initialValue = themePrefs.accentPreset.get())
             val customAccentArgb by themePrefs.customAccentColor.changes()
-                .collectAsStateWithLifecycle(initial = themePrefs.customAccentColor.get())
+                .collectAsStateWithLifecycle(initialValue = themePrefs.customAccentColor.get())
             val customAccent = Color(customAccentArgb.toLong() and 0xFFFFFFFF)
 
             AnikutaTheme(
