@@ -2,6 +2,7 @@ package app.confused.anikuta.feature.videoresolver
 
 import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.coroutines.Dispatchers
@@ -13,16 +14,18 @@ import kotlinx.coroutines.withTimeoutOrNull
  *
  * Handles both the old `getVideoList(episode)` API (ext-lib < 16) and the new
  * `getHosterList(episode)` + `getVideoList(hoster)` API (ext-lib 16+).
- * The new API is preferred; if it throws `IllegalStateException("Not used")`
- * (the default impl), falls back to the old API.
  *
- * Each source call is wrapped in a [withTimeoutOrNull] (10s) so a hanging
- * extension doesn't block the resolver indefinitely.
+ * **Key fix for structured extensions (like AnikotoS):**
+ * When a hoster's [Hoster.videoList] is already populated (non-null, non-empty),
+ * uses those videos directly instead of calling `getVideoList(hoster)` (which
+ * would do a network request to an empty URL and fail).
  *
- * Videos with blank `videoUrl` are filtered out (they can't be played).
+ * Only calls `getVideoList(hoster)` for **lazy** hosters (where [Hoster.videoList]
+ * is null or [Hoster.lazy] is true).
  *
- * The final flat video list is grouped into the 3-tier hierarchy
- * (Server → Audio → Quality) by [VideoTitleParser.groupVideosByServer].
+ * Uses [ResolverStrategyPicker] to automatically choose between the structured
+ * 3-tier hierarchy ([StructuredResolverStrategy]) and the flat list
+ * ([RawResolverStrategy]) based on the video title quality.
  */
 class ResolverService {
 
@@ -45,7 +48,11 @@ class ResolverService {
                     return@withContext ResolverResult.NoSources
                 }
 
-                val servers = VideoTitleParser.groupVideosByServer(validVideos)
+                // Pick the best strategy based on video title quality
+                val strategy = ResolverStrategyPicker.pick(validVideos)
+                Log.i(TAG, "Using ${strategy::class.simpleName} for ${validVideos.size} videos")
+
+                val servers = strategy.resolve(validVideos)
                 if (servers.isEmpty()) {
                     ResolverResult.NoSources
                 } else {
@@ -60,6 +67,9 @@ class ResolverService {
 
     /**
      * Tries the new hoster-based API first; falls back to the old direct API.
+     *
+     * For non-lazy hosters (videoList already populated), uses the videos directly.
+     * For lazy hosters (videoList is null), calls `getVideoList(hoster)`.
      */
     private suspend fun resolveVideos(source: AnimeSource, episode: SEpisode): List<Video> {
         // Try getHosterList first (ext-lib 16+)
@@ -77,8 +87,19 @@ class ResolverService {
         }
 
         if (hosters.isNotEmpty()) {
-            // Fetch videos from each hoster
+            Log.i(TAG, "Got ${hosters.size} hosters from '${source.name}'")
             return hosters.flatMap { hoster ->
+                // ★ Key fix: check hoster.videoList FIRST.
+                // Non-lazy hosters (like AnikotoS) already have videoList populated.
+                // Only call getVideoList(hoster) for lazy hosters (videoList is null).
+                val hosterVideos = hoster.videoList
+                if (hosterVideos != null && hosterVideos.isNotEmpty()) {
+                    Log.d(TAG, "Hoster '${hoster.hosterName}' has ${hosterVideos.size} pre-loaded videos")
+                    return@flatMap hosterVideos
+                }
+
+                // Lazy hoster — resolve it via getVideoList(hoster)
+                Log.d(TAG, "Hoster '${hoster.hosterName}' is lazy — calling getVideoList(hoster)")
                 try {
                     withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
                         source.getVideoList(hoster)
@@ -90,7 +111,8 @@ class ResolverService {
             }
         }
 
-        // Fallback: old direct API
+        // Fallback: old direct API (ext-lib < 16)
+        Log.d(TAG, "Falling back to getVideoList(episode) for '${source.name}'")
         return try {
             withTimeoutOrNull(SOURCE_TIMEOUT_MS) {
                 source.getVideoList(episode)
@@ -103,13 +125,13 @@ class ResolverService {
 
     companion object {
         private const val TAG = "AnikutaResolver"
-        private const val SOURCE_TIMEOUT_MS = 10_000L
+        private const val SOURCE_TIMEOUT_MS = 30_000L // 30s — extensions like AnikotoS need time for parallel resolution
     }
 }
 
 /** The result of [ResolverService.resolve]. */
 sealed interface ResolverResult {
-    /** Videos resolved successfully — [servers] is the 3-tier hierarchy. */
+    /** Videos resolved successfully — [servers] is the resolver hierarchy. */
     data class Success(val servers: List<ResolverServer>) : ResolverResult
     /** The source returned no playable videos. */
     data object NoSources : ResolverResult
