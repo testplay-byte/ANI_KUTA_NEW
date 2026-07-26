@@ -14,12 +14,15 @@ guessing.
 ## The 60-second brief
 
 **ANIKUTA** is an anime-first Android app (manga comes later) that combines:
-1. An **extension-based** content system (like Aniyomi).
+1. An **extension-based** content system (Aniyomi-compatible).
 2. **AniList as a co-primary data source** (not just a tracker) — for discovery,
    metadata, and personalization.
-3. A **custom design language** (M3-inspired but unique — see `DESIGN_LANGUAGE/`).
-4. **Unique features**: watch page (YouTube-style), per-episode metadata,
-   dual-mode episode notifications, auto-download, customizable screens/nav.
+3. A **custom design language** (M3-inspired but unique — primary color #B1F256
+   lime green, RobotoFamily font).
+4. **Full feature set**: browse, search, details, watch (MPV), library, history,
+   updates (schedule + calendar), profile (stats + charts), trackers (AniList +
+   MAL OAuth), backup/restore, downloads/offline playback, episode settings,
+   extension-only details page.
 
 It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 `ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
@@ -27,103 +30,121 @@ It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 ## Read order (mandatory)
 
 1. **This file** (`AGENT_CONTEXT/START_HERE.md`).
-2. [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the single source of truth.
-3. [`../RULES/ai-agent-rules.md`](../RULES/ai-agent-rules.md) — the 14-section ruleset.
-4. [`../RULES/project-conventions.md`](../RULES/project-conventions.md) — ANIKUTA-specific rules.
-5. [`../DOCS/04-design-decisions.md`](../DOCS/04-design-decisions.md) — all decisions (ADRs 001–022).
-6. [`../DOCS/05-roadmap.md`](../DOCS/05-roadmap.md) — what phase we're in.
-7. [`../DESIGN_LANGUAGE/`](../DESIGN_LANGUAGE/) — the UI/UX spec.
-8. The newest session note in [`../RULES/sessions/`](../RULES/sessions/) — what the last agent did.
+2. [`../AGENT_CONTEXT/PROJECT_STARTUP.md`](../PROJECT_STARTUP.md) — startup steps.
+3. [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the single source of truth.
+4. [`../RULES/ai-agent-rules.md`](../RULES/ai-agent-rules.md) — the 14-section ruleset.
+5. [`../RULES/project-conventions.md`](../RULES/project-conventions.md) — ANIKUTA-specific rules.
+6. [`../DOCS/04-design-decisions.md`](../DOCS/04-design-decisions.md) — all ADRs.
+7. [`../DESIGN_LANGUAGE/`](../DESIGN_LANGUAGE/) — the UI/UX spec (read principles + components first).
+8. [`../DOCS/episode-settings-architecture.md`](../DOCS/episode-settings-architecture.md) — episode row + settings.
 
 ## Current phase
 
-**Phase 7+ (Implementation) is IN PROGRESS.** The app builds, ships debug APKs via
-CI, and has working: browse, search, anime details, watch (MPV), library,
-extensions, and the episode-settings subsystem. See
-[`../PLANNING/PHASED_PLAN.md`](../PLANNING/PHASED_PLAN.md) for the full plan.
+**Phase 8+ (Full feature set) is COMPLETE.** The app builds, ships debug APKs via
+CI, and has ALL major features working. The codebase has **41 Gradle modules**
+across `:core:*`, `:feature:*`, `:data:*`, and `:app`.
 
-See [`../DOCS/05-roadmap.md`](../DOCS/05-roadmap.md) for the current phase's exit
-criteria.
+## What's done (all features working)
 
-## What's been done so far
+### Core app screens
+- ✅ **Browse/Home** — trending/popular grid, daily cache, pull-to-refresh
+- ✅ **Search** — dual-source (AniList + extensions), filters, recent searches, extension→AniList linking
+- ✅ **Anime Details** — 3-stage load (AniList → source match → episodes + metadata), episode list with two-section design, source link persistence, episode DB persistence (offline), metadata DB persistence, manual search sheet with currently-linked display, unreleased anime detection
+- ✅ **Watch/Player** — MPV player, YouTube-style, gestures, PiP, episode switching with thumbnails, quality/subtitle sheets, metadata-threaded description, episode list with metadata
+- ✅ **Library** — grid/list, categories, badges (configurable position), settings sheet, search
+- ✅ **Episode Settings** — 4 full-page screens (Hub → Display/Layout/Metadata) with sticky live previews, separate prefs for details vs watch
 
-- ✅ Repo structured: `ANIYOMI_REFRENCE/` (reference + 68-doc analysis),
-  `OLD_ANIKUTA/` (prior attempt + screen analysis), `ANIKUTA_PROJECT/` (live code).
-- ✅ Rules established (`RULES/ai-agent-rules.md` — 14 sections).
-- ✅ Aniyomi reference fully documented (`ANIYOMI_REFRENCE/DOCUMENTATION/`).
-- ✅ Vision clarified → 30 ADRs in `DOCS/04`.
-- ✅ Design language docs complete (`DESIGN_LANGUAGE/` — 12 principles, 9 components,
-  themes, 10 per-screen specs).
-- ✅ Old ANIKUTA key screens analyzed (`OLD_ANIKUTA/ANALYSIS/` — 4 files).
-- ✅ `ARCHITECTURE.md` finalized — the single source of truth.
-- ✅ Gradle project scaffolded under `ANIKUTA_PROJECT/ANIKUTA/` — multi-module
-  (core/*/feature/*/data/*/app), Compose-first, Koin DI, convention plugins in
-  `buildSrc/` (`anikuta.library` + `anikuta.library.compose`).
-- ✅ Browse + AniList API + extension system (Aniyomi-compat via Injekt).
-- ✅ Search (dual-source AniList + extensions, manual link flow).
-- ✅ Anime details (3-stage load: AniList → source match → episodes + metadata).
-- ✅ Watch screen + MPV player (YouTube-style, gestures, PiP, episode switching).
-- ✅ Library (grid/list, categories, selection mode).
-- ✅ Episode metadata enrichment (Jikan/MAL + Anikage.cc + AniList Streaming;
-  `:core:episode-metadata` module; per-field fetch toggles).
-- ✅ **Episode settings subsystem** (`:feature:episode-settings` module — see
-  [`../DOCS/episode-settings-architecture.md`](../DOCS/episode-settings-architecture.md)):
-  - 4 full-page screens (Hub → Display / Layout / Metadata) with sticky live previews.
-  - Episode row rebuilt to match OLD ANIKUTA design (black 70% pill badge,
-    outlineVariant date/audio pills, plain-text title).
-  - `EpisodeDisplayPreferences` is now correctly wired to `EpisodeRow` via
-    `koinInject` + reactive `Preference.changes` (previously disconnected — a
-    critical bug where settings only affected the preview, not the list).
+### New feature screens (by AI agents)
+- ✅ **History** — day-grouped watch history list, clear-all, progress bars
+- ✅ **Updates** — updates tab (pull-to-refresh, SUB/DUB badges) + schedule tab (list + calendar view)
+- ✅ **My Profile** — 10-section stats page (genre/format/status/score/country charts, behind-status, recently watched, reset, customization), works with or without AniList linked
+- ✅ **Trackers** — AniList (implicit OAuth) + MAL (PKCE OAuth), auto-sync, token refresh
+- ✅ **Backup & Restore** — ANIKUTA format + Aniyomi format compatibility, auto-backup (WorkManager), SAF folder, granular data selection, 10 backup providers
+- ✅ **Downloads** — DownloadManager interface, queue, offline playback, SAF folder, HLS support, auto-download, notification, PNG/corrupt rejection
 
-## What's NOT done yet
+### Infrastructure
+- ✅ **Extension system** — Aniyomi-compatible, Injekt + Koin DI
+- ✅ **Extension-only details page** — for anime not on AniList, same UI as normal details, "A" re-link button
+- ✅ **Smart video resolver** — dual strategy (structured 3-tier hierarchy + raw flat list), hoster name propagation, audio/server detection, auto A/B/C naming
+- ✅ **Local persistent caching** — AniList data (24h TTL), episode metadata, episode list (DB), home page (daily), source links
+- ✅ **UpdateChecker** — reusable module, manual checking (future: WorkManager background)
+- ✅ **StatsCalculator** — local + AniList stats, Compose Canvas charts
+- ✅ **AniList rate limiter** — prevents API rate limit issues
 
-- ❌ Trackers (AniList/MAL tracking sync beyond display).
-- ❌ Manga reader (anime-first; manga comes later).
-- ❌ Downloads / offline playback.
-- ❌ Notifications (dual-mode episode notifications).
-- ❌ Backups.
-- ❌ Release (Play Store / signed APK) build flavor.
+## What's NOT done yet (future work)
+
+- ❌ Manga reader (anime-first; manga comes later)
+- ❌ Notifications (new episode notifications)
+- ❌ 1DM-style multi-threaded download method (interface ready, impl pending)
+- ❌ Release (Play Store / signed APK) build flavor
+- ❌ Watch page control sheets (audio/speed/server/more — 4 TODO buttons)
+- ❌ Dynamic cover-color theming (code exists but coverColor is null — Palette extraction needed)
+- ❌ Dark/light theme toggle (hardcoded to dark)
+- ❌ General settings page (theme, about, data management)
 
 ## Where things live (cheat sheet)
 
 | You want to... | Go here |
 |---|---|
-| Understand the vision | `DOCS/04-design-decisions.md` (ADRs 009–030) |
+| Understand the vision | `DOCS/04-design-decisions.md` (ADRs 009–030+) |
 | Understand the design language | `DESIGN_LANGUAGE/` |
-| Read the Aniyomi reference analysis | `ANIYOMI_REFRENCE/DOCUMENTATION/` |
-| Read the old ANIKUTA screen analysis | `OLD_ANIKUTA/ANALYSIS/` |
-| Find planning specs | `PLANNING/` |
-| Find the rules | `RULES/` |
-| **Write/edit app code** | `ANIKUTA_PROJECT/ANIKUTA/` (live multi-module project) |
-| Episode settings screens | `ANIKUTA_PROJECT/ANIKUTA/feature/episode-settings/` |
-| Episode row + display prefs | `ANIKUTA_PROJECT/ANIKUTA/feature/anime-details/.../EpisodesSection.kt` + `EpisodeDisplayPreferences.kt` |
-| Episode metadata (sources/repo/prefs) | `ANIKUTA_PROJECT/ANIKUTA/core/episode-metadata/` |
-| Convention plugins (build) | `ANIKUTA_PROJECT/ANIKUTA/buildSrc/src/main/kotlin/` |
-| Leave a note for the next agent | `RULES/sessions/` |
+| **Write/edit app code** | `ANIKUTA_PROJECT/ANIKUTA/` (41-module Gradle project) |
+| Build system / convention plugins | `ANIKUTA_PROJECT/ANIKUTA/buildSrc/src/main/kotlin/` |
+| Browse/home page | `ANIKUTA_PROJECT/ANIKUTA/feature/browse/` |
+| Search page | `ANIKUTA_PROJECT/ANIKUTA/feature/search/` |
+| Anime details + episode list | `ANIKUTA_PROJECT/ANIKUTA/feature/anime-details/` |
+| Extension-only details page | `ANIKUTA_PROJECT/ANIKUTA/feature/anime-details/.../ExtensionDetailScreen.kt` |
+| Watch/player page | `ANIKUTA_PROJECT/ANIKUTA/feature/watch/` |
+| Library page | `ANIKUTA_PROJECT/ANIKUTA/feature/library/` |
+| History page | `ANIKUTA_PROJECT/ANIKUTA/feature/history/` |
+| Updates + Schedule page | `ANIKUTA_PROJECT/ANIKUTA/feature/updates/` |
+| Profile page | `ANIKUTA_PROJECT/ANIKUTA/feature/my/` |
+| Trackers settings | `ANIKUTA_PROJECT/ANIKUTA/feature/trackers/` |
+| Backup & Restore | `ANIKUTA_PROJECT/ANIKUTA/feature/backup/` + `core/backup/` |
+| Downloads | `ANIKUTA_PROJECT/ANIKUTA/feature/download/` + `core/download/` |
+| Episode settings | `ANIKUTA_PROJECT/ANIKUTA/feature/episode-settings/` |
+| Video resolver (smart) | `ANIKUTA_PROJECT/ANIKUTA/feature/video-resolver/` |
+| AniList API + cache | `ANIKUTA_PROJECT/ANIKUTA/core/anilist/` |
+| Tracker (OAuth, sync) | `ANIKUTA_PROJECT/ANIKUTA/core/tracker/` |
+| Update checker | `ANIKUTA_PROJECT/ANIKUTA/core/update-checker/` |
+| Episode metadata | `ANIKUTA_PROJECT/ANIKUTA/core/episode-metadata/` |
+| MPV player | `ANIKUTA_PROJECT/ANIKUTA/core/player/` |
+| DB (SQLDelight) | `ANIKUTA_PROJECT/ANIKUTA/core/database/` |
+| Preferences | `ANIKUTA_PROJECT/ANIKUTA/core/preferences/` |
+| Design system (theme, components) | `ANIKUTA_PROJECT/ANIKUTA/core/designsystem/` |
+| Extension manager + source matcher | `ANIKUTA_PROJECT/ANIKUTA/data/extension/` |
+| Anime/episode repos | `ANIKUTA_PROJECT/ANIKUTA/data/anime/` |
+| Navigation (state machine) | `ANIKUTA_PROJECT/ANIKUTA/app/.../MainActivity.kt` |
+| Koin DI modules | `ANIKUTA_PROJECT/ANIKUTA/app/src/main/java/.../di/` |
+| Backup/restore planning docs | `BACKUP-AND-RESTORE-AND-DOWNLOADING-PLANING/` |
+| AI agent prompts (for backup/downloads) | `AI-AGENT-PROMPTS/` |
 
 ## Hard rules (don't violate)
 
 1. **Read `ARCHITECTURE.md` first.** It's the single source of truth.
 2. **Don't modify the references** (`ANIYOMI_REFRENCE/`, `OLD_ANIKUTA/`).
-3. **Don't build APKs locally.** CI-only (ADR-003).
-4. **Send a ntfy.sh notification** on every task completion (ADR-008).
-5. **No blind guesses.** If unsure, ask — show reasoning first (Rule §1).
+3. **Don't build APKs locally.** CI-only (ADR-003). Push to a feature branch, trigger `workflow_dispatch`.
+4. **Send a ntfy.sh notification** on every task completion to `https://ntfy.sh/TASKISDONE` (ADR-008).
+5. **No blind guesses.** If unsure, read the code first (Rule §1).
 6. **Follow the design language.** See `DESIGN_LANGUAGE/` — don't improvise UI.
+7. **All network calls on `Dispatchers.IO`.**
+8. **No nested LazyColumn** inside another LazyColumn.
+9. **All ModalBottomSheet: `dragHandle = null`.**
+10. **Push to feature branches only.** Never push to `main` directly.
 
 ## What to do next (if you're resuming)
 
-1. Read the newest session note in `RULES/sessions/` (or the worklog at
-   `/home/z/my-project/worklog.md` if you're in the build sandbox).
-2. Check `DOCS/05-roadmap.md` for the current phase's exit criteria.
-3. The Gradle project is live at `ANIKUTA_PROJECT/ANIKUTA/`. To build, push to
-   a feature branch and trigger the `CI` workflow via `workflow_dispatch`
-   (feature branches do NOT auto-build on push — only `main` does). Do NOT
-   build APKs locally (ADR-003, CI-only).
-4. The episode settings subsystem lives in `:feature:episode-settings`. Its
-   architecture is documented in `DOCS/episode-settings-architecture.md`.
-5. The app uses a **hand-rolled state-machine for navigation** in `MainActivity.kt`
-   (NOT Voyager, NOT Compose Nav) — state flags like `detailAnimeId`, `showSettings`,
-   `episodeSettingsPage` drive a `when` block. Follow this pattern for new screens.
+1. Read the worklog at `/home/z/my-project/worklog.md` (last 5 sections) for recent context.
+2. Check `DOCS/05-roadmap.md` for what's planned next.
+3. The Gradle project is at `ANIKUTA_PROJECT/ANIKUTA/`. To build: push to a feature branch, trigger CI `workflow_dispatch`:
+   ```bash
+   curl -X POST -H "Authorization: token <PAT>" -H "Accept: application/vnd.github+json" \
+   "https://api.github.com/repos/testplay-byte/ANI_KUTA_NEW/actions/workflows/ci.yml/dispatches" \
+   -d '{"ref":"<your-branch>"}'
+   ```
+4. Navigation: **hand-rolled state-machine** in `MainActivity.kt` (NOT Voyager/Compose Nav). State flags drive a `when` block. New screens: add state var + `when` branch + `BackHandler` case.
+5. DI: **Koin** — modules in `app/.../di/`. Use `koinInject<>()` in composables, `get<>()` in constructors.
+6. Design: **#B1F256 lime green** primary, **RobotoFamily** font, `surfaceVariant@0.4f` card backgrounds.
 
 ---
 
