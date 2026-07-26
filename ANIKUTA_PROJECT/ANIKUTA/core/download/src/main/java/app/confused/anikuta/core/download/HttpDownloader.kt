@@ -80,19 +80,38 @@ class HttpDownloader(
             throw DownloadException("Video URL is blank — cannot download")
         }
 
-        DownloadLogger.i("Starting download: ${anime.title} EP ${episode.episodeNumber} ($videoUrl)")
+        DownloadLogger.i("Starting download: ${anime.title} EP ${episode.episodeNumber}")
+        DownloadLogger.i("  URL: $videoUrl")
+        DownloadLogger.i("  Method: ${preferences.method().get()}")
+        DownloadLogger.i("  Headers: ${task.request.videoHeaders?.take(100) ?: "none"}")
+        DownloadLogger.i("  Server: ${task.request.videoServer}, Audio: ${task.request.videoAudio}, Quality: ${task.request.videoQuality}")
 
         try {
             // ── 1. Download + validate the video to internal cache ──
             val videoExt = inferVideoExtension(videoUrl)
-            val tempVideo = tempCache.videoFile(task.id, videoExt)
-            val downloadedBytes = downloadVideoToCache(
+            var tempVideo = tempCache.videoFile(task.id, videoExt)
+            var downloadedBytes = downloadVideoToCache(
                 url = videoUrl,
                 headers = task.request.videoHeaders,
                 tempFile = tempVideo,
                 taskId = task.id,
                 onProgress = onProgress,
             )
+
+            // ── 1b. HLS content detection ──
+            // Many extension video URLs are proxy URLs (e.g. localhost:PORT/m3u8?url=...)
+            // that return HLS playlists but don't have ".m3u8" in the URL. The
+            // VideoTypeDetector may have treated them as DIRECT_VIDEO (UNKNOWN →
+            // DIRECT_VIDEO fallback). If the downloaded file is small AND starts
+            // with "#EXTM3U", it's an HLS playlist — re-download via HlsDownloader.
+            if (tempVideo.length() < 500 * 1024 && isHlsPlaylist(tempVideo)) {
+                DownloadLogger.i("Downloaded file is an HLS playlist (${tempVideo.length()} bytes) — switching to HlsDownloader")
+                tempVideo.delete()
+                tempVideo = tempCache.videoFile(task.id, "ts")
+                downloadedBytes = hlsDownloader.download(videoUrl, task.request.videoHeaders, tempVideo) { d, t ->
+                    onProgress(d, t)
+                }
+            }
 
             // ── 2. Validate the downloaded file ──
             validateDownloadedFile(videoUrl, tempVideo, downloadedBytes)
@@ -268,6 +287,21 @@ class HttpDownloader(
     }
 
     /**
+     * Checks if the file is an HLS playlist by reading the first few bytes.
+     * HLS playlists start with `#EXTM3U` (case-insensitive).
+     */
+    private fun isHlsPlaylist(file: File): Boolean {
+        return try {
+            val first20 = ByteArray(20)
+            java.io.FileInputStream(file).use { it.read(first20) }
+            val text = String(first20).trimStart()
+            text.startsWith("#EXTM3U", ignoreCase = true)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Validates the downloaded temp file before publishing. Rejects:
      *  - Empty/missing files
      *  - Files smaller than [MIN_VALID_VIDEO_BYTES] (corrupt/playlist/error page)
@@ -284,10 +318,16 @@ class HttpDownloader(
             throw DownloadException("Downloaded file is empty — the source returned no data.")
         }
         if (tempFile.length() < MIN_VALID_VIDEO_BYTES) {
-            DownloadLogger.e("Downloaded file too small: ${tempFile.length()} bytes (min=$MIN_VALID_VIDEO_BYTES)")
+            // Log the first 200 bytes as text for debugging (shows error pages, redirects, etc.)
+            val preview = try {
+                val bytes = ByteArray(minOf(200, tempFile.length().toInt()))
+                java.io.FileInputStream(tempFile).use { it.read(bytes) }
+                "\n--- File content preview ---\n${String(bytes).take(200)}\n--- End preview ---"
+            } catch (e: Exception) { "" }
+            DownloadLogger.e("Downloaded file too small: ${tempFile.length()} bytes (min=$MIN_VALID_VIDEO_BYTES) URL: $url$preview")
             throw DownloadException(
-                "Downloaded file is only ${tempFile.length()} bytes — too small to be a real video. " +
-                "The source may have returned an error page or a redirect instead of the video file."
+                "Downloaded file is only ${tempFile.length()} bytes — the server returned an error page or redirect instead of the video. " +
+                "Try a different server or quality. (URL: ${url.take(80)}...)"
             )
         }
     }

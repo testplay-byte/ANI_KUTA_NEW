@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -149,6 +150,8 @@ private fun AnikutaApp() {
     var showDownloads by remember { mutableStateOf(false) }
     // Full-page download settings (replaces the bottom sheet per owner request).
     var showDownloadSettings by remember { mutableStateOf(false) }
+    // Downloaded files page (shows completed downloads).
+    var showDownloadedFiles by remember { mutableStateOf(false) }
     // Episodes currently resolving (tapped download, waiting for source response).
     // Keyed by episode URL — shows the Resolving spinner on the row immediately.
     val resolvingEpisodes = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
@@ -175,6 +178,25 @@ private fun AnikutaApp() {
     // Keyed by episode URL (the anime-details side doesn't know anilistId).
     val downloadTasksMap by downloadManager.episodeDownloadStates
         .collectAsStateWithLifecycle(initialValue = emptyMap())
+
+    // ── Download error toast observer ──
+    // When any download task transitions to ERROR, show a toast so the user
+    // sees the failure immediately (not just on the downloads page).
+    val previousErrorIds = remember { mutableStateOf<Set<Long>>(emptySet()) }
+    LaunchedEffect(downloadTasksMap) {
+        val currentErrors = downloadTasksMap.values
+            .filter { it.status == app.confused.anikuta.core.download.DownloadStatus.ERROR }
+        val newErrors = currentErrors.filter { it.id !in previousErrorIds.value }
+        if (newErrors.isNotEmpty()) {
+            val firstError = newErrors.first()
+            val msg = firstError.errorMessage ?: "Unknown error"
+            Toast.makeText(context, "Download failed: $msg", Toast.LENGTH_LONG).show()
+            previousErrorIds.value = (previousErrorIds.value + newErrors.map { it.id }).toSet()
+        }
+        // Clean up old non-error IDs from the tracking set
+        val currentIds = downloadTasksMap.values.map { it.id }.toSet()
+        previousErrorIds.value = previousErrorIds.value.intersect(currentIds)
+    }
     fun episodeDownloadState(episodeUrl: String): app.confused.anikuta.feature.animedetails.EpisodeDownloadState {
         // Resolving takes priority — shows the immediate spinner.
         if (resolvingEpisodes[episodeUrl] == true) {
@@ -230,7 +252,7 @@ private fun AnikutaApp() {
 
     // Handle back gesture for sub-screens + resolver sheet + linking sheet + episode-settings sub-pages
     // ── Agent 1: History + Updates ── + ── Agent 2: Profile + Trackers ──
-    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || extensionDetailTarget != null || episodeSettingsPage != null || showHistory || showUpdates || showProfile || showTrackers || showDownloads || showDownloadSettings || downloadPickerTarget != null) {
+    BackHandler(enabled = watchTarget != null || detailAnimeId != null || showExtensions || showSettings || showRepoSettings || resolverState !is VideoResolverState.Hidden || linkingTarget != null || extensionDetailTarget != null || episodeSettingsPage != null || showHistory || showUpdates || showProfile || showTrackers || showDownloads || showDownloadSettings || showDownloadedFiles || downloadPickerTarget != null) {
         when {
             downloadPickerTarget != null -> downloadPickerTarget = null
             watchTarget != null -> watchTarget = null
@@ -249,6 +271,7 @@ private fun AnikutaApp() {
             // ── Agent 2: Downloads ──
             showDownloads -> showDownloads = false
             showDownloadSettings -> showDownloadSettings = false
+            showDownloadedFiles -> showDownloadedFiles = false
             // ── Agent 2: Profile + Trackers ──
             showTrackers -> showTrackers = false
             showProfile -> showProfile = false
@@ -670,6 +693,18 @@ private fun AnikutaApp() {
                 app.confused.anikuta.feature.download.DownloadsScreen(
                     onBack = { showDownloads = false },
                     onOpenSettings = { showDownloadSettings = true },
+                    onOpenDownloaded = { showDownloadedFiles = true },
+                )
+            }
+            // ── Agent 2: Downloaded files page ──
+            showDownloadedFiles -> {
+                app.confused.anikuta.feature.download.DownloadedFilesScreen(
+                    onBack = { showDownloadedFiles = false },
+                    onPlayEpisode = { anilistId, episodeUrl ->
+                        showDownloadedFiles = false
+                        detailAnimeId = anilistId
+                        // The resolveEpisode flow will check for offline playback.
+                    },
                 )
             }
             // ── Agent 2: Profile + Trackers — full-screen pages ──
