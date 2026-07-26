@@ -4,7 +4,7 @@
 **Task ID:** phase-0c-aniyomi-documentation
 **Session goal:** Read and understand the entire Aniyomi reference codebase and
 produce comprehensive, multi-folder documentation under
-`ANIYOMI_REFRENCE/DOCUMENTATION/` so anyone (human or AI agent) can understand
+`_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/` so anyone (human or AI agent) can understand
 every part of the reference project from the docs alone.
 
 ## What I did
@@ -29,12 +29,12 @@ every part of the reference project from the docs alone.
   - Batch C (4 agents): data models (`04/`, 4 docs), key flows (`05/`, 9 docs),
     UI (`06/`, 5 docs), reference index (`07/`, 4 docs)
 - **Verified link integrity:** 1,081 relative cross-links checked, 0 broken.
-- Updated `ANIYOMI_REFRENCE/README.md` to point at the DOCUMENTATION folder.
+- Updated `_REFERENCES/ANIYOMI_REFRENCE/README.md` to point at the DOCUMENTATION folder.
 - Wrote this handoff note.
 
 ## What is DONE
 
-- **64 documentation files, ~21,400 lines** under `ANIYOMI_REFRENCE/DOCUMENTATION/`.
+- **64 documentation files, ~21,400 lines** under `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/`.
 - Every Gradle module documented (13 modules + index).
 - Every major subsystem documented (15 subsystems + index): reader, player,
   source system, downloads, trackers (11 of them), backup, history, updates,
@@ -88,10 +88,10 @@ every part of the reference project from the docs alone.
 
 ## Pointers (files to read first)
 
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/README.md` — the master index.
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/01-project-overview.md`
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/05-project-conventions.md` — the dual manga/anime pattern.
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/07-reference/cross-reference-matrix.md` — subsystem × module map.
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/README.md` — the master index.
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/01-project-overview.md`
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/05-project-conventions.md` — the dual manga/anime pattern.
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/07-reference/cross-reference-matrix.md` — subsystem × module map.
 - `/home/z/my-project/worklog.md` — the 12 subagent work records (A-1..A-4, B-1..B-4, C-1..C-4) with detailed findings.
 
 ## Dev environment notes

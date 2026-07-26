@@ -29,18 +29,22 @@ reorganized, or built inside.
 
 | Reference | Location | What it is | ADR |
 |---|---|---|---|
-| Aniyomi source | `ANIYOMI_REFRENCE/ANIYOMI/` | The original Aniyomi app (source-only, no `.git`) | ADR-002, ADR-005 |
-| Old ANIKUTA project | `OLD_ANIKUTA/ANIKUTA_OLD/` | Our previous attempt (source-only, no `.git`) | ADR-007 |
-| Aniyomi documentation | `ANIYOMI_REFRENCE/DOCUMENTATION/` | 68-doc analysis of the Aniyomi source | — |
+| Aniyomi source | `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/` | The original Aniyomi app (source-only, no `.git`) | ADR-002, ADR-005 |
+| Old ANIKUTA project | `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/` | Our previous attempt (source-only, no `.git`) | ADR-007 |
+| Aniyomi documentation | `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/` | 68-doc analysis of the Aniyomi source | — |
 
 **Rules:**
 - 🔒 **READ-ONLY.** Never edit, rename, or reorganize files in these folders.
 - 🚫 **Do not build here.** No `./gradlew` runs inside any reference folder.
-- 📋 **Copying ideas is allowed and encouraged.** To port a concept: read it in
-  the reference, then implement fresh under `ANIKUTA_PROJECT/ANIKUTA/`. Do not
-  edit the reference in place.
-- 📖 The `ANIYOMI_REFRENCE/DOCUMENTATION/` folder is a comprehensive analysis of
-  the Aniyomi source. Read it instead of reverse-engineering the source.
+- 🚫 **Off-limits for normal work.** Do not scan, grep, or glob into `_REFERENCES/`
+  during feature work, bug fixes, or documentation updates. The main project lives
+  at `ANIKUTA_PROJECT/ANIKUTA/`. See [`_REFERENCES/README.md`](../_REFERENCES/README.md)
+  for when cross-referencing is appropriate.
+- 📋 **Copying ideas is allowed** — but only when you have a specific reason. To
+  port a concept: read the specific file you need in the reference, then implement
+  fresh under `ANIKUTA_PROJECT/ANIKUTA/`. Do not edit the reference in place.
+- 📖 The `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/` folder is a comprehensive analysis of
+  the Aniyomi source. Prefer it over reverse-engineering the source.
 
 ---
 
@@ -49,7 +53,7 @@ reorganized, or built inside.
 > Per ADR-003 and `ai-agent-rules.md` §7.
 
 - **Never produce an APK/AAB locally.** No `./gradlew assemble*` / `bundle*`.
-- **Never run any build inside a reference folder** (`ANIYOMI_REFRENCE/` or `OLD_ANIKUTA/`).
+- **Never run any build inside a reference folder** (`_REFERENCES/ANIYOMI_REFRENCE/` or `_REFERENCES/OLD_ANIKUTA/`).
 - **All builds happen via GitHub Actions** (`.github/workflows/`).
 - Static checks, edits, and documentation are fine locally.
 - See [`../DOCS/06-build-and-ci.md`](../DOCS/06-build-and-ci.md) for the full policy.
@@ -101,14 +105,16 @@ reorganized, or built inside.
 > A common source of confusion: the reference uses a different architecture than
 > what we're building.
 
-| | Aniyomi reference (`ANIYOMI_REFRENCE/`) | Our project (`ANIKUTA_PROJECT/ANIKUTA/`) |
+| | Aniyomi reference (`_REFERENCES/ANIYOMI_REFRENCE/`) | Our project (`ANIKUTA_PROJECT/ANIKUTA/`) |
 |---|---|---|
-| Architecture | Tachiyomi/Mihon lineage: `:app`, `:core:common`, `:data`, `:domain`, etc. Injekt DI. | **To be defined** in `ARCHITECTURE.md` — will follow `ai-agent-rules.md` (`:feature:*`, `:core`, `:data`). |
-| Status | Frozen snapshot (read-only) | Not yet scaffolded (Phase 1, after design) |
-| Use | Study + port ideas | The actual new app |
+| Architecture | Tachiyomi/Mihon lineage: `:app`, `:core:common`, `:data`, `:domain`, etc. Injekt DI. | Koin DI, `:feature:*` / `:core:*` / `:data:*` modules, hand-rolled state-machine nav (Voyager migration planned). See `ARCHITECTURE.md`. |
+| Status | Frozen snapshot (read-only backup) | **Feature-complete (Phase 8+)** — 41 Gradle modules, CI shipping debug APKs |
+| Use | Study + port ideas (off-limits for normal work — see `_REFERENCES/README.md`) | The actual app |
 
-When studying the reference, note its patterns but **do not assume** we'll copy
-them. Our architecture will be defined in `ARCHITECTURE.md` and may differ.
+When studying the reference, note its patterns but **do not assume** we copy
+them. Our architecture is defined in `ARCHITECTURE.md` and differs where we
+chose to (e.g., Koin instead of Injekt for our own DI, though we still ship
+Injekt for extension compatibility per ADR-029).
 
 ---
 

@@ -80,8 +80,8 @@ Read these files to understand what exists and what you'll integrate with:
 ## Step 6: Study the old project's SourceLinkingScreen (for extension-to-AniList linking)
 
 Read this file for the linking flow pattern:
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/detail/SourceLinkingScreen.kt`
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/cache/ExtensionLinkStore.kt`
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/detail/SourceLinkingScreen.kt`
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/cache/ExtensionLinkStore.kt`
 
 The old project has a working extension-to-AniList linking system:
 1. User taps an extension anime result

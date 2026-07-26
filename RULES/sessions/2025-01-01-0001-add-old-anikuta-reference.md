@@ -5,7 +5,7 @@
 **Session goal:**
 1. Persist the ntfy.sh task-completion notification rule (topic `TASKISDONE`).
 2. Download the old ANIKUTA project (`github.com/testplay-byte/anikuta`) and save
-   it as a second read-only reference under `OLD_ANIKUTA/ANIKUTA_OLD/`.
+   it as a second read-only reference under `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/`.
 
 ## What I did
 
@@ -15,10 +15,10 @@
   (topic, format, color semantics: 🟩/🟥/🟦/🟧, examples).
 - Downloaded the old ANIKUTA source tarball (`archive/refs/heads/main.tar.gz`,
   source-only, no `.git`).
-- Extracted into `OLD_ANIKUTA/ANIKUTA_OLD/` (37 MB, 2580 files). Kept the old
+- Extracted into `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/` (37 MB, 2580 files). Kept the old
   project's own `REFERENCE/` folder intact for fidelity (it duplicates our
-  `ANIYOMI_REFRENCE/` at an older Aniyomi commit `2f5cf77`).
-- Wrote `OLD_ANIKUTA/README.md` (provenance, rules, note on the duplicated
+  `_REFERENCES/ANIYOMI_REFRENCE/` at an older Aniyomi commit `2f5cf77`).
+- Wrote `_REFERENCES/OLD_ANIKUTA/README.md` (provenance, rules, note on the duplicated
   Aniyomi copy, what's valuable to mine).
 - Updated root `README.md` (layout + status now mention OLD_ANIKUTA + ntfy rule).
 - Updated `AGENTS.md` (cheat sheet row, hard rule #1 now covers both references,
@@ -49,15 +49,15 @@
   analysis. The owner explicitly said they will guide this — do not start it
   autonomously.
 - When directed, a good first read is
-  `OLD_ANIKUTA/ANIKUTA_OLD/DOCS/REFERENCE-DOCS/SUBSYSTEMS/` — the old project
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/DOCS/REFERENCE-DOCS/SUBSYSTEMS/` — the old project
   already did per-subsystem Aniyomi analysis. We can review/validate it rather
   than redo it from scratch.
-- Also read `OLD_ANIKUTA/ANIKUTA_OLD/DOCS/ENGINEERING/MODULARIZATION-ASSESSMENT.md`
+- Also read `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/DOCS/ENGINEERING/MODULARIZATION-ASSESSMENT.md`
   for lessons learned before finalizing our `DOCS/02-target-architecture.md`.
 
 ## Pointers (files to read first)
 
-- `/OLD_ANIKUTA/README.md` — the new reference's rules + provenance.
+- `/_REFERENCES/OLD_ANIKUTA/README.md` — the new reference's rules + provenance.
 - `/RULES/notifications.md` — the mandatory notification rule.
 - `/DOCS/04-design-decisions.md` — ADR-007 and ADR-008 (new).
 - `/AGENTS.md` — updated cheat sheet + hard rules.

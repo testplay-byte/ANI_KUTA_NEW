@@ -1,7 +1,7 @@
 # 02 — Protobuf Schema
 
 > Complete protobuf field reference for all Aniyomi backup models.
-> Field numbers match `ANIYOMI_REFRENCE/.../data/backup/models/Backup*.kt`.
+> Field numbers match `_REFERENCES/ANIYOMI_REFRENCE/.../data/backup/models/Backup*.kt`.
 
 ## Root: `Backup` (modern format)
 

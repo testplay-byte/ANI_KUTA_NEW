@@ -496,5 +496,5 @@ API 31, blur is a no-op; gradient alone still applies.
   §6 — cover-color theming (applied to the player chrome).
 - `DOCS/04-design-decisions.md` — ADR-012 (watch page → maximize →
   fullscreen), ADR-015 (custom design language).
-- `OLD_ANIKUTA/ANALYSIS/player-and-subtitle-screens.md` — source
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/player-and-subtitle-screens.md` — source
   analysis (read-only structural reference).

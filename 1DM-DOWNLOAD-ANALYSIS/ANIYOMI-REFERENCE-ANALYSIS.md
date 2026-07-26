@@ -1,6 +1,6 @@
 # Aniyomi 1DM Reference Analysis
 
-> **Source:** `ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/`
+> **Source:** `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/`
 > **Date:** 2026-07-25
 > **Agent:** Agent 2
 

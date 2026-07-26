@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────
 # ANI_KUTA_NEW — root .gitignore
-# This repo holds BOTH a frozen reference snapshot (ANIYOMI_REFRENCE/)
-# AND our live project (ANIKUTA_PROJECT/). The reference is committed
+# This repo holds BOTH frozen reference snapshots (_REFERENCES/)
+# AND our live project (ANIKUTA_PROJECT/). The references are committed
 # in full; only build artifacts & secrets are ignored.
 # ─────────────────────────────────────────────────────────────
 
@@ -48,11 +48,12 @@ local.properties
 # ── Logs ──
 *.log
 logs/
+LOGCAT.MD
 
 # ── Node / tooling (if any docs tooling is added later) ──
 node_modules/
 
-# ── NOTE: ANIYOMI_REFRENCE/ is committed in full (source only, no .git).
-#    Its own .gitignore (inside ANIYOMI_REFRENCE/ANIYOMI/.gitignore) handles
-#    Android-specific ignores should anyone accidentally build there.
-#    Do NOT build inside the reference folder.
+# ── NOTE: _REFERENCES/ holds frozen backup snapshots (source only, no .git).
+#    Their own .gitignore files (e.g. _REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/.gitignore)
+#    handle Android-specific ignores should anyone accidentally build there.
+#    Do NOT build inside the reference folders. See _REFERENCES/README.md.

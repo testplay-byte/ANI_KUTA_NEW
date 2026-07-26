@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * - `<baseUrl>/icon/<pkg>.png` — an extension's icon.
  * - `<baseUrl>/apk/<apkName>` — the actual APK file.
  *
- * (See `ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/extensions-update.md`.)
+ * (See `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/extensions-update.md`.)
  *
  * This mirrors the Aniyomi reference's `mihon.domain.extensionrepo.model.ExtensionRepo`
  * but drops the `signingKeyFingerprint` field for Phase 4B — signature trust is

@@ -30,7 +30,7 @@
    updates, profile, trackers, backup/restore, downloads, episode settings.
 
 **It is NOT a fork of Aniyomi.** The Aniyomi source is a read-only reference at
-`ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
+`_REFERENCES/ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
 
 ## Step 3: Understand the module structure
 

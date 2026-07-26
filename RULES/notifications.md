@@ -43,10 +43,10 @@ notification's intent). Do not mix colors in one message.
 ```
 🟩🟩🟩🟩🟩🟩🟩🟩
 
-Task complete: Old ANIKUTA project saved to OLD_ANIKUTA/ANIKUTA_OLD.
+Task complete: Old ANIKUTA project saved to _REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD.
 
 - Downloaded source tarball from github.com/testplay-byte/anikuta
-- Extracted into OLD_ANIKUTA/ANIKUTA_OLD (XXX files)
+- Extracted into _REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD (XXX files)
 - Updated docs and pushed to GitHub
 - CI passed
 

@@ -18,11 +18,11 @@ that combines:
    dual-mode notifications, auto-download, customizable screens/nav.
 
 It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
-[`ANIYOMI_REFRENCE/`](ANIYOMI_REFRENCE/). All new code goes in
+[`_REFERENCES/ANIYOMI_REFRENCE/`](_REFERENCES/ANIYOMI_REFRENCE/). All new code goes in
 [`ANIKUTA_PROJECT/ANIKUTA/`](ANIKUTA_PROJECT/ANIKUTA/).
 
 See [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) for the full
-ADR log (ADRs 001–030).
+ADR log (ADRs 001–036).
 
 ---
 
@@ -32,7 +32,7 @@ ADR log (ADRs 001–030).
 |---|---|---|
 | Language | Kotlin | — |
 | UI | Jetpack Compose (Compose-first; `AndroidView` for MPV only) | ADR-025 |
-| Navigation | Voyager | ADR-012 (watch page) |
+| Navigation | **Hand-rolled state machine** in `MainActivity.kt` (NOT Voyager). Voyager dependency is present in the catalog and a migration to it is planned. ADR-012 covers the *watch page* design (YouTube-style), not the navigation framework. | ADR-012 |
 | DI | **Koin** | ADR-023 |
 | Persistence | **SQLDelight** (with status-tracking columns) | ADR-024 |
 | Networking | OkHttp + kotlinx-serialization | ADR-030 |
@@ -242,8 +242,8 @@ for per-screen specs.
   (ADR-022) — extensions declare what they support; the app renders UI for
   declared capabilities.
 
-See [`ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md`](ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md)
-for the contract and [`ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/source-system.md`](ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/source-system.md)
+See [`_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md`](_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md)
+for the contract and [`_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/source-system.md`](_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/03-subsystems/source-system.md)
 for how the loader works.
 
 ---
@@ -271,9 +271,28 @@ for how the loader works.
 
 ## 11. Status
 
-**Phase 0b (Design & Planning) is COMPLETE.** All decisions recorded (ADRs 001–030).
-This file is finalized. The next step is **Phase 1: scaffold the Gradle project**
-under `ANIKUTA_PROJECT/ANIKUTA/` — pending the owner's go-ahead.
+**Phase 8+ (Full feature set) is COMPLETE.** The app builds, ships debug APKs
+via CI, and has all major features working: browse, search, anime details
+(incl. extension-only details), watch (MPV), library, history, updates
+(schedule + calendar), profile (stats + charts), trackers (AniList + MAL),
+backup/restore (ANIKUTA + Aniyomi compat), downloads/offline playback, and
+episode settings. The codebase has **41 Gradle modules** across `:core:*`,
+`:feature:*`, `:data:*`, and `:app`.
+
+All architecture decisions are recorded (ADRs 001–036). This file is the
+living source of truth and is kept up to date as the project evolves.
+
+### What's NOT done yet (future work)
+
+- ❌ Manga reader (anime-first; manga deferred per ADR-009)
+- ❌ Episode-release notifications (ADR-014 — `:core:notification` is a stub)
+- ❌ General settings page (theme, about, data management — `:feature:settings` is a stub)
+- ❌ Dark/light theme toggle (currently hardcoded to dark)
+- ❌ Watch page control sheets (audio/speed/server/more — TODO buttons)
+- ❌ Dynamic cover-color theming (Palette extraction)
+- ❌ WorkManager background update-checking (UpdateChecker is manual-only)
+- ❌ Release (Play Store / signed APK) build flavor
+- ❌ Voyager navigation migration (currently a hand-rolled state machine; planned)
 
 See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full roadmap and
 [`PLANNING/PHASED_PLAN.md`](PLANNING/PHASED_PLAN.md) for the detailed phase plan.
@@ -282,9 +301,9 @@ See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full roadmap and
 
 ## 12. References
 
-- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–030.
+- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–036.
 - [`DESIGN_LANGUAGE/`](DESIGN_LANGUAGE/) — the UI/UX spec.
 - [`PLANNING/`](PLANNING/) — detailed specs + phased plan.
 - [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) — the 14-section ruleset.
 - [`AGENT_CONTEXT/START_HERE.md`](AGENT_CONTEXT/START_HERE.md) — agent onboarding.
-- [`ANIYOMI_REFRENCE/DOCUMENTATION/`](ANIYOMI_REFRENCE/DOCUMENTATION/) — Aniyomi reference analysis.
+- [`_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/`](_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/) — Aniyomi reference analysis.

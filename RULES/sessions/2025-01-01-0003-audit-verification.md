@@ -10,7 +10,7 @@ verified supplementary docs for valid gaps.
 
 - Read the audit (`/home/z/my-project/upload/DOCUMENTATION_CONS_AUDIT.md`).
 - **Verified every concrete source-evidence claim** against the actual snapshot
-  at `ANIYOMI_REFRENCE/ANIYOMI/`. Did NOT trust the audit blindly.
+  at `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/`. Did NOT trust the audit blindly.
 - Sent an orange "processing" notification (per ADR-008).
 
 ## Audit verification results (honest assessment)
@@ -80,8 +80,8 @@ The audit contained many inaccurate source citations. Verified FALSE:
 
 ## Pointers
 
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/06-dual-manga-anime-pattern.md` — new.
-- `/ANIYOMI_REFRENCE/DOCUMENTATION/08-guides/` — new folder.
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/00-overview/06-dual-manga-anime-pattern.md` — new.
+- `/_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/08-guides/` — new folder.
 - `/home/z/my-project/upload/DOCUMENTATION_CONS_AUDIT.md` — the audit (unreliable).
 
 ## Dev environment notes
@@ -89,5 +89,5 @@ The audit contained many inaccurate source citations. Verified FALSE:
 - The audit was written against a Windows path
   (`C:\Users\khurr\Desktop\ANI_PROJECT\DOCUMENTATION\`) — likely a different/older
   copy. This explains the systematic discrepancies.
-- No source files under `ANIYOMI_REFRENCE/ANIYOMI/` were modified (read-only, ADR-005).
+- No source files under `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/` were modified (read-only, ADR-005).
 - No builds performed (CI-only, ADR-003).

@@ -84,7 +84,7 @@ AnikutaPalette(
 ```
 
 The role set is the **full M3 role set** the old ANIKUTA project already uses
-(`Color.kt` in `OLD_ANIKUTA/…/ui/theme/`): `primary`, `onPrimary`,
+(`Color.kt` in `_REFERENCES/OLD_ANIKUTA/…/ui/theme/`): `primary`, `onPrimary`,
 `primaryContainer`, `onPrimaryContainer`, `secondary`, `secondary*`,
 `tertiary`, `tertiary*`, `error`, `error*`, `background`, `onBackground`,
 `surface`, `onSurface`, `surfaceVariant`, `onSurfaceVariant`, `outline` —
@@ -187,7 +187,7 @@ Inherited concept from the old ANIKUTA detail + player screens
 
 ## 8. Reference to the old ANIKUTA project
 
-The old project at `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/
+The old project at `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/
 theme/` ships three files worth studying for STRUCTURE (not for values):
 
 - `Theme.kt` — `AnikutaTheme` composable with light/dark schemes + Monet
@@ -247,5 +247,5 @@ placeholder. The contract in §3 is final; only the values are pending.
 - `DESIGN_LANGUAGE/04-screens/watch-page.md` — cover-color override consumer.
 - `DOCS/04-design-decisions.md` ADR-015 (custom M3-inspired), ADR-018
   (customizable defaults + simple mode).
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/theme/` — the
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/theme/` — the
   prior implementation (read-only reference).

@@ -372,5 +372,5 @@ Real bugs in the old code the new project must NOT reintroduce:
   §6 — cover-color theming recipe.
 - `DOCS/04-design-decisions.md` — ADR-011 (dual-source metadata
   resolver), ADR-012 (watch page), ADR-015 (custom design language).
-- `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §1 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §1 —
   source analysis (read-only structural reference).

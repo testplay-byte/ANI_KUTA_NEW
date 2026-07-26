@@ -7,25 +7,28 @@
 
 ## 1. The 30-second orientation
 
-- **ANI_KUTA_NEW** is a monorepo for building **ANIKUTA**, a reimagined version of the Aniyomi manga/anime reader.
-- **We did NOT fork Aniyomi.** Its source is stored read-only under `ANIYOMI_REFRENCE/` for reference only.
+- **ANI_KUTA_NEW** is a monorepo for building **ANIKUTA**, a reimagined version of the Aniyomi anime app.
+- **We did NOT fork Aniyomi.** Its source is stored read-only under `_REFERENCES/ANIYOMI_REFRENCE/` for reference only.
 - **All new code goes under `ANIKUTA_PROJECT/ANIKUTA/`.**
-- **Never build APKs locally.** Builds happen only through GitHub Actions (`.github/workflows/`).
+- **The app is feature-complete (Phase 8+).** 41 Gradle modules, CI shipping debug APKs, all major features working.
+- **Never build APKs locally.** Builds happen only through GitHub Actions (`.github/workflows/ci.yml`).
 - **Read `ARCHITECTURE.md` FIRST** — it's the single source of truth (per `RULES/ai-agent-rules.md` §2).
+- **Stay out of `_REFERENCES/`** — those are frozen backup snapshots, off-limits for normal work (see `_REFERENCES/README.md`).
 
 ---
 
 ## 2. Read order when resuming work
 
-1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — **the single source of truth** (MUST READ FIRST per rules).
-2. [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) — the general ruleset (14 sections).
-3. [`RULES/project-conventions.md`](RULES/project-conventions.md) — ANIKUTA-specific rules.
-4. [`RULES/notifications.md`](RULES/notifications.md) — the ntfy.sh notification format.
-5. [`RULES/session-handoff-template.md`](RULES/session-handoff-template.md) — the format for leaving notes.
-6. [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — every decision made so far and why (avoids re-litigating).
-7. [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) — what phase we are in and what comes next.
-8. [`DOCS/03-reference-module-map.md`](DOCS/03-reference-module-map.md) — what each Aniyomi module does (use when porting ideas).
-9. The most recent session handoff note in [`RULES/sessions/`](RULES/sessions/) — what the last agent was doing.
+1. [`AGENT_CONTEXT/START_HERE.md`](AGENT_CONTEXT/START_HERE.md) — the 60-second brief + current state.
+2. [`AGENT_CONTEXT/PROJECT_STARTUP.md`](AGENT_CONTEXT/PROJECT_STARTUP.md) — detailed startup steps.
+3. [`ARCHITECTURE.md`](ARCHITECTURE.md) — **the single source of truth** (MUST READ FIRST per rules).
+4. [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) — the general ruleset (14 sections).
+5. [`RULES/project-conventions.md`](RULES/project-conventions.md) — ANIKUTA-specific rules.
+6. [`RULES/notifications.md`](RULES/notifications.md) — the ntfy.sh notification format.
+7. [`RULES/session-handoff-template.md`](RULES/session-handoff-template.md) — the format for leaving notes.
+8. [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — every decision made so far and why (ADRs 001–036).
+9. [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) — what phase we are in and what comes next.
+10. The most recent session handoff note in [`RULES/sessions/`](RULES/sessions/) — what the last agent was doing.
 
 > The newest file in `RULES/sessions/` is the latest handoff. Read it before starting.
 
@@ -38,14 +41,14 @@
 | Read the single source of truth | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Read the general AI agent rules | [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) |
 | Read ANIKUTA-specific rules (reference boundary, CI-only, etc.) | [`RULES/project-conventions.md`](RULES/project-conventions.md) |
-| Read the original Aniyomi code for reference | `ANIYOMI_REFRENCE/ANIYOMI/` (**read-only**) |
-| Read the Aniyomi analysis docs (68 docs) | `ANIYOMI_REFRENCE/DOCUMENTATION/` (**read-only**) |
-| Read the OLD ANIKUTA project (prior attempt + its Aniyomi analysis) | `OLD_ANIKUTA/ANIKUTA_OLD/` (**read-only**) |
+| Read the frozen Aniyomi source + analysis (OFF-LIMITS by default) | [`_REFERENCES/ANIYOMI_REFRENCE/`](_REFERENCES/ANIYOMI_REFRENCE/) (**read-only backups**) |
+| Read the frozen old ANIKUTA project (OFF-LIMITS by default) | [`_REFERENCES/OLD_ANIKUTA/](_REFERENCES/OLD_ANIKUTA/) (**read-only backups**) |
+| Understand why `_REFERENCES/` is off-limits | [`_REFERENCES/README.md`](_REFERENCES/README.md) |
 | Write new ANIKUTA app code | `ANIKUTA_PROJECT/ANIKUTA/` |
 | Record an architecture/design decision | [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) |
 | Leave a note for the next agent | [`RULES/sessions/`](RULES/sessions/) |
 | Add/modify CI | `.github/workflows/` |
-| Understand the target architecture (draft) | [`DOCS/02-target-architecture.md`](DOCS/02-target-architecture.md) |
+| Understand the target architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | See the plan / current phase | [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) |
 | Send a task-completion notification | [`RULES/notifications.md`](RULES/notifications.md) (ntfy.sh, topic `TASKISDONE`) |
 
@@ -54,7 +57,7 @@
 ## 4. Hard rules (do not violate)
 
 1. **Read `ARCHITECTURE.md` before writing ANY code.** It is the single source of truth. If something isn't covered there, ask — don't invent.
-2. **Do not modify anything under `ANIYOMI_REFRENCE/` or `OLD_ANIKUTA/`.** Both are frozen snapshots. If you need to copy an idea, copy it into `ANIKUTA_PROJECT/ANIKUTA/` and adapt it there.
+2. **Do not modify anything under `_REFERENCES/`.** Both `ANIYOMI_REFRENCE/` and `OLD_ANIKUTA/` are frozen backup snapshots. If you need to copy an idea, copy it into `ANIKUTA_PROJECT/ANIKUTA/` and adapt it there. See [`_REFERENCES/README.md`](_REFERENCES/README.md).
 3. **Do not build APKs locally.** No `./gradlew assembleDebug`, no Android Studio builds. CI does this. If you need to verify compilation, do it via a CI-triggered workflow or a syntax/type check that doesn't produce an APK.
 4. **Do not commit secrets, tokens, or keystore files.** The `.gitignore` blocks common ones, but stay vigilant.
 5. **Every non-trivial change must be documented.** If you add a module, a design choice, or change an approach, update `ARCHITECTURE.md` and [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) in the same commit.
@@ -68,34 +71,39 @@
 
 ## 5. Where the references came from
 
-There are **two** read-only references in this repo:
+There are **two** read-only backup snapshots in `_REFERENCES/`:
 
-### `ANIYOMI_REFRENCE/ANIYOMI/` — the original Aniyomi source
+### `_REFERENCES/ANIYOMI_REFRENCE/` — the original Aniyomi source
 - Source: `https://github.com/aniyomiorg/aniyomi` (branch `main`).
-- Downloaded as a source **tarball** (no `.git` history) — see `ANIYOMI_REFRENCE/README.md`.
+- Downloaded as a source **tarball** (no `.git` history) — see `_REFERENCES/ANIYOMI_REFRENCE/README.md`.
 - Not kept in sync with upstream; point-in-time snapshot for study.
-- **Fully documented** in `ANIYOMI_REFRENCE/DOCUMENTATION/` (68 docs, ~21,900 lines). Read the docs instead of reverse-engineering the source.
+- **Fully documented** in `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/` (68 docs, ~21,900 lines). Read the docs instead of reverse-engineering the source.
 
-### `OLD_ANIKUTA/ANIKUTA_OLD/` — our previous ANIKUTA attempt
+### `_REFERENCES/OLD_ANIKUTA/` — our previous ANIKUTA attempt
 - Source: `https://github.com/testplay-byte/anikuta` (branch `main`).
-- Downloaded as a source **tarball** (no `.git` history) — see `OLD_ANIKUTA/README.md`.
+- Downloaded as a source **tarball** (no `.git` history) — see `_REFERENCES/OLD_ANIKUTA/README.md`.
 - The old project reached a working state but had structural/modularity issues and unpolished UI. We rebuild fresh in `ANIKUTA_PROJECT/`.
 - **Valuable:** the old project contains prior Aniyomi subsystem analysis under
-  `OLD_ANIKUTA/ANIKUTA_OLD/DOCS/REFERENCE-DOCS/SUBSYSTEMS/` and 30+ session logs
-  under `OLD_ANIKUTA/ANIKUTA_OLD/MEMORY/SESSION-LOGS/`. Mine these during the
-  design phase instead of redoing the research.
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/DOCS/REFERENCE-DOCS/SUBSYSTEMS/` and 30+ session logs
+  under `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/MEMORY/SESSION-LOGS/`. Mine these during design
+  tasks instead of redoing the research.
 - Note: the old project shipped its **own** Aniyomi snapshot at
-  `OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
-  top-level `ANIYOMI_REFRENCE/` but at an older commit. Prefer our top-level
-  snapshot when studying Aniyomi; cross-reference the old one only when its docs
-  cite specific lines.
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
+  top-level `_REFERENCES/ANIYOMI_REFRENCE/` but at an older commit. Prefer our top-level
+  snapshot when studying Aniyomi; cross-reference the old one only when its docs cite specific lines.
+
+> ⛔ **Both folders are off-limits for normal work.** See [`_REFERENCES/README.md`](_REFERENCES/README.md).
+> Only enter them when you have a specific cross-reference need.
 
 ---
 
 ## 6. Build policy reminder
 
 - **GitHub Actions only.** See [`DOCS/06-build-and-ci.md`](DOCS/06-build-and-ci.md).
-- The placeholder workflow at `.github/workflows/ci-placeholder.yml` exists to be expanded later. Do not wire it to produce releases until the `ANIKUTA` app actually has something to build.
+- The CI workflow at `.github/workflows/ci.yml` builds the debug APK (arm64-v8a only — ADR-032),
+  runs unit tests for `:data:anime`, and uploads the APK as an artifact. It triggers on push to
+  `main`, PRs to `main`, and manual `workflow_dispatch` (for feature branches).
+- **Never build inside `_REFERENCES/`.** Those are source-only snapshots with no build setup.
 
 ---
 

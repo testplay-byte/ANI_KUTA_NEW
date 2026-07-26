@@ -10,33 +10,41 @@ This exists so that:
 - No one needs an Android toolchain installed locally to contribute.
 - Release artifacts always come from a trusted CI environment.
 
-## Current state (Phase 0)
+## Current state (Phase 8+)
 
-The only workflow is [`.github/workflows/ci-placeholder.yml`](../.github/workflows/ci-placeholder.yml).
-It runs a lightweight **repo-sanity** job that verifies:
-- The reference snapshot is present.
-- The ANIKUTA skeleton is present.
+The CI workflow lives at [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+It triggers on:
+- Push to `main` (auto).
+- Pull requests to `main` (auto).
+- Manual `workflow_dispatch` (for feature branches).
+
+It runs two jobs:
+
+### `build` job
+1. Checks out the repo.
+2. Sets up JDK 17 (Temurin).
+3. Sets up Gradle (with caching).
+4. Runs `./gradlew :app:assembleDebug --stacktrace` from `ANIKUTA_PROJECT/ANIKUTA/`.
+   - ABI: arm64-v8a only (ADR-032) — single APK, no universal APK.
+   - Stable debug signing (committed `anikuta-debug.keystore`) so CI builds can
+     update over previous versions without uninstalling.
+5. Runs unit tests: `./gradlew :data:anime:testDebugUnitTest --stacktrace`.
+6. Uploads the debug APK as a build artifact (`anikuta-debug-arm64-v8a`, ~39 MB).
+
+### `repo-sanity` job
+Verifies:
+- The `_REFERENCES/` backup snapshots are present.
 - All required documentation files exist.
 
-It does **not** build an APK, because the ANIKUTA app codebase does not exist yet.
+## Known CI limitations (to address in Phase 9)
 
-## Planned state (Phase 1 onward)
-
-A `build-anikuta` job (currently sketched as a comment block in the placeholder
-workflow) will:
-
-1. Check out the repo.
-2. Set up JDK 17 (Temurin).
-3. Set up Gradle (with caching).
-4. Run `./gradlew assembleDebug` from `ANIKUTA_PROJECT/ANIKUTA/`.
-5. Upload the debug APK as a build artifact.
-
-Later phases add:
-- `lintDebug`, `testDebugUnitTest` jobs.
-- A release job (on tagged pushes) that signs the APK with CI secrets and
-  publishes a GitHub Release. Signing keys are stored as GitHub Actions secrets —
-  **never** in the repo.
-- Baseline profile generation (mirroring Aniyomi's `:macrobenchmark`).
+- **No full build or lint.** CI only runs `:app:assembleDebug` + the `:data:anime`
+  unit tests. It does **not** run `./gradlew build` or `:app:lint`, so latent
+  issues (like the missing `:i18n` module folder — referenced in
+  `settings.gradle.kts` but never created) can slip through. Expanding CI is on
+  the Phase 9 roadmap.
+- **No release job.** Release signing + GitHub Releases are not yet wired (ADR-003
+  lists them as future). The committed keystore is debug-only.
 
 ## What agents/contributors MAY do locally
 
@@ -49,10 +57,10 @@ Later phases add:
 - `./gradlew assembleDebug` / `assembleRelease` / `bundleRelease`.
 - Any command whose output is an APK/AAB.
 - Generating signing keystores or signing artifacts locally for release.
-- Running `./gradlew` *inside* `ANIYOMI_REFRENCE/ANIYOMI/` (the reference is
-  read-only and not built).
+- Running `./gradlew` *inside* `_REFERENCES/` (the reference snapshots are
+  read-only backups and not built — see `_REFERENCES/README.md`).
 
-## CI secrets (to configure before Phase 6 release)
+## CI secrets (to configure before the release phase)
 
 When we reach the release phase, the following secrets must be added via the
 GitHub repo settings → Secrets and variables → Actions:

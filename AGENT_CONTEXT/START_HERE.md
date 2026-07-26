@@ -25,7 +25,7 @@ guessing.
    extension-only details page.
 
 It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
-`ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
+`_REFERENCES/ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
 
 ## Read order (mandatory)
 
@@ -122,7 +122,7 @@ across `:core:*`, `:feature:*`, `:data:*`, and `:app`.
 ## Hard rules (don't violate)
 
 1. **Read `ARCHITECTURE.md` first.** It's the single source of truth.
-2. **Don't modify the references** (`ANIYOMI_REFRENCE/`, `OLD_ANIKUTA/`).
+2. **Don't modify the references** (`_REFERENCES/ANIYOMI_REFRENCE/`, `_REFERENCES/OLD_ANIKUTA/`).
 3. **Don't build APKs locally.** CI-only (ADR-003). Push to a feature branch, trigger `workflow_dispatch`.
 4. **Send a ntfy.sh notification** on every task completion to `https://ntfy.sh/TASKISDONE` (ADR-008).
 5. **No blind guesses.** If unsure, read the code first (Rule §1).

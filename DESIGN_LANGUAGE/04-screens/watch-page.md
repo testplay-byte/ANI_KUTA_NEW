@@ -198,7 +198,7 @@ The user can maximize the mini-player to fullscreen via:
   (top/bottom bars, gestures for seek/volume/brightness, subtitle/audio/
   quality sheets, "more" sheet with sleep timer etc.) — feature-parity
   with the old project's fullscreen player
-  (`OLD_ANIKUTA/…/player/controls/FullscreenControls.kt`).
+  (`_REFERENCES/OLD_ANIKUTA/…/player/controls/FullscreenControls.kt`).
 - The watch page's description + episode list are NOT visible in
   fullscreen (immersive mode).
 
@@ -237,7 +237,7 @@ The user can maximize the mini-player to fullscreen via:
 
 ## 9. Relationship to the old ANIKUTA project
 
-The old project at `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/
+The old project at `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/
 player/` already implements the watch page concept under a single
 `PlayerScreen` that switches between `MINIMIZED` and `FULLSCREEN` modes.
 Direct-reference files:
@@ -298,7 +298,7 @@ behavior verbatim, adapted to the new screen split (`WatchScreen` +
 - `DESIGN_LANGUAGE/04-screens/bottom-nav.md` — the watch page is a
   non-top-level destination, so the floating bar is hidden here.
 - `DOCS/04-design-decisions.md` ADR-012 (watch page), ADR-018 (simple mode).
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/` — prior
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/` — prior
   working implementation (read-only structural reference).
 - `PLANNING/02-screen-specs/player.md` (TBD) — fullscreen player + MPV
   embedding architecture.

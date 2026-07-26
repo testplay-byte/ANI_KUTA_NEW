@@ -7,7 +7,7 @@ source + fallback), ADR-022 (extensible architecture).
 **Proposes ADR:** ADR-023 — Per-episode metadata via pluggable source
 registry (this spec is the basis for that ADR; see §1.3).
 **Companion analysis:**
-[`OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md`](../../OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md).
+[`_REFERENCES/OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md`](../../_REFERENCES/OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md).
 
 ---
 
@@ -35,7 +35,7 @@ Translation into spec requirements:
 1. **Same method as the old project** — 4 parallel sources (Anikage.cc /
    AniList streaming / Jikan-MAL / Kitsu), per-field merge priority, parallel
    `coroutineScope { async { … } }`, graceful degradation. See
-   [analysis](../../OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md) §5.
+   [analysis](../../_REFERENCES/OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md) §5.
 2. **Separate module** — lives in its own Gradle module so it can be edited
    in isolation. Named `:core:episode-metadata` (§2).
 3. **Input = anime info, output = episode metadata** — a single
@@ -837,15 +837,15 @@ To prevent scope creep, explicitly out of scope:
 ## 14. References
 
 - **Analysis (this task's companion):**
-  [`OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md`](../../OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md)
+  [`_REFERENCES/OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md`](../../_REFERENCES/OLD_ANIKUTA/ANALYSIS/episode-metadata-method.md)
 - **Old project fetcher:**
-  `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/metadata/EpisodeMetadataFetcher.kt`
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/metadata/EpisodeMetadataFetcher.kt`
 - **Old project caller:**
-  `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/detail/DetailViewModel.kt` lines 385–485
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/ui/detail/DetailViewModel.kt` lines 385–485
 - **Old project disk cache:**
-  `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/cache/EpisodeCacheStore.kt`
+  `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/data/cache/EpisodeCacheStore.kt`
 - **Old project design-language extraction (Stage 3):**
-  `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §"Stage 3"
+  `_REFERENCES/OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §"Stage 3"
 - **ADRs:** `DOCS/04-design-decisions.md` — ADR-010, ADR-011, ADR-022, and
   the open question on line 438 that this spec proposes to close as ADR-023.
 - **Module conventions:** `RULES/ai-agent-rules.md` §4 (modularity),

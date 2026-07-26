@@ -14,7 +14,7 @@
   study, (b) our own code, (c) docs/rules for AI agents — all co-existing without
   cross-contamination.
 - **Decision:** Use a single repository `ANI_KUTA_NEW` with two top-level trees:
-  `ANIYOMI_REFRENCE/` (frozen reference) and `ANIKUTA_PROJECT/` (live project).
+  `_REFERENCES/ANIYOMI_REFRENCE/` (frozen reference) and `ANIKUTA_PROJECT/` (live project).
   Keep the root clean for navigation + `DOCS/` + `RULES/`.
 - **Consequences:**
   - ✅ A new agent reads the root, immediately understands layout.
@@ -35,7 +35,7 @@
   - ✅ Small. No history bloat.
   - ⚠️ Cannot `git blame`/`log` the reference. Acceptable — it's a study copy,
     not a working clone. The upstream URL is recorded in
-    `ANIYOMI_REFRENCE/README.md` for anyone who needs history.
+    `_REFERENCES/ANIYOMI_REFRENCE/README.md` for anyone who needs history.
 
 ## ADR-003 — Builds happen via GitHub Actions ONLY
 
@@ -71,13 +71,13 @@
 - **Date:** Phase 0.
 - **Context:** Editing the reference would blur "what Aniyomi does" vs "what we
   do", defeating the purpose of a study snapshot.
-- **Decision:** Nothing under `ANIYOMI_REFRENCE/` is ever modified, except to
+- **Decision:** Nothing under `_REFERENCES/ANIYOMI_REFRENCE/` is ever modified, except to
   replace the whole snapshot with a newer upstream tarball (procedure in
-  `ANIYOMI_REFRENCE/README.md`). To port an idea, copy code into
+  `_REFERENCES/ANIYOMI_REFRENCE/README.md`). To port an idea, copy code into
   `ANIKUTA_PROJECT/ANIKUTA/` and adapt there.
 - **Consequences:**
   - ✅ The reference always reflects real upstream behavior.
-  - ✅ `git diff ANIYOMI_REFRENCE/` is effectively always empty between refreshes.
+  - ✅ `git diff _REFERENCES/ANIYOMI_REFRENCE/` is effectively always empty between refreshes.
 
 ## ADR-006 — AI-agent-first documentation strategy
 
@@ -102,9 +102,9 @@
   structural/modularity issues and unpolished UI — the reasons we are starting
   fresh. However, it contains valuable prior research (Aniyomi subsystem analysis,
   30+ session logs, a modularization assessment) that we should not throw away.
-- **Decision:** Add a second read-only reference tree `OLD_ANIKUTA/ANIKUTA_OLD/`
+- **Decision:** Add a second read-only reference tree `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/`
   containing a source-only tarball snapshot of the old project. Treat it with the
-  same read-only discipline as `ANIYOMI_REFRENCE/` (ADR-005). Mine it for insights
+  same read-only discipline as `_REFERENCES/ANIYOMI_REFRENCE/` (ADR-005). Mine it for insights
   during the design phase; do not edit it.
 - **Consequences:**
   - ✅ Prior research (especially `DOCS/REFERENCE-DOCS/SUBSYSTEMS/`) is preserved
@@ -112,8 +112,8 @@
   - ✅ Lessons-learned (`MODULARIZATION-ASSESSMENT.md`) inform our architecture
     choices so we avoid the old project's pitfalls.
   - ⚠️ The old project shipped its own Aniyomi snapshot at
-    `OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
-    top-level `ANIYOMI_REFRENCE/` (newer `main`) at an older commit. We keep it
+    `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
+    top-level `_REFERENCES/ANIYOMI_REFRENCE/` (newer `main`) at an older commit. We keep it
     intact for fidelity — the old project's docs cite line numbers against that
     specific commit. Prefer our top-level snapshot when studying Aniyomi directly.
   - ⚠️ Repo grows by ~37 MB (old project + its nested reference). Acceptable.
@@ -449,7 +449,7 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - `next_episode_check` — when to next check for a new episode (for ADR-014).
   These support the notification/auto-download features and let us debug stale data.
 - **Consequences:**
-  - ✅ Matches reference (already documented in `ANIYOMI_REFRENCE/DOCUMENTATION/`).
+  - ✅ Matches reference (already documented in `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/`).
   - ✅ KMP-friendly (future-proofs for potential desktop).
   - ✅ Status columns enable robust notification scheduling + debugging.
   - ⚠️ Less IDE support than Room. Accepted.
@@ -499,17 +499,25 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - ⚠️ English-only means non-English users see English until we add locales.
     Accepted for Phase 1.
 
-## ADR-028 — Backup format: gzipped protobuf (own schema)
+## ADR-028 — Backup format: ~~gzipped protobuf~~ (own schema)
+
+> **Update (Phase 7+):** The "gzipped protobuf" part of this decision was
+> **superseded by ADR-036** (gzipped JSON in a ZIP container) during the Backup
+> & Restore implementation. The "own schema, not Aniyomi's `.tachibk`" part
+> still holds. See ADR-036 for the rationale.
 
 - **Date:** Phase 0b.
 - **Context:** Need a backup format.
-- **Decision:** **Gzipped protobuf** with our **own schema** (not Aniyomi's
-  `.tachibk` format — we define our own `.anikuta` backup). Compact, fast, proven.
-  We can restore our own backups; Aniyomi backup compat is NOT a goal.
+- **Decision:** ~~**Gzipped protobuf** with our **own schema**~~ (superseded by
+  ADR-036 — switched to gzipped JSON in a ZIP). The retained part: our **own
+  schema** (not Aniyomi's `.tachibk` format — we define our own `.anikuta`
+  backup). Aniyomi restore compat was later added as a restore-only feature
+  (ADR-036).
 - **Consequences:**
   - ✅ Compact, fast, schema is ours to evolve.
   - ✅ Easy to change later if needed.
-  - ⚠️ Users can't import Aniyomi backups (we'd need a converter if ever wanted).
+  - ⚠️ ~~Users can't import Aniyomi backups~~ (resolved by ADR-036: Aniyomi
+    `.tachibk` backups can now be restored via `AniyomiBackupFormat`).
   - 📌 No encryption initially (matches Aniyomi). Can add later.
 
 ## ADR-029 — Extension compatibility: keep Aniyomi extension format exactly
@@ -524,7 +532,7 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - ✅ Instant extension ecosystem (existing Aniyomi anime extensions work).
   - ✅ Custom extensions can add features via capability declarations.
   - ⚠️ Locked into the source-api shape (acceptable — it's well-designed).
-  - 📌 See `ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md` for the contract.
+  - 📌 See `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md` for the contract.
 
 ## ADR-030 — AniList client: raw HTTP + kotlinx-serialization (swappable)
 
@@ -668,7 +676,11 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
-## ADR-035 — Backup format: gzipped JSON in a zip container (refines ADR-028)
+## ADR-036 — Backup format: gzipped JSON in a zip container (refines ADR-028)
+
+> **Note:** Previously mis-numbered as ADR-035 (collision with the Downloads
+> ADR-035 above). Renumbered to ADR-036 on 2026-07-26 during the documentation
+> cleanup pass to resolve the collision.
 
 - **Date:** Phase 7+ (Agent 1 — Backup & Restore implementation).
 - **Context:** ADR-028 specified "gzipped protobuf" for the backup format.

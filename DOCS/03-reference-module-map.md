@@ -1,12 +1,12 @@
 # 03 — Reference Module Map (Aniyomi)
 
 > A quick-reference map of the Aniyomi source under
-> `../ANIYOMI_REFRENCE/ANIYOMI/`. Use this when porting a concept: find the
+> `../_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/`. Use this when porting a concept: find the
 > module here, read it in the reference, then re-implement it the ANIKUTA way
 > under `../ANIKUTA_PROJECT/ANIKUTA/`.
 
 The modules below are defined in
-`ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts`.
+`_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts`.
 
 ## Modules
 
@@ -19,7 +19,7 @@ The main application module. Contains:
 - `PlayerViewModel` and reader controllers.
 - App-level Gradle config (signing, flavors, dependencies).
 
-**Key entry points:** `ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/...`
+**Key entry points:** `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/...`
 
 ### `:core:common`
 Shared utilities used across the whole app: logging, file helpers, system
@@ -87,6 +87,6 @@ so users can read local manga/anime.
 
 1. Identify the Aniyomi feature you want to port (e.g. "downloads queue").
 2. Find the module above that owns it (downloads touches `:app`, `:data`, `:domain`).
-3. Read the relevant files in `ANIYOMI_REFRENCE/ANIYOMI/<module>/`.
+3. Read the relevant files in `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/<module>/`.
 4. Decide how ANIKUTA will implement it (record in `04-design-decisions.md`).
 5. Implement under `ANIKUTA_PROJECT/ANIKUTA/` — do not edit the reference.

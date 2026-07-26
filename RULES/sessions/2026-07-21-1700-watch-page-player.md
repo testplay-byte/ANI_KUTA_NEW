@@ -113,7 +113,7 @@ Implemented the ANIKUTA watch page + video player — the most critical missing 
 - `core/player/src/main/java/app/confused/anikuta/core/player/PlayerInitializer.kt` — MPV init/destroy
 - `core/player/src/main/java/app/confused/anikuta/core/player/PlayerStateHolder.kt` — shared state
 - `core/player/src/main/java/app/confused/anikuta/core/player/controls/` — MinimizedControls + FullscreenControls
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/sheets/PlayerSheets.kt` — reference for sheets to port
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/SubtitleSettingsPanel.kt` — reference for subtitle panel
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/NumericKeypad.kt` — reference for keypad
-- `OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/PlayerGestureHandler.kt` — reference for gestures
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/sheets/PlayerSheets.kt` — reference for sheets to port
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/SubtitleSettingsPanel.kt` — reference for subtitle panel
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/NumericKeypad.kt` — reference for keypad
+- `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/app/src/main/java/app/anikuta/player/controls/PlayerGestureHandler.kt` — reference for gestures
