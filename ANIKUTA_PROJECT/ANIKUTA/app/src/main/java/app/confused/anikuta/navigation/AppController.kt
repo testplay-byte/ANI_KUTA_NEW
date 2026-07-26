@@ -218,7 +218,7 @@ class AppController(
         downloadPickerTarget = null
     }
 
-    fun setPendingTrackerAuth(trackerId: Int?) {
+    fun updatePendingTrackerAuth(trackerId: Int?) {
         pendingTrackerAuth = trackerId
     }
 

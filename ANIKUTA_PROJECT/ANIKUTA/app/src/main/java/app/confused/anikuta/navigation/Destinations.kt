@@ -233,7 +233,7 @@ object TrackersDestination : Screen {
         TrackersSettingsScreen(
             onBack = { navigator.pop() },
             onLoginTracker = { trackerId ->
-                appController.setPendingTrackerAuth(trackerId)
+                appController.updatePendingTrackerAuth(trackerId)
                 val tracker = appController.trackerManager.getTracker(trackerId)
                 val authUrl = tracker?.getAuthUrl()
                 if (authUrl != null) {
