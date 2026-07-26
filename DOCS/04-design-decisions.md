@@ -714,6 +714,71 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
+## ADR-037 — Navigation: Voyager (replaces the hand-rolled state machine)
+
+- **Date:** Phase 9 (Voyager navigation migration).
+- **Context:** The app originally used a hand-rolled state-machine in
+  `MainActivity.kt` for navigation — ~20 `mutableStateOf` flags driving a
+  `when` block, with a single `BackHandler` containing a priority-ordered
+  `when` for back navigation. This worked but:
+  (a) The file grew to 1174 lines — hard to maintain and extend.
+  (b) Every new screen required adding a flag + a `when` branch + a
+      `BackHandler` case.
+  (c) No back-stack semantics — the "stack" was a priority list, not a true
+      LIFO. Back behavior was manually coded and fragile.
+  (d) No transitions/animations between screens.
+  (e) Business logic (resolve, download, cancel) lived in the composable,
+      violating Rule §3 ("UI files contain ONLY display logic").
+  Voyager (`cafe.adriel.voyager:voyager-navigator:1.0.1`) was already in the
+  dependency catalog (added during Phase 0b as the intended nav library) but
+  unused.
+- **Decision:**
+  - Migrate to **Voyager** for navigation. Each screen is a `Screen` class
+    (data class or object) with a `@Composable Content()` method.
+  - Use a **single root `Navigator`** (not per-tab Navigators). The 4
+    bottom-nav tabs are the root screens; switching tabs calls
+    `navigator.replace(newTab)`. Pushed screens (detail, watch, settings,
+    etc.) push on top. This matches the previous single-stack behavior.
+    Per-tab Navigators (tab state preservation) can be added later if desired.
+  - Extract all shared state + business logic from the composable into an
+    `AppController` (Koin singleton). This addresses Rule §3 — the UI
+    (Voyager `Screen` classes) forwards events to the controller; the
+    controller holds state + calls services.
+  - Overlay sheets (resolver, linking, download picker) remain modal overlays
+    rendered at the root level, driven by `AppController` state. They are NOT
+    navigated screens (per DESIGN_LANGUAGE §1–3: no drag handle, partial
+    height).
+  - The `AniListApi` is consolidated to a single full-featured instance
+    (with persistent cache + rate limiter) registered in `navModule`,
+    shared app-wide. Previously, `updateCheckerModule` registered a no-arg
+    version while `MainActivity` created a separate full version.
+- **Consequences:**
+  - ✅ `MainActivity.kt` shrinks from 1174 lines to ~55 (just the Activity +
+    OAuth intent handling). Navigation logic lives in `AnikutaRoot.kt` +
+    `Destinations.kt` + `AppController.kt`.
+  - ✅ Adding a new screen = create a `Screen` class + call
+    `navigator.push()`. No flags, no `when` branches, no `BackHandler` cases.
+  - ✅ True LIFO back stack — back behavior is automatic via Voyager's
+    built-in `BackHandler`.
+  - ✅ Slide transitions between screens (`SlideTransition`).
+  - ✅ Business logic moved out of the composable into `AppController`
+    (addresses Rule §3). A future refactor can split `AppController` into
+    per-concern coordinators.
+  - ⚠️ Tab state is NOT preserved when switching tabs (matching previous
+    behavior). Each tab switch `replace`s the root screen. Per-tab Navigators
+    could be added later for state preservation.
+  - ⚠️ `AppController` is a coordination God class (~600 lines). It's a step
+    forward from the composable (survives recomposition, testable, Koin-
+    injectable) but should be split into per-concern coordinators in a
+    future refactor. Tracked as a follow-up.
+  - 📌 The `MoreScreen` and `SettingsScreen` composables live in `:app`'s
+    navigation package (not `:feature:more` / `:feature:settings`) because
+    they compose entries from multiple feature modules, which would violate
+    Rule §14 (feature isolation) if they lived in a feature module. The
+    `:feature:more` and `:feature:settings` stub modules remain for now.
+
+---
+
 ## How to add a new ADR
 
 1. Use the next free `ADR-NNN` number.

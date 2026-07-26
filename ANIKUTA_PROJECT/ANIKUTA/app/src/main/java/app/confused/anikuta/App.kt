@@ -16,6 +16,7 @@ import app.confused.anikuta.di.searchModule
 import app.confused.anikuta.core.preferences.di.preferenceModule
 import app.confused.anikuta.core.player.di.playerModule
 import app.confused.anikuta.core.episodemetadata.di.episodeMetadataModule
+import app.confused.anikuta.navigation.navModule
 import eu.kanade.tachiyomi.animesource.ExtensionAppHolder
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.CoroutineScope
@@ -103,6 +104,8 @@ class App : Application() {
                 app.confused.anikuta.feature.backup.di.aniyomiRestoreModule,
                 // ── Agent 2: Downloads & Offline Playback ──
                 downloadAppModule,
+                // ── Voyager navigation (AppController + shared AniListApi) ──
+                navModule,
             )
         }
 

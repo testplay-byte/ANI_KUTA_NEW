@@ -22,7 +22,7 @@ It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at
 [`ANIKUTA_PROJECT/ANIKUTA/`](ANIKUTA_PROJECT/ANIKUTA/).
 
 See [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) for the full
-ADR log (ADRs 001–036).
+ADR log (ADRs 001–037).
 
 ---
 
@@ -32,7 +32,7 @@ ADR log (ADRs 001–036).
 |---|---|---|
 | Language | Kotlin | — |
 | UI | Jetpack Compose (Compose-first; `AndroidView` for MPV only) | ADR-025 |
-| Navigation | **Hand-rolled state machine** in `MainActivity.kt` (NOT Voyager). Voyager dependency is present in the catalog and a migration to it is planned. ADR-012 covers the *watch page* design (YouTube-style), not the navigation framework. | ADR-012 |
+| Navigation | **Voyager** (single root `Navigator` + `Screen` classes). Migrated from a hand-rolled state machine in Phase 9 (ADR-037). | ADR-012, ADR-037 |
 | DI | **Koin** | ADR-023 |
 | Persistence | **SQLDelight** (with status-tracking columns) | ADR-024 |
 | Networking | OkHttp + kotlinx-serialization | ADR-030 |
@@ -292,7 +292,7 @@ living source of truth and is kept up to date as the project evolves.
 - ❌ Dynamic cover-color theming (Palette extraction)
 - ❌ WorkManager background update-checking (UpdateChecker is manual-only)
 - ❌ Release (Play Store / signed APK) build flavor
-- ❌ Voyager navigation migration (currently a hand-rolled state machine; planned)
+- ✅ ~~Voyager navigation migration~~ (DONE — ADR-037, Phase 9)
 
 See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full roadmap and
 [`PLANNING/PHASED_PLAN.md`](PLANNING/PHASED_PLAN.md) for the detailed phase plan.
@@ -301,7 +301,7 @@ See [`DOCS/05-roadmap.md`](DOCS/05-roadmap.md) for the full roadmap and
 
 ## 12. References
 
-- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–036.
+- [`DOCS/04-design-decisions.md`](DOCS/04-design-decisions.md) — ADRs 001–037.
 - [`DESIGN_LANGUAGE/`](DESIGN_LANGUAGE/) — the UI/UX spec.
 - [`PLANNING/`](PLANNING/) — detailed specs + phased plan.
 - [`RULES/ai-agent-rules.md`](RULES/ai-agent-rules.md) — the 14-section ruleset.

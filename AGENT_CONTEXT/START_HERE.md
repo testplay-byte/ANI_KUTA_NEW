@@ -114,7 +114,7 @@ across `:core:*`, `:feature:*`, `:data:*`, and `:app`.
 | Design system (theme, components) | `ANIKUTA_PROJECT/ANIKUTA/core/designsystem/` |
 | Extension manager + source matcher | `ANIKUTA_PROJECT/ANIKUTA/data/extension/` |
 | Anime/episode repos | `ANIKUTA_PROJECT/ANIKUTA/data/anime/` |
-| Navigation (state machine) | `ANIKUTA_PROJECT/ANIKUTA/app/.../MainActivity.kt` |
+| Navigation (Voyager) | `ANIKUTA_PROJECT/ANIKUTA/app/.../navigation/AnikutaRoot.kt` + `Destinations.kt` + `AppController.kt` |
 | Koin DI modules | `ANIKUTA_PROJECT/ANIKUTA/app/src/main/java/.../di/` |
 | Backup/restore planning docs | `BACKUP-AND-RESTORE-AND-DOWNLOADING-PLANING/` |
 | AI agent prompts (for backup/downloads) | `AI-AGENT-PROMPTS/` |
@@ -142,7 +142,7 @@ across `:core:*`, `:feature:*`, `:data:*`, and `:app`.
    "https://api.github.com/repos/testplay-byte/ANI_KUTA_NEW/actions/workflows/ci.yml/dispatches" \
    -d '{"ref":"<your-branch>"}'
    ```
-4. Navigation: **hand-rolled state-machine** in `MainActivity.kt` (NOT Voyager/Compose Nav). State flags drive a `when` block. New screens: add state var + `when` branch + `BackHandler` case.
+4. Navigation: **Voyager** (single root `Navigator` + `Screen` classes — ADR-037). New screens: create a `Screen` class in `navigation/Destinations.kt` + call `navigator.push()`. The `AppController` (Koin singleton in `navigation/AppController.kt`) holds shared state + business logic.
 5. DI: **Koin** — modules in `app/.../di/`. Use `koinInject<>()` in composables, `get<>()` in constructors.
 6. Design: **#B1F256 lime green** primary, **RobotoFamily** font, `surfaceVariant@0.4f` card backgrounds.
 
