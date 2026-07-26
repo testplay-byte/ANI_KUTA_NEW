@@ -34,7 +34,7 @@ import app.confused.anikuta.feature.trackers.TrackersSettingsScreen
 import app.confused.anikuta.feature.updates.UpdatesScreen
 import app.confused.anikuta.feature.watch.WatchRequest
 import app.confused.anikuta.feature.watch.WatchScreen
-import cafe.adriel.voyager.core.Screen
+import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
