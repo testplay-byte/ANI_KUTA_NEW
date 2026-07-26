@@ -635,6 +635,40 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
+## ADR-035 — Backup format: gzipped JSON in a zip container (refines ADR-028)
+
+- **Date:** Phase 7+ (Agent 1 — Backup & Restore implementation).
+- **Context:** ADR-028 specified "gzipped protobuf" for the backup format.
+  During implementation, the practical trade-offs favored gzipped JSON instead:
+  (a) kotlinx-serialization-json is already in the stack (no protobuf compiler
+  setup); (b) JSON is debuggable (you can inspect a backup file's contents);
+  (c) the backup schema uses a polymorphic sealed class (`BackupEntry`) which
+  kotlinx-serialization handles natively with a `"type"` discriminator; (d) the
+  size difference is negligible after gzip compression.
+- **Decision:**
+  - The ANIKUTA backup format (`.anikuta` extension) is a **ZIP archive**
+    containing `meta.json.gz` (gzipped JSON of the `BackupContainer`) + optional
+    `covers/<anilistId>.jpg` files.
+  - The zip wrapper allows bundling binary cover images alongside JSON data
+    without base64-encoding (which would bloat memory).
+  - **Aniyomi compatibility** is restore-only: `AniyomiBackupFormat` decodes
+    Aniyomi `.tachibk` protobuf backups using `kotlinx-serialization-protobuf`
+    + minimal model classes copied from Aniyomi's source. We never export in
+    Aniyomi format.
+  - **Supersedes the "gzipped protobuf" part of ADR-028** — the "own schema,
+    not Aniyomi's `.tachibk`" part still holds.
+- **Consequences:**
+  - ✅ No protobuf compiler setup — uses existing kotlinx-serialization.
+  - ✅ Debuggable — backup files can be unzipped + the JSON inspected.
+  - ✅ Self-contained — cover images bundled in the zip.
+  - ✅ Aniyomi restore compat — users can import Aniyomi backups.
+  - ⚠️ Slightly larger than pure protobuf (JSON is more verbose than protobuf
+    before compression). After gzip, the difference is <5%. Accepted.
+  - 📌 Can add protobuf export later if size becomes an issue (the
+    `BackupFormat` interface is pluggable).
+
+---
+
 ## How to add a new ADR
 
 1. Use the next free `ADR-NNN` number.

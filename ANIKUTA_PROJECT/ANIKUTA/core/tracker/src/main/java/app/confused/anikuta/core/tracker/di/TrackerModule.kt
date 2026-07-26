@@ -7,6 +7,8 @@ import app.confused.anikuta.core.preferences.PreferenceStore
 import app.confused.anikuta.core.tracker.StatsCalculator
 import app.confused.anikuta.core.tracker.TrackRepository
 import app.confused.anikuta.core.tracker.TrackSyncManager
+import app.confused.anikuta.core.tracker.TrackerBackupProvider
+import app.confused.anikuta.core.tracker.TrackerBackupProviderImpl
 import app.confused.anikuta.core.tracker.TrackerManager
 import app.confused.anikuta.core.tracker.anilist.AniListTrackApi
 import app.confused.anikuta.core.tracker.anilist.AniListTracker
@@ -59,6 +61,17 @@ val trackerModule: Module = module {
             watchProgressStore = get<WatchProgressStore>(),
             animeRepository = get<AnimeRepository>(),
             trackerManager = get<TrackerManager>(),
+        )
+    }
+
+    // ── Agent 1: Backup & Restore — tracker backup provider ──
+    // Implements the TrackerBackupProvider interface for backup/restore of
+    // OAuth tokens + animetrack bindings. Used by TrackerBackupProviderAdapter
+    // in :core:backup.
+    single<TrackerBackupProvider> {
+        TrackerBackupProviderImpl(
+            preferenceStore = get(),
+            trackRepository = get(),
         )
     }
 }

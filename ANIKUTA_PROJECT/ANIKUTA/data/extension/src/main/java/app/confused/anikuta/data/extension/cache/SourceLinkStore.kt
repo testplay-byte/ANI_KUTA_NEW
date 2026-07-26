@@ -58,6 +58,9 @@ class SourceLinkStore(
         store.set(map)
     }
 
+    /** Get all saved source links (for backup). Key = AniList anime ID (as String). */
+    fun getAll(): Map<String, SourceLink> = store.get()
+
     val changes: Flow<Map<String, SourceLink>> = store.changes().map { it }
 
     companion object {

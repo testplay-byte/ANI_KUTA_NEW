@@ -81,4 +81,10 @@ class EpisodeMetadataCache(
     fun clearAll() {
         prefs.set(emptyMap())
     }
+
+    /**
+     * Get all cached metadata for all anime (for backup export).
+     * @return Map where outer key = animeId (as String), inner value = JSON of Map<Int, EpisodeMetadata>.
+     */
+    fun getAll(): Map<String, String> = prefs.get()
 }

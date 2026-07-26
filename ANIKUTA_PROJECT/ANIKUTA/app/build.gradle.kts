@@ -79,6 +79,10 @@ dependencies {
     // Core modules for episode metadata
     implementation(projects.core.episodeMetadata)
 
+    // ── Agent 1: Backup & Restore ──
+    implementation(projects.core.backup)
+    implementation(projects.feature.backup)
+
     // OkHttp + serialization (used by ExtensionModule for extension API HTTP client)
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")

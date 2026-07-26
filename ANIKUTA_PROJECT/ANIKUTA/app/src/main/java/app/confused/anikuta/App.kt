@@ -96,6 +96,10 @@ class App : Application() {
                 app.confused.anikuta.core.tracker.di.trackerModule,
                 app.confused.anikuta.feature.my.di.myModule,
                 app.confused.anikuta.feature.trackers.di.trackersModule,
+                // ── Agent 1: Backup & Restore ──
+                app.confused.anikuta.core.backup.di.backupModule,
+                app.confused.anikuta.feature.backup.di.backupFeatureModule,
+                app.confused.anikuta.feature.backup.di.aniyomiRestoreModule,
             )
         }
 
