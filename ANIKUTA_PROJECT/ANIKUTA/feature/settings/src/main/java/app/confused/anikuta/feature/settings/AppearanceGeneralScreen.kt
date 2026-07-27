@@ -16,13 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -58,22 +57,13 @@ import org.koin.compose.koinInject
 /**
  * The Appearance → General screen.
  *
- * Per owner spec (Session 1 + feedback): the actual theme settings live here.
  * Layout (top to bottom):
  * 1. **Theme mode** (Light / Dark / System) — 3-way segmented toggle.
- * 2. **Palettes** — horizontal carousel (LazyRow) of skeleton-screen preview
- *    cards. Custom is first, with a unique highlight. Tapping Custom opens
- *    the [CustomColorSheet].
- * 3. **AMOLED** toggle — shown BELOW the palettes, only in dark mode.
- *    Smoothly expands/collapses with slide+fade when dark mode toggles.
- *
- * The Episode settings link is NOT here — it's on the Appearance list screen
- * (per owner feedback: "there was still the episode list showing inside the
- * General options too so that needs to be properly fixed").
- *
- * All changes apply live with a smooth cross-fade transition.
- *
- * @param onBack Pops this screen.
+ * 2. **Palettes** — horizontal carousel (LazyRow):
+ *    - Custom (first, unique highlight, click-to-select, click-again-to-edit).
+ *    - 10 accent-only presets.
+ *    - 5 full-palette presets (different bg/card/text).
+ * 3. **AMOLED** toggle — below palettes, only in dark mode (smooth expand/collapse).
  */
 @Composable
 fun AppearanceGeneralScreen(
@@ -81,7 +71,6 @@ fun AppearanceGeneralScreen(
 ) {
     val prefs = koinInject<ThemePreferences>()
 
-    // Observe preferences reactively — the app theme updates live.
     val themeMode by prefs.themeMode.changes()
         .collectAsStateWithLifecycle(initialValue = prefs.themeMode.get())
     val amoled by prefs.amoled.changes()
@@ -101,7 +90,6 @@ fun AppearanceGeneralScreen(
 
     var showCustomSheet by remember { mutableStateOf(false) }
 
-    // Resolve the effective dark mode (System follows the device setting).
     val isDark = when (themeMode) {
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
@@ -127,7 +115,7 @@ fun AppearanceGeneralScreen(
                 )
             }
 
-            // ── Palettes (horizontal carousel) ──
+            // ── Palettes carousel ──
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingsSectionLabel("Palettes")
@@ -142,20 +130,30 @@ fun AppearanceGeneralScreen(
                     customCard = Color(customCardArgb.toLong() and 0xFFFFFFFF),
                     customText = Color(customTextArgb.toLong() and 0xFFFFFFFF),
                     onSelectPreset = { preset ->
-                        // Selecting a preset switches back to SIMPLIFIED mode
-                        // so the custom bg/card/text no longer apply (per owner
-                        // feedback: custom palette should only apply if the user
-                        // has selected the custom option).
-                        if (paletteMode == PaletteMode.FULL) {
-                            prefs.paletteMode.set(PaletteMode.SIMPLIFIED)
+                        if (preset.isFullPalette) {
+                            // Full-palette preset: apply its bg/card/text + FULL mode.
+                            prefs.applyFullPalettePreset(preset)
+                        } else {
+                            // Accent-only preset: switch back to SIMPLIFIED mode.
+                            if (paletteMode == PaletteMode.FULL) {
+                                prefs.paletteMode.set(PaletteMode.SIMPLIFIED)
+                            }
+                            prefs.accentPreset.set(preset)
                         }
-                        prefs.accentPreset.set(preset)
                     },
-                    onOpenCustom = { showCustomSheet = true },
+                    onCustomClick = {
+                        // First click: select custom (apply saved colors).
+                        // Second click (already selected): open the sheet.
+                        if (accentPreset != AccentPreset.CUSTOM) {
+                            prefs.accentPreset.set(AccentPreset.CUSTOM)
+                        } else {
+                            showCustomSheet = true
+                        }
+                    },
                 )
             }
 
-            // ── AMOLED (below palettes, only in dark mode — smooth expand/collapse) ──
+            // ── AMOLED (below palettes, dark-only, smooth expand/collapse) ──
             item {
                 AnimatedVisibility(
                     visible = isDark,
@@ -176,13 +174,10 @@ fun AppearanceGeneralScreen(
     }
 
     // ── Custom color bottom sheet ──
+    // Always opens with the SAVED custom colors (not the current theme's).
     if (showCustomSheet) {
         CustomColorSheet(
-            initialAccent = if (accentPreset == AccentPreset.CUSTOM) {
-                Color(customColorArgb.toLong() and 0xFFFFFFFF)
-            } else {
-                Color(accentPreset.seedColorArgb.toLong() and 0xFFFFFFFF)
-            },
+            initialAccent = Color(customColorArgb.toLong() and 0xFFFFFFFF),
             initialBackground = Color(customBgArgb.toLong() and 0xFFFFFFFF),
             initialCard = Color(customCardArgb.toLong() and 0xFFFFFFFF),
             initialText = Color(customTextArgb.toLong() and 0xFFFFFFFF),
@@ -201,7 +196,7 @@ fun AppearanceGeneralScreen(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Theme mode card (Light / Dark / System — 3-way segmented toggle)
+//  Theme mode card
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -238,16 +233,19 @@ private fun PalettesCarousel(
     customCard: Color,
     customText: Color,
     onSelectPreset: (AccentPreset) -> Unit,
-    onOpenCustom: () -> Unit,
+    onCustomClick: () -> Unit,
 ) {
     val baseBg = if (isDark) BgDark else BgLight
     val baseCard = if (isDark) Surface1Dark else Surface1Light
     val baseText = if (isDark) TextDark else TextLight
 
-    // The custom preview shows the current custom colors (or the base if not FULL).
+    // The custom preview shows the saved custom colors (or base if SIMPLIFIED).
     val customPreviewBg = if (paletteMode == PaletteMode.FULL) customBg else baseBg
     val customPreviewCard = if (paletteMode == PaletteMode.FULL) customCard else baseCard
     val customPreviewText = if (paletteMode == PaletteMode.FULL) customText else baseText
+
+    // All presets EXCEPT CUSTOM (properly filtered — no index math).
+    val presets = AccentPreset.entries.filter { it != AccentPreset.CUSTOM }
 
     SettingsCard {
         LazyRow(
@@ -264,22 +262,22 @@ private fun PalettesCarousel(
                     textColor = customPreviewText,
                     isSelected = currentPreset == AccentPreset.CUSTOM,
                     isCustom = true,
-                    onClick = onOpenCustom,
+                    onClick = onCustomClick,
                 )
             }
 
-            // ── Presets ──
-            items(
-                count = AccentPreset.entries.size - 1, // exclude CUSTOM
-            ) { idx ->
+            // ── 15 presets (10 accent-only + 5 full-palette) ──
+            items(presets) { preset ->
                 Spacer(modifier = Modifier.width(12.dp))
-                val preset = AccentPreset.entries[idx + 1] // skip CUSTOM (index 5)
+                val presetBg = if (preset.isFullPalette) Color(preset.backgroundArgb!!.toLong() and 0xFFFFFFFF) else baseBg
+                val presetCard = if (preset.isFullPalette) Color(preset.cardArgb!!.toLong() and 0xFFFFFFFF) else baseCard
+                val presetText = if (preset.isFullPalette) Color(preset.textArgb!!.toLong() and 0xFFFFFFFF) else baseText
                 PalettePreviewCard(
                     label = preset.displayName,
-                    backgroundColor = baseBg,
-                    cardColor = baseCard,
+                    backgroundColor = presetBg,
+                    cardColor = presetCard,
                     accentColor = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF),
-                    textColor = baseText,
+                    textColor = presetText,
                     isSelected = currentPreset == preset,
                     isCustom = false,
                     onClick = { onSelectPreset(preset) },
@@ -290,7 +288,7 @@ private fun PalettesCarousel(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  AMOLED card (switch — only shown in dark mode, below palettes)
+//  AMOLED card
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -329,7 +327,7 @@ private fun AmoledCard(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Shared UI helpers (match the design language)
+//  Shared UI helpers
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -357,7 +355,6 @@ private fun SettingsSectionLabel(text: String) {
     )
 }
 
-/** A simple segmented toggle (3-way). Matches the episode-settings SegmentedRow design. */
 @Composable
 private fun SegmentedToggle(
     options: List<String>,

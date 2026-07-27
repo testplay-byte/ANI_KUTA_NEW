@@ -115,7 +115,7 @@ private fun AppearanceNavRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                color = MaterialTheme.colorScheme.primaryContainer,
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.size(36.dp),
             ) {
@@ -123,7 +123,7 @@ private fun AppearanceNavRow(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(20.dp),
                     )
                 }

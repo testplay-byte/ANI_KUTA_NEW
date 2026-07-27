@@ -40,32 +40,16 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 /**
  * A mini "skeleton screen" preview of the anime details page for a palette.
  *
- * Per owner spec (Session 1 item 9.4 + feedback): the palette selection shows
- * mini screens (mock UI) — a detailed miniature of the anime details page using
- * the palette's colors:
- * - Background = the palette's background color.
- * - Banner / hero area = the card surface color (with a gradient hint).
- * - Cover thumbnail = a small rectangle in the accent color.
- * - Title line = a text-colored bar.
- * - Subtitle line = a muted text-colored bar (thinner).
- * - Action button = a small pill in the accent color.
- * - Secondary button = a small outlined card.
- * - Episode row mock = a thumbnail + two text bars (title + meta), showing how
- *   episode rows look in this palette.
+ * Designed to closely mimic the actual anime details page layout:
+ * - **Banner** (hero area, ~35% of height) — card surface color.
+ * - **Cover thumbnail** (accent) — overlaps the banner bottom-left.
+ * - **Title + subtitle** — text-colored bars.
+ * - **Action buttons** — accent pill + outlined card.
+ * - **Episode rows** — thumbnail + title + meta (2 rows, second is lighter).
  *
- * Tapping the card calls [onClick]. When [isSelected], a border + checkmark
- * appear. When [isCustom], a unique dashed border + edit icon distinguish it
- * from presets (per owner feedback: "the custom one should have a different
- * color of unique highlighting to it").
- *
- * @param label The palette name (shown below the preview).
- * @param backgroundColor The palette's background color.
- * @param cardColor The palette's card/surface color.
- * @param accentColor The palette's accent (primary) color.
- * @param textColor The palette's text color.
- * @param isSelected Whether this palette is currently selected.
- * @param isCustom Whether this is the Custom palette (unique highlight).
- * @param onClick Called when the card is tapped.
+ * Tapping the card calls [onClick]. When [isSelected], a border + indicator
+ * appear. When [isCustom], the indicator is an edit icon (unique); presets
+ * use a checkmark.
  */
 @Composable
 fun PalettePreviewCard(
@@ -79,8 +63,6 @@ fun PalettePreviewCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Custom gets a unique highlight color (accent-tinted), presets get the
-    // standard primary/outline border.
     val borderColor by animateColorAsState(
         targetValue = when {
             isSelected && isCustom -> accentColor
@@ -100,54 +82,50 @@ fun PalettePreviewCard(
             color = backgroundColor,
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier
-                .size(width = 96.dp, height = 148.dp)
+                .size(width = 100.dp, height = 168.dp)
                 .border(borderWidth.dp, borderColor, RoundedCornerShape(14.dp))
                 .clickable(onClick = onClick),
         ) {
-            // Wrap content in a Box so the checkmark can align to TopEnd.
             Box(modifier = Modifier.fillMaxSize()) {
-                // ── Mini details-page skeleton (detailed) ──
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(5.dp),
                 ) {
-                    // ── Banner / hero area (card surface) ──
+                    // ── Banner / hero area (card surface, taller) ──
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(36.dp)
+                            .height(44.dp)
                             .clip(RoundedCornerShape(5.dp))
                             .background(cardColor),
                     ) {
-                        // Cover thumbnail (accent color) — overlaps the banner.
-                        // Uses offset() (NOT padding) for the overlap because
-                        // padding() does not accept negative values.
+                        // Cover thumbnail (accent) — overlaps banner bottom
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
-                                .offset(x = 4.dp, y = 8.dp)
-                                .size(width = 22.dp, height = 28.dp)
+                                .offset(x = 4.dp, y = 10.dp)
+                                .size(width = 22.dp, height = 30.dp)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(accentColor),
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // ── Title line (text color) ──
+                    // ── Title line ──
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.85f)
+                            .fillMaxWidth(0.8f)
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .background(textColor),
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    // ── Subtitle line (muted text — 50% opacity) ──
+                    // ── Subtitle line ──
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(0.55f)
+                            .fillMaxWidth(0.5f)
                             .height(3.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .background(textColor.copy(alpha = 0.5f)),
@@ -155,9 +133,8 @@ fun PalettePreviewCard(
 
                     Spacer(modifier = Modifier.height(5.dp))
 
-                    // ── Action buttons row ──
+                    // ── Action buttons ──
                     Row {
-                        // Primary action (accent pill)
                         Box(
                             modifier = Modifier
                                 .width(24.dp)
@@ -166,7 +143,6 @@ fun PalettePreviewCard(
                                 .background(accentColor),
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        // Secondary action (outlined card)
                         Box(
                             modifier = Modifier
                                 .width(16.dp)
@@ -179,23 +155,19 @@ fun PalettePreviewCard(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // ── Episode row mock (thumbnail + title + meta) ──
-                    // Per owner feedback: "There should be a mini view of the
-                    // episode inside it too."
+                    // ── Episode row 1 (full opacity) ──
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Episode thumbnail (card color with accent corner)
                         Box(
                             modifier = Modifier
-                                .size(width = 20.dp, height = 12.dp)
+                                .size(width = 22.dp, height = 13.dp)
                                 .clip(RoundedCornerShape(2.dp))
                                 .background(cardColor),
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            // Episode title line
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(0.9f)
@@ -204,7 +176,6 @@ fun PalettePreviewCard(
                                     .background(textColor.copy(alpha = 0.8f)),
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            // Episode meta line (muted)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(0.6f)
@@ -217,25 +188,25 @@ fun PalettePreviewCard(
 
                     Spacer(modifier = Modifier.height(3.dp))
 
-                    // ── Second episode row mock (lighter) ──
+                    // ── Episode row 2 (lighter — watched) ──
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(width = 20.dp, height = 12.dp)
+                                .size(width = 22.dp, height = 13.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(cardColor.copy(alpha = 0.7f)),
+                                .background(cardColor.copy(alpha = 0.6f)),
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.75f)
+                                    .fillMaxWidth(0.7f)
                                     .height(3.dp)
                                     .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.5f)),
+                                    .background(textColor.copy(alpha = 0.4f)),
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Box(
@@ -250,7 +221,6 @@ fun PalettePreviewCard(
                 }
 
                 // ── Selected indicator (top-end) ──
-                // Custom shows an edit icon (unique), presets show a checkmark.
                 if (isSelected) {
                     Box(
                         modifier = Modifier
@@ -264,7 +234,7 @@ fun PalettePreviewCard(
                         Icon(
                             imageVector = if (isCustom) Icons.Filled.Create else Icons.Filled.Check,
                             contentDescription = null,
-                            tint = if (accentColor.luminance() > 0.5f) Color.Black else Color.White,
+                            tint = if ((if (isCustom) accentColor else MaterialTheme.colorScheme.primary).luminance() > 0.5f) Color.Black else Color.White,
                             modifier = Modifier.size(10.dp),
                         )
                     }
