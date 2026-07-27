@@ -155,8 +155,6 @@ fun PalettePreviewCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(2.dp))
-
                     // ── Info section (label + synopsis + episode label with accent pill) ──
                     Column(modifier = Modifier.fillMaxWidth()) {
                         // Short white label (general info)
@@ -198,6 +196,7 @@ fun PalettePreviewCard(
                                     .clip(RoundedCornerShape(1.dp))
                                     .background(textColor),
                             )
+                            Spacer(modifier = Modifier.weight(1f))
                             // Accent-colored extension button pill
                             Box(
                                 modifier = Modifier

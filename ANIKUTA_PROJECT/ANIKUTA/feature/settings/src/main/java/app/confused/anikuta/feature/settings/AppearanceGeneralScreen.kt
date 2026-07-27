@@ -255,8 +255,8 @@ private fun PalettesCarousel(
     SettingsCard {
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // ── 15 presets FIRST (10 accent-only + 5 full-palette) ──
             items(presets) { preset ->
