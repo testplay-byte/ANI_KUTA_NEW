@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,11 +106,14 @@ fun PalettePreviewCard(
                             .clip(RoundedCornerShape(6.dp))
                             .background(cardColor),
                     ) {
-                        // Cover thumbnail (accent color) — overlaps the banner
+                        // Cover thumbnail (accent color) — overlaps the banner.
+                        // Uses offset() (NOT padding) for the overlap because
+                        // padding() does not accept negative values (throws
+                        // IllegalArgumentException: Padding must be non-negative).
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
-                                .padding(start = 4.dp, bottom = (-8).dp)
+                                .offset(x = 4.dp, y = 8.dp)
                                 .size(width = 24.dp, height = 32.dp)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(accentColor),
