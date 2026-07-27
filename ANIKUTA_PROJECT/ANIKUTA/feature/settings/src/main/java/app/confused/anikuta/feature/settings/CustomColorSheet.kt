@@ -37,8 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -51,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -64,15 +61,8 @@ import app.confused.anikuta.core.preferences.PaletteMode
 /**
  * A bottom sheet for creating/editing a custom color palette.
  *
- * Per owner spec + DESIGN_LANGUAGE §3: capped at 70% of the viewport height
- * (content scrolls within). `dragHandle = null` per design language.
- *
- * Layout (scrollable, max 70% height):
- * 1. Header — "Custom palette" title (compact, no excess top spacing).
- * 2. Accent color picker — preview swatch + hex input + styled RGB sliders.
- * 3. Advanced toggle — tap to expand/collapse.
- * 4. Advanced section — background, card, text color pickers.
- * 5. Action buttons — Cancel (outlined) + OK (filled, accent).
+ * Per owner spec + DESIGN_LANGUAGE §3: capped at 70% of the viewport height.
+ * `dragHandle = null` per design language.
  */
 @Composable
 fun CustomColorSheet(
@@ -111,7 +101,6 @@ fun CustomColorSheet(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 20.dp, vertical = 12.dp),
         ) {
-            // ── Header (compact — no excess top spacing) ──
             Text(
                 text = "Custom palette",
                 fontFamily = RobotoFamily,
@@ -122,16 +111,10 @@ fun CustomColorSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Accent color picker ──
-            ColorPickerSection(
-                label = "Accent color",
-                color = accent,
-                onColorChange = { accent = it },
-            )
+            ColorPickerSection("Accent color", accent, { accent = it })
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ── Advanced toggle ──
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(12.dp),
@@ -162,7 +145,6 @@ fun CustomColorSheet(
                 }
             }
 
-            // ── Advanced section (collapsible) ──
             AnimatedVisibility(
                 visible = showAdvanced,
                 enter = fadeIn() + expandVertically(),
@@ -179,7 +161,6 @@ fun CustomColorSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // ── Action buttons ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -211,8 +192,7 @@ fun CustomColorSheet(
 }
 
 /**
- * A labeled color picker section: preview swatch + hex input + styled RGB sliders.
- * Compact — no excess spacing.
+ * A labeled color picker section: preview swatch + hex input + gradient sliders.
  */
 @Composable
 private fun ColorPickerSection(
@@ -226,7 +206,6 @@ private fun ColorPickerSection(
     var parseError by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Label + swatch + hex in a single row (compact)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -239,7 +218,6 @@ private fun ColorPickerSection(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            // Preview swatch
             Box(
                 modifier = Modifier
                     .size(28.dp)
@@ -273,24 +251,36 @@ private fun ColorPickerSection(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // RGB sliders — styled with channel-colored tracks
-        ColorSlider("R", (color.red * 255).toInt(), Color(0xFFFF5252)) { r ->
-            onColorChange(Color(red = r / 255f, green = color.green, blue = color.blue, alpha = 1f))
-        }
-        ColorSlider("G", (color.green * 255).toInt(), Color(0xFF69F0AE)) { g ->
-            onColorChange(Color(red = color.red, green = g / 255f, blue = color.blue, alpha = 1f))
-        }
-        ColorSlider("B", (color.blue * 255).toInt(), Color(0xFF448AFF)) { b ->
-            onColorChange(Color(red = color.red, green = color.green, blue = b / 255f, alpha = 1f))
-        }
+        // RGB sliders — channel-colored thumb + track
+        StyledColorSlider(
+            label = "R",
+            value = (color.red * 255).toInt(),
+            sliderColor = Color(0xFFFF5252),
+            onValueChange = { r -> onColorChange(color.copy(red = r / 255f)) },
+        )
+        StyledColorSlider(
+            label = "G",
+            value = (color.green * 255).toInt(),
+            sliderColor = Color(0xFF69F0AE),
+            onValueChange = { g -> onColorChange(color.copy(green = g / 255f)) },
+        )
+        StyledColorSlider(
+            label = "B",
+            value = (color.blue * 255).toInt(),
+            sliderColor = Color(0xFF448AFF),
+            onValueChange = { b -> onColorChange(color.copy(blue = b / 255f)) },
+        )
     }
 }
 
+/**
+ * A well-styled RGB slider: channel-colored thumb + track, clean layout.
+ */
 @Composable
-private fun ColorSlider(
+private fun StyledColorSlider(
     label: String,
     value: Int,
-    trackColor: Color,
+    sliderColor: Color,
     onValueChange: (Int) -> Unit,
 ) {
     Row(
@@ -302,18 +292,18 @@ private fun ColorSlider(
             fontFamily = RobotoFamily,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = trackColor,
+            color = sliderColor,
             modifier = Modifier.width(14.dp),
         )
-        Slider(
+        androidx.compose.material3.Slider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.toInt()) },
             valueRange = 0f..255f,
             modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(
-                thumbColor = trackColor,
-                activeTrackColor = trackColor,
-                inactiveTrackColor = trackColor.copy(alpha = 0.2f),
+            colors = androidx.compose.material3.SliderDefaults.colors(
+                thumbColor = sliderColor,
+                activeTrackColor = sliderColor,
+                inactiveTrackColor = sliderColor.copy(alpha = 0.2f),
             ),
         )
         Text(

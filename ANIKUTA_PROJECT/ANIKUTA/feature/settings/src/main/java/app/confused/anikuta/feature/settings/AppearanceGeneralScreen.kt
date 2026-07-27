@@ -142,10 +142,10 @@ fun AppearanceGeneralScreen(
                         }
                     },
                     onCustomClick = {
-                        // First click: select custom (apply saved colors).
+                        // First click: select custom (restore saved custom mode).
                         // Second click (already selected): open the sheet.
                         if (accentPreset != AccentPreset.CUSTOM) {
-                            prefs.accentPreset.set(AccentPreset.CUSTOM)
+                            prefs.selectCustom()
                         } else {
                             showCustomSheet = true
                         }
@@ -188,6 +188,9 @@ fun AppearanceGeneralScreen(
                 prefs.customCardColor.set(card.toArgb())
                 prefs.customTextColor.set(text.toArgb())
                 prefs.paletteMode.set(mode)
+                // Save the mode for custom palette persistence — so switching
+                // away from Custom and back restores the advanced settings.
+                prefs.customPaletteMode.set(mode)
                 showCustomSheet = false
             },
             onDismiss = { showCustomSheet = false },
@@ -252,23 +255,8 @@ private fun PalettesCarousel(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
         ) {
-            // ── Custom (first, unique highlight) ──
-            item {
-                PalettePreviewCard(
-                    label = "Custom",
-                    backgroundColor = customPreviewBg,
-                    cardColor = customPreviewCard,
-                    accentColor = customColor,
-                    textColor = customPreviewText,
-                    isSelected = currentPreset == AccentPreset.CUSTOM,
-                    isCustom = true,
-                    onClick = onCustomClick,
-                )
-            }
-
-            // ── 15 presets (10 accent-only + 5 full-palette) ──
+            // ── 15 presets FIRST (10 accent-only + 5 full-palette) ──
             items(presets) { preset ->
-                Spacer(modifier = Modifier.width(12.dp))
                 val presetBg = if (preset.isFullPalette) Color(preset.backgroundArgb!!.toLong() and 0xFFFFFFFF) else baseBg
                 val presetCard = if (preset.isFullPalette) Color(preset.cardArgb!!.toLong() and 0xFFFFFFFF) else baseCard
                 val presetText = if (preset.isFullPalette) Color(preset.textArgb!!.toLong() and 0xFFFFFFFF) else baseText
@@ -281,6 +269,21 @@ private fun PalettesCarousel(
                     isSelected = currentPreset == preset,
                     isCustom = false,
                     onClick = { onSelectPreset(preset) },
+                )
+            }
+
+            // ── Custom LAST (rightmost, unique highlight) ──
+            item {
+                Spacer(modifier = Modifier.width(12.dp))
+                PalettePreviewCard(
+                    label = "Custom",
+                    backgroundColor = customPreviewBg,
+                    cardColor = customPreviewCard,
+                    accentColor = customColor,
+                    textColor = customPreviewText,
+                    isSelected = currentPreset == AccentPreset.CUSTOM,
+                    isCustom = true,
+                    onClick = onCustomClick,
                 )
             }
         }

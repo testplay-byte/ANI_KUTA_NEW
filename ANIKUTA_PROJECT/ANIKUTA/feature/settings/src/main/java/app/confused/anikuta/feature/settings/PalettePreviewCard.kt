@@ -40,16 +40,14 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 /**
  * A mini "skeleton screen" preview of the anime details page for a palette.
  *
- * Designed to closely mimic the actual anime details page layout:
- * - **Banner** (hero area, ~35% of height) — card surface color.
- * - **Cover thumbnail** (accent) — overlaps the banner bottom-left.
- * - **Title + subtitle** — text-colored bars.
- * - **Action buttons** — accent pill + outlined card.
- * - **Episode rows** — thumbnail + title + meta (2 rows, second is lighter).
- *
- * Tapping the card calls [onClick]. When [isSelected], a border + indicator
- * appear. When [isCustom], the indicator is an edit icon (unique); presets
- * use a checkmark.
+ * Closely mimics the actual anime details page layout:
+ * - **Banner** (hero, ~30% height) — card surface color.
+ * - **Cover thumbnail** (accent) — fully visible, overlapping the banner.
+ * - **Title + subtitle** — text bars next to the cover.
+ * - **Accent pills** — right below the cover/title (NOT below synopsis).
+ * - **Action buttons** — gray (muted) pills, like the real buttons.
+ * - **Episode list** — 5 rows, each with a bg + thumbnail + title + meta.
+ *   Alternating opacity to show watched/unwatched states.
  */
 @Composable
 fun PalettePreviewCard(
@@ -82,7 +80,7 @@ fun PalettePreviewCard(
             color = backgroundColor,
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier
-                .size(width = 100.dp, height = 168.dp)
+                .size(width = 100.dp, height = 190.dp)
                 .border(borderWidth.dp, borderColor, RoundedCornerShape(14.dp))
                 .clickable(onClick = onClick),
         ) {
@@ -90,151 +88,155 @@ fun PalettePreviewCard(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(5.dp),
+                        .padding(4.dp),
                 ) {
-                    // ── Banner / hero area (card surface, taller) ──
+                    // ── Banner / hero area ──
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(5.dp))
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(4.dp))
                             .background(cardColor),
+                    )
+
+                    // ── Cover + title row (cover overlaps the banner) ──
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(y = (-12).dp),
+                        verticalAlignment = Alignment.Bottom,
                     ) {
-                        // Cover thumbnail (accent) — overlaps banner bottom
+                        // Cover thumbnail (accent) — fully visible
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .offset(x = 4.dp, y = 10.dp)
-                                .size(width = 22.dp, height = 30.dp)
+                                .size(width = 24.dp, height = 32.dp)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(accentColor),
                         )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // ── Title line ──
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.8f)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(textColor),
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    // ── Subtitle line ──
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(textColor.copy(alpha = 0.5f)),
-                    )
-
-                    Spacer(modifier = Modifier.height(5.dp))
-
-                    // ── Action buttons ──
-                    Row {
-                        Box(
-                            modifier = Modifier
-                                .width(24.dp)
-                                .height(9.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(accentColor),
-                        )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(16.dp)
-                                .height(9.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(cardColor)
-                                .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(4.dp)),
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // ── Episode row 1 (full opacity) ──
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 22.dp, height = 13.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(cardColor),
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
                         Column(modifier = Modifier.weight(1f)) {
+                            // Title line
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.8f)),
+                                    .fillMaxWidth(0.85f)
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(textColor),
                             )
                             Spacer(modifier = Modifier.height(2.dp))
+                            // Subtitle line
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.6f)
-                                    .height(2.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.4f)),
+                                    .fillMaxWidth(0.55f)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(textColor.copy(alpha = 0.5f)),
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(3.dp))
 
-                    // ── Episode row 2 (lighter — watched) ──
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    // ── Accent pills (right below cover/title) ──
+                    Row {
                         Box(
                             modifier = Modifier
-                                .size(width = 22.dp, height = 13.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(cardColor.copy(alpha = 0.6f)),
+                                .width(18.dp)
+                                .height(7.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(accentColor.copy(alpha = 0.3f)),
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(14.dp)
+                                .height(7.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(accentColor.copy(alpha = 0.3f)),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // ── Action buttons (gray/muted, like real buttons) ──
+                    Row {
+                        Box(
+                            modifier = Modifier
+                                .width(22.dp)
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(textColor.copy(alpha = 0.2f)),
                         )
                         Spacer(modifier = Modifier.width(3.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .width(14.dp)
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(textColor.copy(alpha = 0.1f))
+                                .border(0.5.dp, textColor.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // ── Episode list (5 rows with background) ──
+                    repeat(5) { idx ->
+                        val alpha = if (idx == 0) 0.8f else if (idx <= 2) 0.6f else 0.4f
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 1.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(cardColor.copy(alpha = 0.3f))
+                                .padding(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Episode thumbnail
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.7f)
-                                    .height(3.dp)
+                                    .size(width = 18.dp, height = 10.dp)
                                     .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.4f)),
+                                    .background(cardColor),
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.45f)
-                                    .height(2.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.3f)),
-                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.85f)
+                                        .height(2.dp)
+                                        .clip(RoundedCornerShape(1.dp))
+                                        .background(textColor.copy(alpha = alpha)),
+                                )
+                                Spacer(modifier = Modifier.height(1.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.5f)
+                                        .height(1.5.dp)
+                                        .clip(RoundedCornerShape(1.dp))
+                                        .background(textColor.copy(alpha = alpha * 0.5f)),
+                                )
+                            }
                         }
                     }
                 }
 
                 // ── Selected indicator (top-end) ──
                 if (isSelected) {
+                    val indicatorColor = if (isCustom) accentColor else MaterialTheme.colorScheme.primary
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(3.dp)
                             .size(16.dp)
                             .clip(CircleShape)
-                            .background(if (isCustom) accentColor else MaterialTheme.colorScheme.primary),
+                            .background(indicatorColor),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = if (isCustom) Icons.Filled.Create else Icons.Filled.Check,
                             contentDescription = null,
-                            tint = if ((if (isCustom) accentColor else MaterialTheme.colorScheme.primary).luminance() > 0.5f) Color.Black else Color.White,
+                            tint = if (indicatorColor.luminance() > 0.5f) Color.Black else Color.White,
                             modifier = Modifier.size(10.dp),
                         )
                     }
