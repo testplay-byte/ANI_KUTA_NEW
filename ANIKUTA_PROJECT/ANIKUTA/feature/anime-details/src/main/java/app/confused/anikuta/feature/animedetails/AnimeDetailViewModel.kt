@@ -508,23 +508,28 @@ class AnimeDetailViewModel(
         }
     }
 
-    /** Observes the library save state (favorite flag) for this anime. */
+    /**
+     * Observes the library save state (favorite flag) for this anime.
+     *
+     * - Linked anime (anilistId != null): reactive via `observeByAnilistId`.
+     * - Unlinked extension anime: polled after each load via `getBySourceAndUrl`
+     *   (no reactive Flow for sourceId+url keying today — acceptable; the flag
+     *   refreshes on load/switch).
+     */
     private fun observeLibraryState() {
-        viewModelScope.launch {
-            val unified = (_animeState.value as? DetailState.Success)?.anime
-            // Wait for the first Success state if not loaded yet.
-            if (unified == null) {
-                // Collect until we get a Success, then observe.
-                animeRepository.observeAll().collect { _ -> /* placeholder */ }
-                return@launch
-            }
-        }
-        // Simpler: poll the favorite state after load. Observe by anilistId or sourceId.
         viewModelScope.launch {
             val anilistId = currentAnilistId()
             if (anilistId != null) {
                 animeRepository.observeByAnilistId(anilistId).collect { anime ->
                     _isSaved.value = anime?.favorite == true
+                }
+            } else {
+                // Unlinked extension anime — refresh the saved flag after each load.
+                animeState.collect { state ->
+                    if (state is DetailState.Success) {
+                        val existing = findLibraryAnime(state.anime)
+                        _isSaved.value = existing?.favorite == true
+                    }
                 }
             }
         }
