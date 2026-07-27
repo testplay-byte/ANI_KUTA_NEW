@@ -134,13 +134,18 @@ fun AnimeDetailScreen(
     val availableSources = remember { vm.getAvailableSources() }
 
     // ── Generate dynamic scheme from cover color when available ──
-    val coverColorArgb = remember(animeState) {
-        if (animeState is DetailState.Success) {
-            val hex = (animeState as DetailState.Success).anime.coverColorHex
-            hex?.let {
-                runCatching { AndroidColor.parseColor(it) }.getOrNull() ?: 0
-            } ?: 0
-        } else 0
+    val coverColorArgb: Int = remember(animeState) {
+        val state = animeState
+        if (state is DetailState.Success) {
+            val hex = state.anime.coverColorHex
+            if (hex != null) {
+                runCatching { AndroidColor.parseColor(hex) }.getOrDefault(0)
+            } else {
+                0
+            }
+        } else {
+            0
+        }
     }
     val isDark = when (themeMode) {
         app.confused.anikuta.core.preferences.ThemeMode.LIGHT -> false

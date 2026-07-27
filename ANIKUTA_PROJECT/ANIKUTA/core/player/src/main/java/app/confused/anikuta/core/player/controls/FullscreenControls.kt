@@ -7,6 +7,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -349,12 +350,11 @@ private fun FullscreenSeekbarCustom(
     val trackColor = Color.White.copy(alpha = 0.25f)
     val bufferColor = Color.White.copy(alpha = 0.15f)
     val progressColor = MaterialTheme.colorScheme.primary
-    val thumbColor = MaterialTheme.colorScheme.primary
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(24.dp) // Touch target height — the bar itself is thinner
+            .height(24.dp)
             .pointerInput(maxRange) {
                 detectTapGestures(
                     onTap = { offset ->
@@ -364,7 +364,18 @@ private fun FullscreenSeekbarCustom(
                 )
             }
             .pointerInput(maxRange) {
-                detectTapGestures(
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        scrubPosition = fraction * maxRange
+                    },
+                    onDragEnd = {
+                        scrubPosition?.let { onSeekTo(it.toInt()) }
+                        scrubPosition = null
+                    },
+                    onDragCancel = {
+                        scrubPosition = null
+                    },
                     onDrag = { change, _ ->
                         val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
                         scrubPosition = fraction * maxRange
@@ -373,7 +384,6 @@ private fun FullscreenSeekbarCustom(
             },
         contentAlignment = Alignment.CenterStart,
     ) {
-        // Draw the bar using drawBehind
         androidx.compose.foundation.Canvas(
             modifier = Modifier.fillMaxWidth().height(24.dp),
         ) {
@@ -390,7 +400,7 @@ private fun FullscreenSeekbarCustom(
                 cornerRadius = cornerRadius,
             )
 
-            // Buffer indicator (behind progress)
+            // Buffer indicator
             if (bufferProgress > 0f) {
                 drawRoundRect(
                     color = bufferColor,
@@ -400,7 +410,7 @@ private fun FullscreenSeekbarCustom(
                 )
             }
 
-            // Progress (played portion)
+            // Progress
             drawRoundRect(
                 color = progressColor,
                 topLeft = Offset(0f, barY),
@@ -408,25 +418,17 @@ private fun FullscreenSeekbarCustom(
                 cornerRadius = cornerRadius,
             )
 
-            // Square thumb (on top of the bar, centered vertically)
+            // Square thumb
             val thumbSize = 14.dp.toPx()
-            val thumbX = barWidth * progress - thumbSize / 2f
+            val thumbX = (barWidth * progress - thumbSize / 2f).coerceAtLeast(0f)
             val thumbY = (size.height - thumbSize) / 2f
             drawRoundRect(
-                color = thumbColor,
-                topLeft = Offset(thumbX.coerceAtLeast(0f), thumbY),
+                color = progressColor,
+                topLeft = Offset(thumbX, thumbY),
                 size = Size(thumbSize, thumbSize),
                 cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx()),
             )
         }
-    }
-
-    // Handle scrub release
-    if (scrubPosition != null) {
-        // Use a LaunchedEffect-like pattern via DisposableEffect to commit on release
-        // Actually, we commit when the drag ends. The onDrag callback doesn't have an end.
-        // Let's use a simpler approach: commit when scrubPosition changes via a key.
-        // TODO(owner): This needs proper drag-end handling. For now, commit on tap.
     }
 }
 
@@ -554,11 +556,4 @@ private fun FSInfoPill(text: String) {
     }
 }
 
-/** Format a duration in seconds as `h:mm:ss` or `m:ss`. */
-private fun formatTime(seconds: Int): String {
-    if (seconds <= 0) return "0:00"
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
-}
+/** Format a duration in seconds as `h:mm:ss` or `m:ss`. Uses the shared formatTime. */
