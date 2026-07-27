@@ -281,7 +281,7 @@ private fun PalettesCarousel(
                 Box(
                     modifier = Modifier
                         .height(155.dp),
-                    contentAlignment = Alignment.CenterVertically,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Box(
                         modifier = Modifier
