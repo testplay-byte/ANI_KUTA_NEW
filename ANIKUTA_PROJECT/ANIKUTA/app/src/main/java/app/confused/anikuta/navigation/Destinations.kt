@@ -374,7 +374,21 @@ object SettingsDestination : Screen {
         SettingsScreen(
             onOpenExtensions = { navigator.push(ExtensionsDestination) },
             onOpenAppearance = { navigator.push(AppearanceDestination) },
+            onOpenPlayer = { navigator.push(PlayerSettingsDestination) },
             onOpenBackup = { navigator.push(BackupDestination) },
+            onBack = { navigator.pop() },
+        )
+    }
+}
+
+/**
+ * The Player settings page — auto-play toggle + future player preferences.
+ */
+object PlayerSettingsDestination : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        app.confused.anikuta.feature.settings.PlayerGeneralScreen(
             onBack = { navigator.pop() },
         )
     }

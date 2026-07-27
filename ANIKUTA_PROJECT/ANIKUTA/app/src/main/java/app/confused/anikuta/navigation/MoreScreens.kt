@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -108,6 +109,7 @@ fun MoreScreen(
 fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenPlayer: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -134,6 +136,14 @@ fun SettingsScreen(
                     title = "Appearance",
                     subtitle = "Theme mode, accent colors, episode display",
                     onClick = onOpenAppearance,
+                )
+            }
+            item {
+                MoreRow(
+                    icon = Icons.Filled.PlayCircle,
+                    title = "Player",
+                    subtitle = "Auto-play, playback preferences",
+                    onClick = onOpenPlayer,
                 )
             }
             // Backup & Restore

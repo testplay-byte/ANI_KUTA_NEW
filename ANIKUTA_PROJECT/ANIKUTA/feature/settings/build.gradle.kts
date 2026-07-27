@@ -11,6 +11,7 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.core.preferences)
+    implementation(projects.core.player)
 
     // Koin
     implementation(libs.koin.androidx.compose)
@@ -18,4 +19,5 @@ dependencies {
     // Lifecycle
     implementation(androidx.lifecycle.runtimektx)
     implementation(androidx.lifecycle.viewmodel.compose)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 }
