@@ -933,10 +933,10 @@ private fun WatchScreenContent(
             }
         }
 
-        // Animate the header height smoothly (not AnimatedVisibility — that
-        // causes layout jumps). Height animates from full to 0.
+        // Animate the header height smoothly — 72dp accommodates the floating
+        // pill bar with its status bar padding + margins.
         val headerHeight by animateDpAsState(
-            targetValue = if (isCollapsed) 0.dp else 56.dp,
+            targetValue = if (isCollapsed) 0.dp else 72.dp,
             animationSpec = tween(300, easing = FastOutSlowInEasing),
             label = "headerHeight",
         )
@@ -946,10 +946,7 @@ private fun WatchScreenContent(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Collapsible top navigation bar.
-            // Uses height animation — the bar stays in the layout but shrinks
-            // to 0dp, so the player slides up smoothly without jumping.
-            // Alpha fades proportionally to the height.
+            // Collapsible top navigation bar — height animates from 72dp to 0dp.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -965,11 +962,11 @@ private fun WatchScreenContent(
             }
 
             // Player area — 16:9, rounded corners, horizontal padding.
-            // Always present, NEVER disposed.
+            // Always present, NEVER disposed. No extra top padding (header
+            // handles the spacing).
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
                     .padding(horizontal = 6.dp),
             ) {
                 Box(

@@ -210,9 +210,10 @@ fun QualitySheet(
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    // Audio version tags — current version is highlighted
+                                    // Audio version tags — ONLY highlighted on the current server
                                     server.audioVersions.forEach { audio ->
-                                        val isCurrentAudio = currentAudioVersion.isNotEmpty() &&
+                                        // Only highlight if this is the current server AND the audio matches
+                                        val isCurrentAudio = isCurrentServer && currentAudioVersion.isNotEmpty() &&
                                             audio.label.equals(currentAudioVersion, ignoreCase = true)
                                         Surface(
                                             color = if (isCurrentAudio) MaterialTheme.colorScheme.primary

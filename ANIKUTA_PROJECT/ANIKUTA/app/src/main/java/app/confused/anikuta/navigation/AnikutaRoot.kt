@@ -138,21 +138,39 @@ private fun AppOverlays(appController: AppController) {
     }
 
     // ── 1. Video resolver overlay ──
+    // Wrapped in a dynamic MaterialTheme when cover color is available, so the
+    // resolver sheet picks up the anime's themed colors (per owner feedback).
     val resolverState = appController.resolverState
     if (resolverState !is VideoResolverState.Hidden) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
-                .clickable { appController.hideResolver() },
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            VideoResolverSheet(
-                state = resolverState,
-                onDismiss = { appController.hideResolver() },
-                onVideoSelected = { video -> appController.onVideoSelected(video) },
-                onRetry = { appController.retryResolve() },
+        // Generate dynamic scheme from cover color for the resolver overlay
+        val coverColorArgb = appController.resolveTarget?.watchCtx?.coverColorArgb ?: 0
+        val resolverScheme = if (coverColorArgb != 0) {
+            app.confused.anikuta.core.designsystem.theme.generateDynamicScheme(
+                coverColorArgb, darkTheme = true, amoled = false,
             )
+        } else null
+
+        val resolverContent: @Composable () -> Unit = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.5f))
+                    .clickable { appController.hideResolver() },
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                VideoResolverSheet(
+                    state = resolverState,
+                    onDismiss = { appController.hideResolver() },
+                    onVideoSelected = { video -> appController.onVideoSelected(video) },
+                    onRetry = { appController.retryResolve() },
+                )
+            }
+        }
+
+        if (resolverScheme != null) {
+            MaterialTheme(colorScheme = resolverScheme, content = resolverContent)
+        } else {
+            resolverContent()
         }
     }
 

@@ -58,16 +58,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.player.PlayerLoadingState
 import app.confused.anikuta.core.player.PlayerPreferences
 import app.confused.anikuta.core.player.PlayerStateHolder
 
-private val ANIM_DURATION = 300
+// Slower animations per owner feedback — 450ms instead of 300ms
+private val ANIM_DURATION = 450
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -106,7 +107,6 @@ fun FullscreenControls(
 
     var isSeeking by remember { mutableStateOf(false) }
 
-    // When seeking, keep controls visible (reset the auto-hide timer)
     if (isSeeking) {
         stateHolder.setControlsVisible(true)
     }
@@ -129,7 +129,7 @@ fun FullscreenControls(
                 onClick = onLockToggle,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(8.dp),
+                    .padding(start = 16.dp, top = 4.dp),
             )
         } else {
             Box(
@@ -145,7 +145,6 @@ fun FullscreenControls(
                     ),
             )
 
-            // Tap-to-toggle — disabled while seeking
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -165,7 +164,7 @@ fun FullscreenControls(
                     },
             )
 
-            // ── Top elements: slide UP when hiding, DOWN when showing ──
+            // ── Top elements ──
             AnimatedVisibility(
                 visible = controlsVisible,
                 enter = fadeIn(tween(ANIM_DURATION)) + slideInVertically(tween(ANIM_DURATION), initialOffsetY = { -it }),
@@ -177,7 +176,7 @@ fun FullscreenControls(
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = 16.dp, end = 16.dp),
+                            .padding(start = 16.dp, top = 4.dp, end = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         FSSmallButton(
@@ -198,24 +197,28 @@ fun FullscreenControls(
                                     modifier = Modifier.fillMaxWidth(0.5f),
                                 )
                             }
-                            if (episodeInfo.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                FSInfoPill(text = episodeInfo)
-                            }
-                            if (qualityInfo.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                FSInfoPill(text = qualityInfo)
+                            // Episode + quality pills in a single Row (side by side)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(top = 4.dp),
+                            ) {
+                                if (episodeInfo.isNotEmpty()) {
+                                    FSInfoPill(text = episodeInfo)
+                                }
+                                if (qualityInfo.isNotEmpty()) {
+                                    FSInfoPill(text = qualityInfo)
+                                }
                             }
                         }
                     }
 
-                    // ── Top-right: frosted glass row (with proper right padding) ──
+                    // ── Top-right: frosted glass row (with generous right padding for punch-hole) ──
                     Surface(
                         color = Color.Black.copy(alpha = 0.4f),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(end = 24.dp, top = 16.dp),
+                            .padding(end = 32.dp, top = 4.dp),
                     ) {
                         Row(
                             modifier = Modifier.padding(6.dp),
@@ -277,7 +280,7 @@ fun FullscreenControls(
                 }
             }
 
-            // ── Bottom elements: slide DOWN when hiding, UP when showing ──
+            // ── Bottom elements ──
             AnimatedVisibility(
                 visible = controlsVisible,
                 enter = fadeIn(tween(ANIM_DURATION)) + slideInVertically(tween(ANIM_DURATION), initialOffsetY = { it }),
@@ -291,9 +294,8 @@ fun FullscreenControls(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                            .padding(horizontal = 24.dp, vertical = 4.dp),
                     ) {
-                        // Custom progress bar
                         FullscreenSeekbarCustom(
                             position = position,
                             duration = duration,
@@ -307,21 +309,19 @@ fun FullscreenControls(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Bottom row: left = current time | right = controls + exit + total time
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // Bottom-left: current time only
-                            FSTimeContainer(text = formatTime(position))
+                            // Bottom-left: current time (with extra left padding for punch-hole)
+                            FSTimeContainer(text = formatTime(position), modifier = Modifier.padding(start = 8.dp))
 
                             // Bottom-right: frosted controls group + exit + total time
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                // Frosted controls group: Speed, Rotate, Next, PiP
                                 Surface(
                                     color = Color.Black.copy(alpha = 0.35f),
                                     shape = RoundedCornerShape(10.dp),
@@ -348,7 +348,7 @@ fun FullscreenControls(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Custom progress bar — thicker track, bigger square thumb, buffer, tooltip
+//  Custom progress bar
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -362,6 +362,7 @@ private fun FullscreenSeekbarCustom(
 ) {
     var scrubPosition by remember { mutableStateOf<Float?>(null) }
     var barWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
     val displayPosition = scrubPosition ?: position.toFloat().coerceAtLeast(0f)
     val maxRange = duration.toFloat().coerceAtLeast(1f)
     val progress = (displayPosition / maxRange).coerceIn(0f, 1f)
@@ -369,8 +370,9 @@ private fun FullscreenSeekbarCustom(
         ((bufferAheadTime.toFloat()) / maxRange).coerceIn(0f, 1f)
     } else 0f
 
-    val trackColor = Color.White.copy(alpha = 0.25f)
-    val bufferColor = Color.White.copy(alpha = 0.3f) // Increased from 0.15f for visibility
+    val trackColor = Color.White.copy(alpha = 0.2f)
+    // Buffer color: lighter shade of the themed/primary color (not white)
+    val bufferColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
     val progressColor = MaterialTheme.colorScheme.primary
 
     val barHeightDp = 6.dp
@@ -435,17 +437,19 @@ private fun FullscreenSeekbarCustom(
             drawRoundRect(color = progressColor, topLeft = Offset(thumbX, thumbY), size = Size(thumbSize, thumbSize), cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx()))
         }
 
-        // ── Seek tooltip: positioned at the thumb's actual X position ──
+        // ── Seek tooltip: follows the thumb position precisely ──
         if (scrubPosition != null && barWidthPx > 0) {
             val tooltipText = formatTime(scrubPosition!!.toInt())
-            // Calculate the thumb's pixel position and convert to dp
-            val thumbXpx = (barWidthPx * progress).coerceIn(20f, barWidthPx - 20f)
-            val tooltipOffsetDp = (thumbXpx / barWidthPx * 100).coerceIn(5f, 85f)
+            // Convert the thumb's pixel X position to a dp offset
+            val thumbXpx = (barWidthPx * progress).coerceIn(0f, barWidthPx.toFloat())
+            val tooltipOffsetPx = (thumbXpx - 30f).coerceIn(0f, (barWidthPx - 60).toFloat())
+            val tooltipOffsetDp = with(density) { tooltipOffsetPx.toDp() }
+
             Surface(
                 color = Color.Black.copy(alpha = 0.8f),
                 shape = RoundedCornerShape(6.dp),
                 modifier = Modifier
-                    .offset(x = tooltipOffsetDp.toInt().dp, y = (-24).dp),
+                    .offset(x = tooltipOffsetDp, y = (-28).dp),
             ) {
                 Text(
                     text = tooltipText,
@@ -529,10 +533,11 @@ private fun FSSpeedButton(speed: Float, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FSTimeContainer(text: String) {
+private fun FSTimeContainer(text: String, modifier: Modifier = Modifier) {
     Surface(
         color = Color.Black.copy(alpha = 0.35f),
         shape = RoundedCornerShape(8.dp),
+        modifier = modifier,
     ) {
         Text(text = text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
     }
@@ -540,14 +545,15 @@ private fun FSTimeContainer(text: String) {
 
 @Composable
 private fun FSExitButton(onClick: () -> Unit) {
+    // Themed background + frosted outer container per owner request
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = Color.Black.copy(alpha = 0.35f),
-        modifier = Modifier.size(32.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+        modifier = Modifier.size(36.dp),
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.FullscreenExit, contentDescription = "Exit fullscreen", tint = Color.White, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.FullscreenExit, contentDescription = "Exit fullscreen", tint = Color.White, modifier = Modifier.size(18.dp))
         }
     }
 }
