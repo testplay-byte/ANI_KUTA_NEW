@@ -86,6 +86,8 @@ fun EpisodeSwitchingOverlay(
         }
 
         // Loading indicator + text (centered)
+        // Uses MaterialTheme.colorScheme.primary so the spinner picks up the
+        // dynamic theme when adaptive colors is ON (Part D1).
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -94,7 +96,7 @@ fun EpisodeSwitchingOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CircularProgressIndicator(
-                color = Color.White,
+                color = MaterialTheme.colorScheme.primary,
                 strokeWidth = 3.dp,
                 modifier = Modifier.size(48.dp),
             )

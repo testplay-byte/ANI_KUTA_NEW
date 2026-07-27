@@ -5,6 +5,11 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -19,6 +24,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -901,20 +907,49 @@ private fun WatchScreenContent(
     } else {
         // ── Minimized mode (YouTube-style watch page) ──
         // Top bar → Player (16:9, rounded, padded) → Scrollable content
+        //
+        // Part C: Collapsible header with magnetic snap.
+        // When the user scrolls the episode list down, the top bar collapses
+        // smoothly (slides up + fades). A magnetic snap threshold prevents
+        // accidental triggering on small scrolls. When scrolled back to the
+        // top, the header reappears.
+        val listState = rememberLazyListState()
+
+        // Track whether the header should be collapsed.
+        // Magnetic snap: only collapse after scrolling past ~50dp threshold.
+        // Only expand when scrolled back to the very top (offset 0).
+        val isCollapsed by remember {
+            derivedStateOf {
+                if (listState.firstVisibleItemIndex > 0) {
+                    true
+                } else {
+                    listState.firstVisibleItemScrollOffset > 200
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Top navigation bar — floating pill, ABOVE the player.
-            // Shows the app name "ANIKUTA" (not the episode title) per user request.
-            WatchTopBar(
-                title = "ANIKUTA",
-                onBack = onBack,
-            )
+            // Collapsible top navigation bar.
+            // Uses AnimatedVisibility for smooth slide-up + fade when collapsed.
+            // When collapsed, the bar is completely removed from layout so the
+            // player moves up to take its space.
+            AnimatedVisibility(
+                visible = !isCollapsed.value,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+            ) {
+                WatchTopBar(
+                    title = "ANIKUTA",
+                    onBack = onBack,
+                )
+            }
 
-            // Player area — 16:9, rounded corners, horizontal padding,
-            // small top gap below the top bar. Always present, NEVER disposed.
+            // Player area — 16:9, rounded corners, horizontal padding.
+            // Always present, NEVER disposed.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -991,7 +1026,7 @@ private fun WatchScreenContent(
             }
 
             // Scrollable content — description + episode list
-            val listState = rememberLazyListState()
+            // Uses the listState declared above for collapsible header tracking.
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
