@@ -381,14 +381,31 @@ object SettingsDestination : Screen {
 }
 
 /**
- * The Appearance / UI Customization page — hosts theme mode, accent colors,
- * custom palette, AND the episode settings link (moved here from root Settings).
+ * The Appearance page — a list of option rows (General, Episode settings).
+ * Per owner spec (Session 1): this screen is JUST a list of buttons. Tapping
+ * General navigates to [AppearanceGeneralDestination] (the actual settings).
  */
 object AppearanceDestination : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         app.confused.anikuta.feature.settings.AppearanceScreen(
+            onOpenGeneral = { navigator.push(AppearanceGeneralDestination) },
+            onOpenEpisodeSettings = { navigator.push(EpisodeSettingsHubDestination) },
+            onBack = { navigator.pop() },
+        )
+    }
+}
+
+/**
+ * The Appearance → General page — the actual theme settings (theme mode,
+ * AMOLED, palettes, episode settings link). Per owner spec (Session 1).
+ */
+object AppearanceGeneralDestination : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        app.confused.anikuta.feature.settings.AppearanceGeneralScreen(
             onOpenEpisodeSettings = { navigator.push(EpisodeSettingsHubDestination) },
             onBack = { navigator.pop() },
         )

@@ -22,8 +22,9 @@ import org.koin.compose.koinInject
  * settings, etc.) on top.
  *
  * **Theme:** The [AnikutaTheme] is wired to [ThemePreferences] reactively —
- * when the user changes the theme mode or accent color in the Appearance
- * screen, the entire app recomposes live (no restart). See ADR-038.
+ * when the user changes the theme mode, accent color, or palette in the
+ * Appearance screen, the entire app recomposes live (no restart) with a
+ * smooth cross-fade transition. See ADR-038.
  *
  * **OAuth callback handling:** Tracker OAuth redirects come back as
  * `ACTION_VIEW` intents. This activity receives them (via `singleTask` launch
@@ -35,7 +36,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            // Observe theme preferences reactively — the app theme updates live.
+            // Observe theme preferences reactively — the app theme updates live
+            // with a smooth cross-fade transition.
             val themePrefs = koinInject<ThemePreferences>()
             val themeMode by themePrefs.themeMode.changes()
                 .collectAsStateWithLifecycle(initialValue = themePrefs.themeMode.get())
@@ -47,11 +49,25 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle(initialValue = themePrefs.customAccentColor.get())
             val customAccent = Color(customAccentArgb.toLong() and 0xFFFFFFFF)
 
+            // Full-palette customization (Session 1 item 9.5)
+            val paletteMode by themePrefs.paletteMode.changes()
+                .collectAsStateWithLifecycle(initialValue = themePrefs.paletteMode.get())
+            val customBgArgb by themePrefs.customBackgroundColor.changes()
+                .collectAsStateWithLifecycle(initialValue = themePrefs.customBackgroundColor.get())
+            val customCardArgb by themePrefs.customCardColor.changes()
+                .collectAsStateWithLifecycle(initialValue = themePrefs.customCardColor.get())
+            val customTextArgb by themePrefs.customTextColor.changes()
+                .collectAsStateWithLifecycle(initialValue = themePrefs.customTextColor.get())
+
             AnikutaTheme(
                 themeMode = themeMode,
                 amoled = amoled,
                 accentPreset = accentPreset,
                 customAccentColor = customAccent,
+                paletteMode = paletteMode,
+                customBackground = Color(customBgArgb.toLong() and 0xFFFFFFFF),
+                customCard = Color(customCardArgb.toLong() and 0xFFFFFFFF),
+                customText = Color(customTextArgb.toLong() and 0xFFFFFFFF),
             ) {
                 AnikutaRoot()
             }

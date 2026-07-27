@@ -40,12 +40,30 @@ enum class AccentPreset(val displayName: String, val seedColorArgb: Int) {
 }
 
 /**
+ * The palette customization mode.
+ *
+ * - [SIMPLIFIED] — the user picks only the accent color; background, card,
+ *   and text colors are derived automatically (default).
+ * - [FULL] — the user manually sets the accent, background, card background,
+ *   and text colors. Each is stored separately in [ThemePreferences].
+ */
+enum class PaletteMode {
+    SIMPLIFIED,
+    FULL,
+}
+
+/**
  * User-selectable theme preferences — persisted via [PreferenceStore].
  *
  * Three independent axes:
  * 1. [themeMode] — Light / Dark / System (surface tone).
  * 2. [amoled] — when true + resolved mode is Dark, forces pure-black surfaces.
  * 3. [accentPreset] + [customAccentColor] — the primary color family.
+ *
+ * **Palette customization** ([paletteMode]): when [PaletteMode.FULL], the user
+ * can override the background, card surface, and text colors individually.
+ * When [PaletteMode.SIMPLIFIED] (default), only the accent is set and the
+ * other colors are derived automatically.
  *
  * All preferences are reactive via `Preference.changes()`, so the app
  * recomposes live when the user changes a setting in the Appearance screen.
@@ -74,6 +92,29 @@ class ThemePreferences(
      * Default: the lime seed color (#B1F256).
      */
     val customAccentColor: Preference<Int> = store.getInt("pref_theme_custom_accent", AccentPreset.LIME.seedColorArgb)
+
+    // ── Full palette customization (PaletteMode.FULL) ──
+
+    /** The palette customization mode. Default: [PaletteMode.SIMPLIFIED]. */
+    val paletteMode: Preference<PaletteMode> = store.getEnum("pref_palette_mode", PaletteMode.SIMPLIFIED)
+
+    /** Custom background color (ARGB Int) — used when [paletteMode] is [PaletteMode.FULL]. */
+    val customBackgroundColor: Preference<Int> = store.getInt(
+        "pref_theme_custom_bg",
+        0xFF14111F.toInt(), // dark default
+    )
+
+    /** Custom card/surface background color (ARGB Int) — used when [paletteMode] is [PaletteMode.FULL]. */
+    val customCardColor: Preference<Int> = store.getInt(
+        "pref_theme_custom_card",
+        0xFF221E33.toInt(), // dark default
+    )
+
+    /** Custom text color (ARGB Int) — used when [paletteMode] is [PaletteMode.FULL]. */
+    val customTextColor: Preference<Int> = store.getInt(
+        "pref_theme_custom_text",
+        0xFFECE6F5.toInt(), // dark default
+    )
 
     /** Convenience: the effective accent color ARGB (preset seed or custom). */
     fun effectiveAccentColorArgb(): Int {
