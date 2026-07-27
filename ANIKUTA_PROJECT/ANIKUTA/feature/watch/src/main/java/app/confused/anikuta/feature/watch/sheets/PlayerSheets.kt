@@ -75,6 +75,7 @@ fun QualitySheet(
     onQualitySelected: (ResolverVideo) -> Unit,
     onDismiss: () -> Unit,
     currentServerName: String = "",
+    currentAudioVersion: String = "",
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -171,11 +172,11 @@ fun QualitySheet(
                         Surface(
                             color = when {
                                 isExpanded -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                isCurrentServer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                isCurrentServer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                 else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                             },
-                            border = if (isCurrentServer && !isExpanded) {
-                                androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                            border = if (isCurrentServer) {
+                                androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                             } else null,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
@@ -209,10 +210,13 @@ fun QualitySheet(
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    // Audio version tags
+                                    // Audio version tags — current version is highlighted
                                     server.audioVersions.forEach { audio ->
+                                        val isCurrentAudio = currentAudioVersion.isNotEmpty() &&
+                                            audio.label.equals(currentAudioVersion, ignoreCase = true)
                                         Surface(
-                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                            color = if (isCurrentAudio) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                                             shape = RoundedCornerShape(6.dp),
                                             modifier = Modifier.padding(end = 4.dp),
                                         ) {
@@ -221,7 +225,8 @@ fun QualitySheet(
                                                 fontFamily = RobotoFamily,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                color = if (isCurrentAudio) MaterialTheme.colorScheme.onPrimary
+                                                    else MaterialTheme.colorScheme.onSecondaryContainer,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                             )
                                         }

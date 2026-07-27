@@ -89,6 +89,10 @@ fun AppearanceGeneralScreen(
         .collectAsStateWithLifecycle(initialValue = prefs.customCardColor.get())
     val customTextArgb by prefs.customTextColor.changes()
         .collectAsStateWithLifecycle(initialValue = prefs.customTextColor.get())
+    val adaptiveColorsDetails by prefs.adaptiveColorsDetails.changes()
+        .collectAsStateWithLifecycle(initialValue = prefs.adaptiveColorsDetails.get())
+    val adaptiveColorsPlayer by prefs.adaptiveColorsPlayer.changes()
+        .collectAsStateWithLifecycle(initialValue = prefs.adaptiveColorsPlayer.get())
 
     var showCustomSheet by remember { mutableStateOf(false) }
 
@@ -171,6 +175,28 @@ fun AppearanceGeneralScreen(
                         )
                     }
                 }
+            }
+
+            // ── Adaptive colors toggles ──
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsSectionLabel("Adaptive colors")
+            }
+            item {
+                AdaptiveColorsCard(
+                    title = "Adaptive colors",
+                    subtitle = "Theme anime details page with cover art colors",
+                    checked = adaptiveColorsDetails,
+                    onCheckedChange = { prefs.adaptiveColorsDetails.set(it) },
+                )
+            }
+            item {
+                AdaptiveColorsCard(
+                    title = "Adaptive colors (Player)",
+                    subtitle = "Theme video player with cover art colors",
+                    checked = adaptiveColorsPlayer,
+                    onCheckedChange = { prefs.adaptiveColorsPlayer.set(it) },
+                )
             }
         }
     }
@@ -336,7 +362,48 @@ private fun AmoledCard(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "Pure-black background for OLED screens.",
+                    text = "Pure black for OLED screens",
+                    fontFamily = RobotoFamily,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Adaptive colors card (switch — always visible)
+// ════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun AdaptiveColorsCard(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    SettingsCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onCheckedChange(!checked) }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = subtitle,
                     fontFamily = RobotoFamily,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

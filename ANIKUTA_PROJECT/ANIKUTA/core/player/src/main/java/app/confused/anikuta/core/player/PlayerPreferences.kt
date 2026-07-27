@@ -328,4 +328,27 @@ class PlayerPreferences(
     /** Subtitle delay in milliseconds (can be negative). Default: 0. */
     fun subtitlesDelay(): Preference<Int> =
         store.getInt("pref_subtitles_delay", 0)
+
+    /**
+     * Auto-play: when enabled (default), playback starts automatically when
+     * an episode is loaded. When disabled, the user must press play.
+     */
+    fun autoPlay(): Preference<Boolean> =
+        store.getBoolean("pref_player_autoplay", true)
+
+    /**
+     * Last used playback speed for Sub audio versions.
+     * Persisted separately from Dub so the user can have different speeds per version.
+     * Default: 1.0f.
+     */
+    fun speedSub(): Preference<Float> =
+        store.getFloat("pref_speed_sub", 1.0f)
+
+    /**
+     * Last used playback speed for Dub audio versions.
+     * Persisted separately from Sub so the user can have different speeds per version.
+     * Default: 1.0f.
+     */
+    fun speedDub(): Preference<Float> =
+        store.getFloat("pref_speed_dub", 1.0f)
 }

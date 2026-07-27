@@ -132,6 +132,15 @@ fun WatchScreen(
     // Set the companion playerPreferences BEFORE inflating the view
     AnikutaMPVView.playerPreferences = playerPreferences
 
+    // ── Keep screen on while the watch page is active (Task 2.3) ──
+    DisposableEffect(Unit) {
+        val window = (context as? Activity)?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // MPV view — cached, NEVER recreated. Owned by this composable.
     var mpvView by remember { mutableStateOf<AnikutaMPVView?>(null) }
     var observer by remember { mutableStateOf<PlayerObserver?>(null) }
@@ -1068,14 +1077,18 @@ private fun WatchScreenContent(
 
     // ── Bottom-up sheets (rendered on top of everything) ──
     if (showQualitySheet) {
-        // Extract the current server name from the video title (format: "Server - SUB - 1080p")
-        val currentServerName = stateHolder.currentVideoTitle.value.substringBefore(" - ").trim()
+        // Extract the current server name + audio version from the video title
+        // (format: "Server - SUB - 1080p" or "Server - 1080p")
+        val titleParts = stateHolder.currentVideoTitle.value.split(" - ")
+        val currentServerName = titleParts.getOrNull(0)?.trim() ?: ""
+        val currentAudioVersion = titleParts.getOrNull(1)?.trim() ?: ""
         app.confused.anikuta.feature.watch.sheets.QualitySheet(
             servers = resolvedServers,
             currentVideoTitle = stateHolder.currentVideoTitle.value,
             onQualitySelected = onQualitySelected,
             onDismiss = onDismissSheet,
             currentServerName = currentServerName,
+            currentAudioVersion = currentAudioVersion,
         )
     }
 
