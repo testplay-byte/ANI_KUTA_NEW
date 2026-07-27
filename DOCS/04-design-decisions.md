@@ -833,6 +833,55 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
+## ADR-038 (amendment) — Palette system + light mode redesign + animated transition
+
+- **Date:** Phase 9 Session 1 (appearance overhaul — items 1-10).
+- **Context:** The initial theme system (ADR-038) worked but the owner wanted:
+  (a) two-screen Appearance flow (list → General), (b) smooth dark↔light
+  transition, (c) better light mode colors, (d) AMOLED hidden in light mode,
+  (e) custom color in a popup (not inline), (f) palette selection as
+  skeleton-screen previews (mini details-page mock), (g) full palette
+  customization (accent + background + card + text), (h) title shrink on
+  scroll, (i) simplified descriptions.
+- **Decision:**
+  - **Two-screen flow:** `AppearanceScreen` (list: General + Episode settings
+    rows) → `AppearanceGeneralScreen` (the actual settings). Added
+    `AppearanceGeneralDestination`.
+  - **Animated transition:** `AnikutaTheme` now animates each color role via
+    `animateColorAsState` (~400ms tween). Dark↔light switches cross-fade
+    smoothly instead of snapping.
+  - **Light mode redesign:** warm-neutral backgrounds (`#FAF9F6` bg, `#F2F0EB`
+    cards) — no purple tint. Card surfaces are darker than the background
+    (clearer hierarchy). The accent in light mode is richer (saturation
+    boosted + targeted lightness ~40%, not muddy).
+  - **AMOLED:** hidden in light mode (AnimatedVisibility fade). Card surfaces
+    in AMOLED are subtle grey (`#121212`, `#1A1A1A`) — not pure black — so
+    cards are distinguishable.
+  - **Palettes (renamed from "Accent Colors"):** skeleton-screen preview cards
+    (`PalettePreviewCard`) showing a mini anime-details-page mock (banner,
+    cover, title, button) using each palette's colors. Custom is FIRST in the
+    row. Tapping Custom opens a `CustomColorDialog`.
+  - **Custom color popup:** hex input + RGB sliders + OK button. A collapsible
+    "Advanced" section reveals full palette customization (accent, background,
+    card, text — each with its own picker). Stored via `PaletteMode` (SIMPLIFIED
+    vs FULL) + `customBackgroundColor` / `customCardColor` / `customTextColor`.
+  - **Title shrink:** fixed `CollapsingHeader` wiring — now uses the
+    `LazyListState`-based `collapsed` overload (was passing a disconnected
+    `ScrollState`, so the title never shrank).
+  - **Simplified descriptions:** all 1-line.
+- **Consequences:**
+  - ✅ Smooth animated theme transitions — no jarring snaps.
+  - ✅ Light mode looks cohesive (warm-neutral, not purple-tinted).
+  - ✅ AMOLED cards are visible (subtle grey, not pure black).
+  - ✅ Palette selection is visual (mini-screen previews, not dots).
+  - ✅ Full palette customization for power users (Advanced mode).
+  - ✅ Title shrinks on scroll (bug fixed).
+  - ⚠️ The `animateColorScheme` adds ~18 `animateColorAsState` calls at the
+    root — negligible perf impact (only recomposes on theme change).
+  - 📌 Cover-color dynamic theming still NOT implemented (separate future ADR).
+
+---
+
 ## How to add a new ADR
 
 1. Use the next free `ADR-NNN` number.
