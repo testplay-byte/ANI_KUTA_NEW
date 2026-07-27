@@ -7,7 +7,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -254,6 +256,7 @@ private fun PalettesCarousel(
         LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ── 15 presets FIRST (10 accent-only + 5 full-palette) ──
             items(presets) { preset ->
@@ -272,9 +275,18 @@ private fun PalettesCarousel(
                 )
             }
 
+            // ── Accent-colored vertical divider (separates presets from Custom) ──
+            item {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(155.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                )
+            }
+
             // ── Custom LAST (rightmost, unique highlight) ──
             item {
-                Spacer(modifier = Modifier.width(12.dp))
                 PalettePreviewCard(
                     label = "Custom",
                     backgroundColor = customPreviewBg,

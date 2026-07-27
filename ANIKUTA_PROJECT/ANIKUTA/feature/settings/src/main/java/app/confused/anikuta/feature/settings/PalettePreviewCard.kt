@@ -45,8 +45,9 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
  * - **Cover thumbnail** (accent) — fully visible, overlapping the banner.
  * - **Title + subtitle** — text bars next to the cover.
  * - **Accent pills** — right below the cover/title (NOT below synopsis).
- * - **Action buttons** — gray (muted) pills, like the real buttons.
- * - **Episode list** — 5 rows, each with a bg + thumbnail + title + meta.
+ * - **Info section** — left: white label + gray synopsis lines + white episode
+ *   label; right: accent-colored extension button pill.
+ * - **Episode list** — 3 rows, each with a bg + thumbnail + title + meta.
  *   Alternating opacity to show watched/unwatched states.
  */
 @Composable
@@ -80,7 +81,7 @@ fun PalettePreviewCard(
             color = backgroundColor,
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier
-                .size(width = 100.dp, height = 190.dp)
+                .size(width = 100.dp, height = 155.dp)
                 .border(borderWidth.dp, borderColor, RoundedCornerShape(14.dp))
                 .clickable(onClick = onClick),
         ) {
@@ -135,9 +136,7 @@ fun PalettePreviewCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(3.dp))
-
-                    // ── Accent pills (right below cover/title) ──
+                    // ── Accent pills (right below cover/title — no gap) ──
                     Row {
                         Box(
                             modifier = Modifier
@@ -158,31 +157,63 @@ fun PalettePreviewCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // ── Action buttons (gray/muted, like real buttons) ──
-                    Row {
+                    // ── Info section (left: label + synopsis + episode label; right: accent pill) ──
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        // Left side: text label + synopsis lines + episode label
+                        Column(modifier = Modifier.weight(1f)) {
+                            // Short white label (general info)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.5f)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(textColor),
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            // Two gray synopsis lines (wider)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .height(2.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(textColor.copy(alpha = 0.3f)),
+                            )
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.75f)
+                                    .height(2.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(textColor.copy(alpha = 0.3f)),
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            // Small white episode section label
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.4f)
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(textColor),
+                            )
+                        }
+                        // Right side: accent-colored extension button pill
                         Box(
                             modifier = Modifier
-                                .width(22.dp)
+                                .width(18.dp)
                                 .height(8.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(textColor.copy(alpha = 0.2f)),
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(14.dp)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(textColor.copy(alpha = 0.1f))
-                                .border(0.5.dp, textColor.copy(alpha = 0.2f), RoundedCornerShape(4.dp)),
+                                .background(accentColor),
                         )
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // ── Episode list (5 rows with background) ──
-                    repeat(5) { idx ->
-                        val alpha = if (idx == 0) 0.8f else if (idx <= 2) 0.6f else 0.4f
+                    // ── Episode list (3 rows with background) ──
+                    repeat(3) { idx ->
+                        val alpha = if (idx == 0) 0.8f else if (idx <= 1) 0.6f else 0.4f
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
