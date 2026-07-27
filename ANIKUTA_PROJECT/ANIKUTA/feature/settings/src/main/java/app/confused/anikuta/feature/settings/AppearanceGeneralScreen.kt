@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package app.confused.anikuta.feature.settings
 
 import androidx.compose.animation.AnimatedVisibility
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
@@ -452,7 +455,7 @@ private fun SegmentedToggle(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .androidx_clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .clickable { onSelect(idx) },
                 ) {
                     Box(
@@ -472,7 +475,3 @@ private fun SegmentedToggle(
         }
     }
 }
-
-/** Helper to avoid the `Modifier.clip` import collision. */
-private fun Modifier.androidx_clip(shape: androidx.compose.ui.graphics.Shape): Modifier =
-    this.then(androidx.compose.ui.draw.clip(shape))

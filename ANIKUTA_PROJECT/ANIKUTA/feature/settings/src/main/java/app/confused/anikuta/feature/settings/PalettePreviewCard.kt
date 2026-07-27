@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -88,92 +89,95 @@ fun PalettePreviewCard(
                 .border(2.dp, borderColor, RoundedCornerShape(14.dp))
                 .clickable(onClick = onClick),
         ) {
-            // ── Mini details-page skeleton ──
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(6.dp),
-            ) {
-                // Banner / hero area (card surface)
-                Box(
+            // Wrap content in a Box so the checkmark can align to TopEnd.
+            Box(modifier = Modifier.fillMaxSize()) {
+                // ── Mini details-page skeleton ──
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(cardColor),
+                        .fillMaxSize()
+                        .padding(6.dp),
                 ) {
-                    // Cover thumbnail (accent color) — overlaps the banner
+                    // Banner / hero area (card surface)
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 4.dp, bottom = (-8).dp)
-                            .size(width = 24.dp, height = 32.dp)
-                            .clip(RoundedCornerShape(3.dp))
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(cardColor),
+                    ) {
+                        // Cover thumbnail (accent color) — overlaps the banner
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 4.dp, bottom = (-8).dp)
+                                .size(width = 24.dp, height = 32.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(accentColor),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Title line (text color)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(textColor),
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    // Subtitle line (muted text — 60% opacity)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(textColor.copy(alpha = 0.5f)),
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Action button (accent pill)
+                    Box(
+                        modifier = Modifier
+                            .width(28.dp)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
                             .background(accentColor),
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Secondary button (outlined card)
+                    Box(
+                        modifier = Modifier
+                            .width(20.dp)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(cardColor)
+                            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(5.dp)),
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Title line (text color)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(textColor),
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                // Subtitle line (muted text — 60% opacity)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(textColor.copy(alpha = 0.5f)),
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Action button (accent pill)
-                Box(
-                    modifier = Modifier
-                        .width(28.dp)
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(accentColor),
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Secondary button (outlined card)
-                Box(
-                    modifier = Modifier
-                        .width(20.dp)
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(cardColor)
-                        .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(5.dp)),
-                )
-            }
-
-            // Selected checkmark (top-end)
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(16.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(12.dp),
-                    )
+                // Selected checkmark (top-end) — aligned in the Box scope.
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
                 }
             }
         }
