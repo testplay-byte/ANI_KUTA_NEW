@@ -276,13 +276,21 @@ private fun PalettesCarousel(
             }
 
             // ── Accent-colored vertical divider (separates presets from Custom) ──
+            // 3dp wide, 108dp tall (70% of card height), rounded ends, centered vertically.
             item {
                 Box(
                     modifier = Modifier
-                        .width(1.dp)
-                        .height(155.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                )
+                        .height(155.dp),
+                    contentAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(108.dp)
+                            .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    )
+                }
             }
 
             // ── Custom LAST (rightmost, unique highlight) ──

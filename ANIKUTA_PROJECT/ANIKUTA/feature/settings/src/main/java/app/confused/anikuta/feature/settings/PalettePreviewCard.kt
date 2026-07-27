@@ -95,7 +95,7 @@ fun PalettePreviewCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(34.dp)
+                            .height(40.dp)
                             .clip(RoundedCornerShape(4.dp))
                             .background(cardColor),
                     )
@@ -136,8 +136,8 @@ fun PalettePreviewCard(
                         }
                     }
 
-                    // ── Accent pills (right below cover/title — no gap) ──
-                    Row {
+                    // ── Accent pills (pulled up close to cover — minimal gap) ──
+                    Row(modifier = Modifier.offset(y = (-10).dp)) {
                         Box(
                             modifier = Modifier
                                 .width(18.dp)
@@ -155,61 +155,61 @@ fun PalettePreviewCard(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
-                    // ── Info section (left: label + synopsis + episode label; right: accent pill) ──
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        // Left side: text label + synopsis lines + episode label
-                        Column(modifier = Modifier.weight(1f)) {
-                            // Short white label (general info)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.5f)
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor),
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            // Two gray synopsis lines (wider)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .height(2.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.3f)),
-                            )
-                            Spacer(modifier = Modifier.height(1.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.75f)
-                                    .height(2.dp)
-                                    .clip(RoundedCornerShape(1.dp))
-                                    .background(textColor.copy(alpha = 0.3f)),
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
+                    // ── Info section (label + synopsis + episode label with accent pill) ──
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Short white label (general info)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.25f)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(textColor),
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        // Two gray synopsis lines (wider)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .height(2.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(textColor.copy(alpha = 0.3f)),
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.75f)
+                                .height(2.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(textColor.copy(alpha = 0.3f)),
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        // Episode label + accent pill row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             // Small white episode section label
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.4f)
+                                    .fillMaxWidth(0.24f)
                                     .height(3.dp)
                                     .clip(RoundedCornerShape(1.dp))
                                     .background(textColor),
                             )
+                            // Accent-colored extension button pill
+                            Box(
+                                modifier = Modifier
+                                    .width(18.dp)
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(accentColor),
+                            )
                         }
-                        // Right side: accent-colored extension button pill
-                        Box(
-                            modifier = Modifier
-                                .width(18.dp)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(accentColor),
-                        )
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     // ── Episode list (3 rows with background) ──
                     repeat(3) { idx ->
@@ -219,7 +219,7 @@ fun PalettePreviewCard(
                                 .fillMaxWidth()
                                 .padding(vertical = 1.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(cardColor.copy(alpha = 0.3f))
+                                .background(cardColor.copy(alpha = 0.5f))
                                 .padding(2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
