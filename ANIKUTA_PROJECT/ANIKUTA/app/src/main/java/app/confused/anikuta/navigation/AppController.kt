@@ -581,10 +581,13 @@ class AppController(
     fun onLinked(anilistId: Int, wasCached: Boolean, sAnimeTitle: String) {
         linkingTarget = null
         val nav = navigator
-        // If we're on the extension-entry unified page, replace it with the AniList-
-        // entry unified page (same screen, AniList data source). Otherwise push.
-        if (nav != null && nav.lastItem is ExtensionAnimeDetailDestination) {
-            nav.replace(AnimeDetailDestination(anilistId))
+        // If we're ALREADY on a detail page (either flavor), REPLACE it — don't push
+        // a second one. Pushing two AnimeDetailDestination instances causes a Voyager
+        // SaveableStateHolder key collision crash during the transition.
+        val onDetailPage = nav?.lastItem is ExtensionAnimeDetailDestination ||
+            nav?.lastItem is AnimeDetailDestination
+        if (onDetailPage) {
+            nav?.replace(AnimeDetailDestination(anilistId))
         } else {
             nav?.push(AnimeDetailDestination(anilistId))
         }

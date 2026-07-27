@@ -33,51 +33,40 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 /**
  * The three-dot overflow menu for the unified details page.
  *
- * Replaces the no-op stub at `DetailBanner.kt`. The menu items adapt to the
- * current data source + link state (per owner feedback, 2026-07-27):
+ * Menu items adapt to [entryMode] (how the user entered the page) + [currentDataSource]
+ * (what's currently displayed) + link state:
  *
- * **AniList mode** (viewing AniList data):
- * - "View from Extension" — if a source link exists (`sourceId != null`).
- *   Switches the displayed data source to Extension in-place.
- * - "Switch anime" — opens an AniList search sheet to navigate to a different
- *   anime (for when the current one is the wrong season/adaptation).
+ * **AniList entry** (`entryMode == ANILIST` — user opened from browse/search/home):
+ * - "View from Extension" (if a source link exists) — switches the view in-place.
  * - "Refresh"
- * - "Current: AniList" (informational)
+ * - "Current: AniList" (informational, faded)
  *
- * **Extension mode, linked** (`anilistId != null`):
- * - "View from AniList" — switches to AniList data source in-place.
- * - "Switch anime" — opens the AniList linking sheet to re-link to a different
- *   AniList entry (for when the auto-match picked the wrong anime).
+ *   **No "Switch anime"** — the user is already on the correct AniList entry.
+ *
+ * **Extension entry, linked** (`entryMode == EXTENSION`, `anilistId != null`):
+ * - "View from AniList" (if currently on Extension) / "View from Extension" (if on AniList)
+ * - "Switch anime" — opens the AniList linking sheet to re-link to a different entry
+ *   (for when the auto-match picked the wrong anime).
  * - "Refresh"
- * - "Current: {extension name}" (informational)
+ * - "Current: {source}" (informational, faded)
  *
- * **Extension mode, unlinked** (`anilistId == null`):
+ * **Extension entry, unlinked** (`entryMode == EXTENSION`, `anilistId == null`):
  * - "Link to AniList" — opens the AniList linking sheet to establish a link.
- *   Once linked, the view refreshes with AniList metadata merged in.
  * - "Refresh"
- * - "Current: {extension name}" (informational)
+ * - "Current: {source}" (informational, faded)
  *
- * **Removed** (per owner feedback): "Switch extension" — redundant with the
- * extension-switching affordance next to the episodes header (ManualSearchSheet).
- *
- * @param anime the current unified anime (drives which options are shown).
- * @param currentDataSource which source is currently displayed.
- * @param onSwitchDataSource called with the target [DataSource] for the
- *   "View from AniList" / "View from Extension" toggle.
- * @param onLinkToAniList called for "Link to AniList" (unlinked) and
- *   "Switch anime" (extension mode) — opens the AniList linking sheet via
- *   `AppController.startLinking(source, sAnime)`.
- * @param onSwitchAnilistAnime called for "Switch anime" (AniList mode) —
- *   opens the [AniListSearchSheet] to search + navigate to a different anime.
- * @param onRefresh called to pull-to-refresh.
+ * @param entryMode how the user ENTERED the page (fixed for the screen's lifetime).
+ *   Drives whether "Switch anime" / "Link to AniList" is shown.
+ * @param currentDataSource what's currently displayed (changes when the user toggles view).
+ *   Drives whether "View from AniList" or "View from Extension" is shown.
  */
 @Composable
 fun SourceSwitcherMenu(
     anime: UnifiedAnime,
     currentDataSource: DataSource,
+    entryMode: DataSource,
     onSwitchDataSource: (DataSource) -> Unit,
     onLinkToAniList: () -> Unit,
-    onSwitchAnilistAnime: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -102,9 +91,9 @@ fun SourceSwitcherMenu(
         expanded = expanded,
         onDismissRequest = { expanded = false },
     ) {
+        // ── View-source toggle ──
         when (currentDataSource) {
             DataSource.ANILIST -> {
-                // "View from Extension" — only if a source link exists.
                 if (anime.sourceId != null) {
                     DropdownMenuItem(
                         text = { MenuText("View from Extension", subtitle = "Switch to ${anime.sourceName} data") },
@@ -115,19 +104,9 @@ fun SourceSwitcherMenu(
                         },
                     )
                 }
-                // "Switch anime" — search AniList for the correct entry.
-                DropdownMenuItem(
-                    text = { MenuText("Switch anime", subtitle = "Wrong anime? Find the correct one") },
-                    leadingIcon = { MenuIcon(Icons.Outlined.FindInPage) },
-                    onClick = {
-                        expanded = false
-                        onSwitchAnilistAnime()
-                    },
-                )
             }
             DataSource.EXTENSION -> {
                 if (anime.anilistId != null) {
-                    // Linked — "View from AniList" (switch view) + "Switch anime" (re-link).
                     DropdownMenuItem(
                         text = { MenuText("View from AniList", subtitle = "Switch to AniList metadata") },
                         leadingIcon = { MenuIcon(Icons.Outlined.SwapHoriz) },
@@ -136,25 +115,33 @@ fun SourceSwitcherMenu(
                             onSwitchDataSource(DataSource.ANILIST)
                         },
                     )
-                    DropdownMenuItem(
-                        text = { MenuText("Switch anime", subtitle = "Wrong link? Find the correct AniList entry") },
-                        leadingIcon = { MenuIcon(Icons.Outlined.FindInPage) },
-                        onClick = {
-                            expanded = false
-                            onLinkToAniList()
-                        },
-                    )
-                } else {
-                    // Unlinked — "Link to AniList" (establish a link).
-                    DropdownMenuItem(
-                        text = { MenuText("Link to AniList", subtitle = "Search AniList + link this anime") },
-                        leadingIcon = { MenuIcon(Icons.Outlined.Link) },
-                        onClick = {
-                            expanded = false
-                            onLinkToAniList()
-                        },
-                    )
                 }
+            }
+        }
+
+        // ── Link / Switch anime — ONLY for extension entry ──
+        // If the user opened from AniList directly, there's no link to correct.
+        if (entryMode == DataSource.EXTENSION) {
+            if (anime.anilistId != null) {
+                // Linked — "Switch anime" to correct a wrong auto-match.
+                DropdownMenuItem(
+                    text = { MenuText("Switch anime", subtitle = "Wrong link? Find the correct AniList entry") },
+                    leadingIcon = { MenuIcon(Icons.Outlined.FindInPage) },
+                    onClick = {
+                        expanded = false
+                        onLinkToAniList()
+                    },
+                )
+            } else {
+                // Unlinked — "Link to AniList" to establish a link.
+                DropdownMenuItem(
+                    text = { MenuText("Link to AniList", subtitle = "Search AniList + link this anime") },
+                    leadingIcon = { MenuIcon(Icons.Outlined.Link) },
+                    onClick = {
+                        expanded = false
+                        onLinkToAniList()
+                    },
+                )
             }
         }
 
@@ -168,16 +155,36 @@ fun SourceSwitcherMenu(
             },
         )
 
-        // ── Data-source indicator (informational) ──
+        // ── Data-source indicator (informational — visually faded/disabled) ──
+        // Per owner feedback: this item should look non-interactive (faded background
+        // + muted colors) to signal it's not a clickable feature.
         DropdownMenuItem(
             text = {
-                MenuText(
-                    "Current: ${anime.sourceName}",
-                    subtitle = "Data source: ${currentDataSource.name.lowercase()}",
+                Text(
+                    text = "Current: ${anime.sourceName}",
+                    fontFamily = RobotoFamily,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+                Text(
+                    text = "Data source: ${currentDataSource.name.lowercase()}",
+                    fontFamily = RobotoFamily,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 )
             },
-            leadingIcon = { MenuIcon(Icons.Outlined.AutoAwesome) },
-            onClick = { expanded = false },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(22.dp),
+                )
+            },
+            enabled = false,  // visually disabled — no ripple, no click effect
+            onClick = { /* no-op — informational only */ },
         )
     }
 }

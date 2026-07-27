@@ -156,6 +156,34 @@ class ExtensionDetailsProvider(
     }
 
     /**
+     * Load ONLY episodes — without re-fetching anime metadata (no getAnimeDetails,
+     * no Palette, no AniList merge). Used when the user switches extension from the
+     * episodes header while in AniList mode: the anime metadata stays, only episodes
+     * refresh from the new extension.
+     */
+    override suspend fun loadEpisodes(request: DetailsRequest): List<Episode>? = when (request) {
+        is DetailsRequest.ByExtension -> {
+            val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(request.sourceId) }
+                ?: return null
+            val sAnime = SAnimeImpl().apply {
+                url = request.animeUrl
+                title = request.animeTitle
+            }
+            fetchAndPersistEpisodes(source, sAnime, request.anilistId)
+        }
+        is DetailsRequest.ByAniListId -> {
+            val savedLink = sourceLinkStore.getLink(request.anilistId) ?: return null
+            val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(savedLink.sourceId) }
+                ?: return null
+            val sAnime = SAnimeImpl().apply {
+                url = savedLink.animeUrl
+                title = savedLink.animeTitle
+            }
+            fetchAndPersistEpisodes(source, sAnime, request.anilistId)
+        }
+    }
+
+    /**
      * Calls `source.getAnimeDetails(sAnime)` to enrich a partial SAnime (from search
      * results) with full metadata. 30s timeout + fallback (Risk R1).
      *

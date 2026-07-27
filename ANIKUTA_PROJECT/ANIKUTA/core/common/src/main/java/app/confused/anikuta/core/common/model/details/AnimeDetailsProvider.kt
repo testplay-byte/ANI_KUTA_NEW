@@ -47,4 +47,19 @@ interface AnimeDetailsProvider {
      * @throws Throwable on transient errors (network, extension binary-incompat).
      */
     suspend fun load(request: DetailsRequest): DetailsResult?
+
+    /**
+     * Load ONLY the episode list for [request] — without re-fetching the anime
+     * metadata (title, description, cover, score, etc.).
+     *
+     * Used when the user switches the extension source from the episodes header
+     * **while in AniList mode**: the anime metadata stays (from AniList), only
+     * the episodes refresh from the newly-selected extension. This prevents the
+     * bug where switching extensions from the episodes header would silently
+     * switch the entire view (title, synopsis, etc.) to the new extension's data.
+     *
+     * @return the episode list, or `null` if the source cannot be resolved.
+     * @throws Throwable on transient errors.
+     */
+    suspend fun loadEpisodes(request: DetailsRequest): List<app.confused.anikuta.core.common.model.Episode>?
 }

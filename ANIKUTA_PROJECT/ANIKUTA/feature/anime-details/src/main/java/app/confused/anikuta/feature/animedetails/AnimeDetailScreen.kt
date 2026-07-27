@@ -75,9 +75,6 @@ fun AnimeDetailScreen(
     /** Called when the user picks "Link to AniList" / "Switch anime" (extension mode) —
      *  opens the AniList linking sheet overlay via AppController.startLinking. */
     onLinkToAniList: () -> Unit = {},
-    /** Called when the user picks a new anime from the AniList search sheet (AniList mode
-     *  "Switch anime"). The destination navigates to the new AniList anime's details page. */
-    onNavigateToAnilistAnime: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -105,6 +102,20 @@ fun AnimeDetailScreen(
             else -> error("AnimeDetailScreen requires either animeId or (extensionSource + extensionSAnime)")
         }
     }
+
+    /**
+     * How the user ENTERED this page — NOT the current data source.
+     *
+     * - [DataSource.ANILIST]: user tapped an anime from browse/search/home (AniList entry).
+     *   "Switch anime" is NOT shown — the user is already on the correct AniList entry.
+     * - [DataSource.EXTENSION]: user opened an extension anime from search (extension entry).
+     *   "Switch anime" / "Link to AniList" IS shown — the auto-match link may need correction.
+     *
+     * This is different from [currentDataSource] (which changes when the user toggles
+     * "View from AniList" / "View from Extension"). [entryMode] is fixed for the
+     * lifetime of this screen instance.
+     */
+    val entryMode: DataSource = if (animeId != null) DataSource.ANILIST else DataSource.EXTENSION
 
     // ── Dynamic cover-color theming (Phase 9 — preserved) ──
     val themePrefs = remember { GlobalContext.get().get<ThemePreferences>() }
@@ -154,9 +165,6 @@ fun AnimeDetailScreen(
     val currentAnimeCategoryIds by vm.currentAnimeCategoryIds.collectAsState()
     val currentDataSource by vm.currentDataSource.collectAsState()
     val availableSources = remember { vm.getAvailableSources() }
-
-    // ── AniList search sheet state (for the three-dot menu's "Switch anime" option in AniList mode) ──
-    var showAniListSearch by remember { mutableStateOf(false) }
 
     // ── Generate dynamic scheme from cover color when available ──
     val coverColorArgb: Int = remember(animeState) {
@@ -211,9 +219,9 @@ fun AnimeDetailScreen(
                     onLongPressSave = vm::openCategoryPicker,
                     onBack = onBack,
                     currentDataSource = currentDataSource,
+                    entryMode = entryMode,
                     onSwitchDataSource = vm::switchDataSource,
                     onLinkToAniList = onLinkToAniList,
-                    onSwitchAnilistAnime = { showAniListSearch = true },
                     onRefresh = vm::refresh,
                     onOpenEpisode = onOpenEpisode,
                     onToggleWatched = vm::toggleWatched,
@@ -237,17 +245,6 @@ fun AnimeDetailScreen(
         MaterialTheme(colorScheme = dynamicScheme, content = screenContent)
     } else {
         screenContent()
-    }
-
-    // ── AniList search sheet (for the three-dot menu's "Switch anime" option in AniList mode) ──
-    val successState = animeState as? DetailState.Success
-    if (showAniListSearch) {
-        AniListSearchSheet(
-            anilistApi = api,
-            initialQuery = successState?.anime?.title ?: "",
-            onPicked = { newId -> onNavigateToAnilistAnime(newId) },
-            onDismiss = { showAniListSearch = false },
-        )
     }
 
     // Category picker dialog (long-press on bookmark button).

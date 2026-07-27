@@ -234,15 +234,54 @@ class AnimeDetailViewModel(
             sourceLinkStore.saveLink(anilistId, source.id, sAnime.url, sAnime.title)
             sourcePrefs.edit().putLong(sourcePrefKey(anilistId), source.id).apply()
         }
+        // Update the active request to the new extension (for future "View from Extension").
         activeRequest = DetailsRequest.ByExtension(
             sourceId = source.id,
             animeUrl = sAnime.url,
             animeTitle = sAnime.title,
             anilistId = anilistId,
         )
-        _currentDataSource.value = DataSource.EXTENSION
         _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
-        load()
+
+        if (_currentDataSource.value == DataSource.ANILIST) {
+            // ── In AniList mode: ONLY reload episodes from the new extension ──
+            // The anime metadata (title, synopsis, score, etc.) stays from AniList.
+            // The user explicitly chose to view AniList data; switching the extension
+            // source from the episodes header should only change which extension
+            // provides the episodes — NOT silently switch the entire view.
+            reloadEpisodesOnly()
+        } else {
+            // ── In Extension mode: full reload (the extension IS the data source) ──
+            load()
+        }
+    }
+
+    /**
+     * Reloads ONLY the episode list from the extension provider — the anime metadata
+     * (in [_animeState]) is preserved. Used by [switchExtension] when in AniList mode.
+     */
+    private fun reloadEpisodesOnly() {
+        viewModelScope.launch {
+            val sourceName = _currentMatch.value?.source?.name ?: "Unknown"
+            _episodeState.value = EpisodeState.Loading(sourceName)
+            try {
+                val extProvider = registry.forSource(DataSource.EXTENSION)
+                val episodes = withContext(Dispatchers.IO) { extProvider.loadEpisodes(activeRequest) }
+                if (episodes.isNullOrEmpty()) {
+                    _episodeState.value = EpisodeState.NoMatch
+                } else {
+                    val sEpisodes = episodes.map { it.toSEpisode() }
+                    _episodeState.value = EpisodeState.Loaded(sEpisodes, sourceName)
+                    Log.i(TAG, "Reloaded ${episodes.size} episodes from extension (episodes-only)")
+                    // Fetch episode metadata for the new episodes.
+                    val anime = (_animeState.value as? DetailState.Success)?.anime
+                    if (anime != null) launch { fetchEpisodeMetadata(anime, episodes.size) }
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "reloadEpisodesOnly failed", e)
+                _episodeState.value = EpisodeState.Error("Failed: ${e.message}")
+            }
+        }
     }
 
     /** Toggles the watched state of an episode (by URL). In-memory only. */

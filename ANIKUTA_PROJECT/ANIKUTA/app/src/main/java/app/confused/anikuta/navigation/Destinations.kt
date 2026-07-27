@@ -34,6 +34,7 @@ import app.confused.anikuta.feature.updates.UpdatesScreen
 import app.confused.anikuta.feature.watch.WatchRequest
 import app.confused.anikuta.feature.watch.WatchScreen
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -107,6 +108,12 @@ object MoreTabDestination : Screen {
 // ════════════════════════════════════════════════════════════════════════
 
 data class AnimeDetailDestination(val animeId: Int) : Screen {
+    /** Unique key per animeId — prevents Voyager SaveableStateHolder collision
+     *  when two AnimeDetailDestination instances exist simultaneously (e.g. during
+     *  a `navigator.replace` transition when "Switch anime" navigates to a different
+     *  AniList entry). Without this, Voyager crashes with
+     *  "Key AnimeDetailDestination:transition was used multiple times". */
+    override val key: ScreenKey = "AnimeDetailDestination($animeId)"
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
@@ -131,9 +138,7 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             onDownloadResume = { episodeUrl -> appController.resumeDownload(animeId, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(animeId, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(animeId, episodeUrl) },
-            // AniList mode: "Switch anime" opens the AniList search sheet → navigate to the picked anime.
-            onNavigateToAnilistAnime = { newId -> navigator.replace(AnimeDetailDestination(newId)) },
-            // "Link to AniList" is not shown in AniList mode (only in extension mode).
+            // "Link to AniList" is not shown in AniList mode (only for extension entry).
             onLinkToAniList = {},
         )
     }
@@ -152,6 +157,8 @@ data class ExtensionAnimeDetailDestination(
     val sAnime: SAnime,
     val anilistId: Int? = null,
 ) : Screen {
+    /** Unique key per source+url — prevents Voyager SaveableStateHolder collision. */
+    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url})"
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
@@ -186,8 +193,6 @@ data class ExtensionAnimeDetailDestination(
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
             // Extension mode: "Link to AniList" / "Switch anime" opens the AniList linking sheet overlay.
             onLinkToAniList = { appController.startLinking(source, sAnime) },
-            // If the AniList search sheet is used (rare in extension mode), navigate to the picked anime.
-            onNavigateToAnilistAnime = { newId -> navigator.replace(AnimeDetailDestination(newId)) },
         )
     }
 }

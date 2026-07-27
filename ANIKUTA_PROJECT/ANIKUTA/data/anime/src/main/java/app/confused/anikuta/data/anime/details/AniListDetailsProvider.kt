@@ -87,6 +87,38 @@ class AniListDetailsProvider(
     }
 
     /**
+     * Load ONLY episodes — used when the user switches extension from the episodes
+     * header while in AniList mode. Skips the DB-first short-circuit (forces a fresh
+     * fetch from the new extension source).
+     */
+    override suspend fun loadEpisodes(request: DetailsRequest): List<Episode>? = when (request) {
+        is DetailsRequest.ByAniListId -> {
+            // Use the saved source link (or match) to fetch fresh episodes.
+            val savedLink = sourceLinkStore.getLink(request.anilistId)
+            if (savedLink != null) {
+                val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(savedLink.sourceId) }
+                if (source != null) {
+                    val sAnime = SAnimeImpl().apply {
+                        url = savedLink.animeUrl
+                        title = savedLink.animeTitle
+                    }
+                    fetchAndPersistEpisodes(source, sAnime, request.anilistId)
+                } else null
+            } else null
+        }
+        is DetailsRequest.ByExtension -> {
+            // Resolve the source + fetch episodes directly.
+            val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(request.sourceId) }
+                ?: return null
+            val sAnime = SAnimeImpl().apply {
+                url = request.animeUrl
+                title = request.animeTitle
+            }
+            fetchAndPersistEpisodes(source, sAnime, request.anilistId)
+        }
+    }
+
+    /**
      * Stage 2 + 3. Mirrors the `findAndLoadEpisodes` + `loadEpisodes` + `saveEpisodesToDb`
      * logic from the old `AnimeDetailViewModel` (doc 01 §2), but returns the episodes
      * instead of emitting to StateFlows.

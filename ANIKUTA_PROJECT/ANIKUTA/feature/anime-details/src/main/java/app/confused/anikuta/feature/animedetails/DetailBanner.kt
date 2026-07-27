@@ -64,12 +64,12 @@ fun DetailBanner(
     coverColor: Color,
     saved: Boolean,
     currentDataSource: app.confused.anikuta.core.common.model.details.DataSource,
+    entryMode: app.confused.anikuta.core.common.model.details.DataSource,
     onBack: () -> Unit,
     onToggleSave: () -> Unit,
     onLongPressSave: () -> Unit = {},
     onSwitchDataSource: (app.confused.anikuta.core.common.model.details.DataSource) -> Unit = {},
     onLinkToAniList: () -> Unit = {},
-    onSwitchAnilistAnime: () -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -127,9 +127,9 @@ fun DetailBanner(
                 SourceSwitcherMenu(
                     anime = anime,
                     currentDataSource = currentDataSource,
+                    entryMode = entryMode,
                     onSwitchDataSource = onSwitchDataSource,
                     onLinkToAniList = onLinkToAniList,
-                    onSwitchAnilistAnime = onSwitchAnilistAnime,
                     onRefresh = onRefresh,
                 )
             }
