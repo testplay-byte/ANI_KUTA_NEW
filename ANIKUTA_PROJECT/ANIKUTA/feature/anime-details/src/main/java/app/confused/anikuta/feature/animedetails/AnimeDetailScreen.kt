@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.api.AniListApi
+import app.confused.anikuta.core.anilist.model.coverColorHex
 import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
 import app.confused.anikuta.core.preferences.ThemePreferences
 import app.confused.anikuta.data.extension.AnimeExtensionManager
