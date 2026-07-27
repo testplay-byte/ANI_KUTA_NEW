@@ -434,10 +434,13 @@ class AnimeDetailViewModel(
     }
 
     /** The current anilistId (from the active request or a reverse-lookup). */
-    private fun currentAnilistId(): Int? = when (activeRequest) {
-        is DetailsRequest.ByAniListId -> activeRequest.anilistId
-        is DetailsRequest.ByExtension -> activeRequest.anilistId
-            ?: extensionLinkStore.getAniListId(activeRequest.sourceId, activeRequest.animeUrl)
+    private fun currentAnilistId(): Int? {
+        val req = activeRequest  // local val so Kotlin can smart-cast
+        return when (req) {
+            is DetailsRequest.ByAniListId -> req.anilistId
+            is DetailsRequest.ByExtension -> req.anilistId
+                ?: extensionLinkStore.getAniListId(req.sourceId, req.animeUrl)
+        }
     }
 
     /** Sets up [_currentMatch] from the unified anime's sourceId (for the source switcher). */
@@ -466,7 +469,7 @@ class AnimeDetailViewModel(
     }
 
     /** Searches all sources in the background (for the source switcher) without blocking. */
-    private fun searchAllSourcesInBackground(title: String) {
+    private suspend fun searchAllSourcesInBackground(title: String) {
         try {
             val all = sourceMatcher.matchAll(title)
             _allMatches.value = all
@@ -501,9 +504,11 @@ class AnimeDetailViewModel(
 
     /** Finds the library anime row (linked by anilistId, or unlinked by sourceId+url). */
     private suspend fun findLibraryAnime(anime: UnifiedAnime): Anime? {
+        val anilistId = anime.anilistId  // local vals so Kotlin can smart-cast
+        val sourceId = anime.sourceId
         return when {
-            anime.anilistId != null -> animeRepository.getByAnilistId(anime.anilistId)
-            anime.sourceId != null -> animeRepository.getBySourceAndUrl(anime.sourceId, anime.url)
+            anilistId != null -> animeRepository.getByAnilistId(anilistId)
+            sourceId != null -> animeRepository.getBySourceAndUrl(sourceId, anime.url)
             else -> null
         }
     }
