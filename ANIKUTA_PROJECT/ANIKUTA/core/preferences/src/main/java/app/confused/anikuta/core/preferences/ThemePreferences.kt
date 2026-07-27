@@ -86,10 +86,6 @@ enum class AccentPreset(
 
     CUSTOM("Custom", 0xFFB1F256.toInt()),
     ;
-
-    /** Compose [Color] for this preset's seed color. The UI layer converts. */
-    val seedColor: androidx.compose.ui.graphics.Color
-        get() = androidx.compose.ui.graphics.Color(seedColorArgb.toLong() and 0xFFFFFFFF)
 }
 
 /**
