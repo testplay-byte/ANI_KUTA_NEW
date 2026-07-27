@@ -268,7 +268,7 @@ class AniListDetailsProvider(
             if (dbAnime != null) {
                 episodeRepository.deleteByAnimeId(dbAnime.id)
                 sEpisodes.forEachIndexed { index, ep ->
-                    episodeRepository.upsert(ep.toDomainEpisode(anilistId, index).copy(animeId = dbAnime.id))
+                    episodeRepository.upsert(ep.toDomainEpisode(index).copy(animeId = dbAnime.id))
                 }
                 Log.i(TAG, "AniList provider: saved ${sEpisodes.size} episodes to DB for anilistId=$anilistId")
             }
