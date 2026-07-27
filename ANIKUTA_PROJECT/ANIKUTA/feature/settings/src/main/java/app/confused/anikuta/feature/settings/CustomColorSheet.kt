@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package app.confused.anikuta.feature.settings
 
 import androidx.compose.animation.AnimatedVisibility
@@ -380,6 +382,3 @@ private fun ColorSlider(
         )
     }
 }
-
-/** Extension to compute luminance for contrast decisions. */
-private fun Color.luminance(): Float = androidx.compose.ui.graphics.luminance()
