@@ -11,7 +11,6 @@ import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
-import app.confused.anikuta.feature.animedetails.ExtensionDetailScreen
 import app.confused.anikuta.feature.animedetails.WatchEpisodeContext
 import app.confused.anikuta.feature.backup.aniyomi.AniyomiRestoreFlow
 import app.confused.anikuta.feature.backup.BackupSettingsScreen
@@ -119,10 +118,6 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
 
         AnimeDetailScreen(
             animeId = animeId,
-            api = appController.anilistApi,
-            extensionManager = appController.extensionManager,
-            sourceMatcher = appController.sourceMatcher,
-            extensionLinkStore = appController.extensionLinkStore,
             onBack = { navigator.pop() },
             onOpenEpisode = { episode, source, episodeList, watchCtx ->
                 appController.resolveEpisode(episode, source, episodeList, watchCtx, animeId)
@@ -139,32 +134,51 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
     }
 }
 
-data class ExtensionDetailDestination(
+/**
+ * Extension-entry variant of the unified details page. Replaces the old
+ * `ExtensionDetailDestination` (which pushed the now-removed `ExtensionDetailScreen`).
+ *
+ * Renders the SAME `AnimeDetailScreen` in extension mode — the unified page
+ * handles both data sources. The optional [anilistId] enables the AniList-merge
+ * path in `ExtensionDetailsProvider` (linked extension anime get the best of both).
+ */
+data class ExtensionAnimeDetailDestination(
     val source: AnimeCatalogueSource,
     val sAnime: SAnime,
+    val anilistId: Int? = null,
 ) : Screen {
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
-        ExtensionDetailScreen(
-            source = source,
-            sAnime = sAnime,
+
+        // For unlinked extension anime, download states are keyed by sourceId+url
+        // (not anilistId). Use 0 as the download-key fallback — the download
+        // orchestrator resolves by episode URL regardless.
+        val downloadKey = anilistId ?: 0
+        val downloadTasksMap by appController.downloadTasksFlow
+            .collectAsStateWithLifecycle(initialValue = emptyMap())
+        val downloadStates = appController.getDownloadStates(downloadKey, downloadTasksMap)
+
+        AnimeDetailScreen(
+            extensionSource = source,
+            extensionSAnime = sAnime,
+            extensionAnilistId = anilistId,
             onBack = { navigator.pop() },
-            onOpenEpisode = { episode, src, episodeList ->
+            onOpenEpisode = { episode, src, episodeList, watchCtx ->
                 appController.resolveEpisode(
-                    episode, src, episodeList,
-                    WatchEpisodeContext(
-                        animeTitle = sAnime.title,
-                        coverUrl = sAnime.thumbnail_url,
-                    ),
-                    anilistId = 0,
+                    episode, src, episodeList, watchCtx,
+                    anilistId = anilistId ?: 0,
                 )
             },
-            onRelinkAnilist = {
-                // Open the linking sheet as an overlay — don't close the extension page.
-                appController.startLinking(source, sAnime)
+            onDownloadEpisode = { episode, src, watchCtx ->
+                appController.downloadEpisode(episode, src, watchCtx, downloadKey)
             },
+            downloadStates = downloadStates,
+            onDownloadCancel = { episodeUrl -> appController.cancelDownload(downloadKey, episodeUrl) },
+            onDownloadResume = { episodeUrl -> appController.resumeDownload(downloadKey, episodeUrl) },
+            onDownloadRetry = { episodeUrl -> appController.retryDownload(downloadKey, episodeUrl) },
+            onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
         )
     }
 }

@@ -168,8 +168,15 @@ class AppController(
         navigator?.push(AnimeDetailDestination(anilistId))
     }
 
-    fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime) {
-        navigator?.push(ExtensionDetailDestination(source, sAnime))
+    /**
+     * Push the unified details page in extension mode (replaces the old
+     * `pushExtensionDetail` which pushed the now-removed `ExtensionDetailScreen`).
+     *
+     * @param anilistId optional — when non-null, the ExtensionDetailsProvider
+     *   merges AniList metadata into the view (linked extension anime).
+     */
+    fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime, anilistId: Int? = null) {
+        navigator?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId))
     }
 
     fun pushWatch(watchRequest: WatchRequest) {
@@ -537,7 +544,9 @@ class AppController(
     fun onLinked(anilistId: Int, wasCached: Boolean, sAnimeTitle: String) {
         linkingTarget = null
         val nav = navigator
-        if (nav != null && nav.lastItem is ExtensionDetailDestination) {
+        // If we're on the extension-entry unified page, replace it with the AniList-
+        // entry unified page (same screen, AniList data source). Otherwise push.
+        if (nav != null && nav.lastItem is ExtensionAnimeDetailDestination) {
             nav.replace(AnimeDetailDestination(anilistId))
         } else {
             nav?.push(AnimeDetailDestination(anilistId))
@@ -552,13 +561,14 @@ class AppController(
 
     /**
      * Called when the user picks "go without linking" on the linking sheet.
-     * Pushes the extension-only detail page (unless we're already on it).
+     * Pushes the unified details page in extension mode (anilistId = null →
+     * unlinked extension anime). Replaces the old `ExtensionDetailScreen` push.
      */
     fun onGoWithoutLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = null
         val nav = navigator
-        if (nav != null && nav.lastItem !is ExtensionDetailDestination) {
-            nav.push(ExtensionDetailDestination(source, sAnime))
+        if (nav != null && nav.lastItem !is ExtensionAnimeDetailDestination) {
+            nav.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
         }
         Log.i("AnikutaSearch", "Go-without-linking: ${sAnime.title} from ${source.name}")
     }
