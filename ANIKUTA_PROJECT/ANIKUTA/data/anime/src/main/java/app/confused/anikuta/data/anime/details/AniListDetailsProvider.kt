@@ -209,9 +209,13 @@ class AniListDetailsProvider(
         return try {
             val sEpisodes = withContext(Dispatchers.IO) { source.getEpisodeList(sAnime) }
             if (sEpisodes.isEmpty()) return emptyList()
-            saveEpisodesToDb(sEpisodes, anilistId)
+            // Only persist to DB for linked anime (anilistId != null). For unlinked,
+            // the ExtensionDetailsProvider handles persistence via getBySourceAndUrl.
+            if (anilistId != null) {
+                saveEpisodesToDb(sEpisodes, anilistId)
+            }
             sEpisodes.mapIndexed { index, ep ->
-                ep.toDomainEpisode(anilistId, index)
+                ep.toDomainEpisode(index)
             }
         } catch (e: Throwable) {
             Log.e(TAG, "AniList provider: getEpisodeList failed on '${source.name}'", e)
@@ -287,7 +291,6 @@ class AniListDetailsProvider(
  * The caller ([AniListDetailsProvider.saveEpisodesToDb]) fills `animeId` before upsert.
  */
 private fun eu.kanade.tachiyomi.animesource.model.SEpisode.toDomainEpisode(
-    anilistId: Int,
     index: Int,
 ): Episode = Episode(
     id = 0,
