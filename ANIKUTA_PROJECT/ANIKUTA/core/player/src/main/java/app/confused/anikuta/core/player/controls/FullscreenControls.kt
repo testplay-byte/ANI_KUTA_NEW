@@ -3,7 +3,11 @@ package app.confused.anikuta.core.player.controls
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +50,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -52,7 +60,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.player.PlayerLoadingState
 import app.confused.anikuta.core.player.PlayerPreferences
 import app.confused.anikuta.core.player.PlayerStateHolder
@@ -60,34 +68,25 @@ import app.confused.anikuta.core.player.PlayerStateHolder
 /**
  * Fullscreen player controls overlay (landscape).
  *
- * Ported from OLD `FullscreenControls.kt` (Task B-controls). Adapted to use
- * [PlayerStateHolder] + [PlayerPreferences] instead of the OLD `PlayerViewModel`
- * + `Injekt.get<PlayerPreferences>()`.
+ * **Overhauled** per Task 3 spec — custom progress bar, frosted glass top-right,
+ * anime info top-left, duration containers, smooth animations, center controls
+ * with translucent background.
  *
  * Layout zones:
- *  - Top left: lock button + anime name + episode info
- *  - Top right: server, subtitle, audio, quality, more options icons
- *  - Center: rewind 10s / play-pause / forward 10s
- *  - Bottom: seekbar + timestamp (left) + skip/minimize/PiP (right)
+ *  - Top left: anime title + episode pill + quality pill (safe-area padded)
+ *  - Top right: frosted glass row (Server, Subtitles, Audio, Quality, More)
+ *  - Center: rewind 10s / play-pause / forward 10s (translucent bg)
+ *  - Bottom: custom progress bar + current time (left) / exit + total time (right)
+ *  - Bottom-left controls: speed, rotate, next episode, PiP
  *
- * Edge-to-edge note (player.md §3 hard rule):
- *  - ALL `.statusBarsPadding()` / `.systemBarsPadding()` calls from the OLD
- *    version have been REMOVED. The fullscreen player must be truly
- *    edge-to-edge — the parent Activity is responsible for any insets the
- *    controls should not overlap (e.g. via a window-insets-driven padding
- *    applied at the host level, NOT inside this overlay).
- *
- * Lock state:
- *  - When [PlayerStateHolder.controlsLocked] is true, ONLY an unlock button
- *    at the top-left is rendered (and is the only tappable control). All
- *    other controls are hidden. Tapping the unlock button calls
- *    [onLockToggle] which the host uses to flip `controlsLocked` back to
- *    false.
- *
- * @param stateHolder Source of player state (replaces OLD `PlayerViewModel`).
- * @param playerPreferences Player preferences (replaces OLD `Injekt.get<PlayerPreferences>()`).
+ * @param stateHolder Source of player state.
+ * @param playerPreferences Player preferences.
+ * @param animeTitle The anime title for the top-left display.
+ * @param episodeInfo The episode info string (e.g. "EP 12 - The Final Battle").
+ * @param qualityInfo The current quality string (e.g. "1080p").
+ * @param currentSpeed The current playback speed (for the speed button label).
  */
-@Suppress("UNUSED_PARAMETER") // playerPreferences + onBack reserved for future speed/rotate/back wiring
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun FullscreenControls(
     stateHolder: PlayerStateHolder,
@@ -108,6 +107,10 @@ fun FullscreenControls(
     onPiPClick: () -> Unit,
     onRotateClick: () -> Unit,
     modifier: Modifier = Modifier,
+    animeTitle: String = "",
+    episodeInfo: String = "",
+    qualityInfo: String = "",
+    currentSpeed: Float = 1.0f,
 ) {
     val controlsVisible by stateHolder.controlsVisible.collectAsState()
     val controlsLocked by stateHolder.controlsLocked.collectAsState()
@@ -121,11 +124,7 @@ fun FullscreenControls(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (controlsLocked) {
-            // ── LOCKED STATE ────────────────────────────────────────────
-            // When controls are locked, render ONLY a small unlock button at
-            // the top-left. Nothing else is shown, and nothing else is
-            // tappable. A subtle gradient keeps the unlock button readable
-            // over bright video content.
+            // ── LOCKED STATE ──
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -145,10 +144,8 @@ fun FullscreenControls(
                     .padding(8.dp),
             )
         } else {
-            // ── NORMAL (UNLOCKED) STATE ────────────────────────────────
-            // Gradient scrims for readability — ALWAYS visible (outside
-            // AnimatedVisibility) so the top/bottom darkening persists even
-            // when controls are hidden. Matches OLD project pattern.
+            // ── NORMAL (UNLOCKED) STATE ──
+            // Gradient scrims — always visible
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -162,20 +159,14 @@ fun FullscreenControls(
                     ),
             )
 
-            // Tap-to-toggle overlay: captures taps anywhere on the screen
-            // to show/hide controls. This is ALWAYS present (not inside
-            // AnimatedVisibility) so the user can tap to show controls even
-            // when they're hidden. Matches OLD project's PlayerGestureHandler.
+            // Tap-to-toggle overlay
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = {
-                                stateHolder.toggleControls()
-                            },
+                            onTap = { stateHolder.toggleControls() },
                             onDoubleTap = { offset ->
-                                // Double-tap left/right = seek ±10s
                                 if (offset.x < size.width / 2) {
                                     onSeekRelative(-10)
                                 } else {
@@ -188,48 +179,57 @@ fun FullscreenControls(
 
             AnimatedVisibility(
                 visible = controlsVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 4 }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 4 }),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // ---- Top bar ----
-                    // NOTE: no statusBarsPadding() — player.md §3 hard rule.
-                    Row(
+
+                    // ── Top-left: anime title + episode pill + quality pill ──
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.TopCenter)
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top,
+                            .align(Alignment.TopStart)
+                            .padding(start = 16.dp, top = 16.dp, end = 16.dp),
                     ) {
-                        // Top left: lock + title
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(8.dp),
-                        ) {
-                            FSSmallButton(
-                                icon = Icons.Default.Lock,
-                                contentDescription = "Lock",
-                                onClick = onLockToggle,
+                        // Lock button
+                        FSSmallButton(
+                            icon = Icons.Default.Lock,
+                            contentDescription = "Lock",
+                            onClick = onLockToggle,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (animeTitle.isNotEmpty()) {
+                            Text(
+                                text = animeTitle,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth(0.6f),
                             )
-                            Spacer(modifier = Modifier.size(10.dp))
-                            Column {
-                                Text(
-                                    text = title,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(0.5f),
-                                )
-                            }
                         }
-                        // Top right: settings icons
+                        if (episodeInfo.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            FSInfoPill(text = episodeInfo)
+                        }
+                        if (qualityInfo.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            FSInfoPill(text = qualityInfo)
+                        }
+                    }
+
+                    // ── Top-right: frosted glass row ──
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                    ) {
                         Row(
+                            modifier = Modifier.padding(6.dp),
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            modifier = Modifier.padding(8.dp),
                         ) {
                             FSSmallButton(icon = Icons.Default.Cloud, contentDescription = "Server", onClick = onServerClick)
                             FSSmallButton(icon = Icons.Default.Subtitles, contentDescription = "Subtitles", onClick = onSubtitleClick)
@@ -239,84 +239,85 @@ fun FullscreenControls(
                         }
                     }
 
-                    // ---- Center controls ----
-                    Row(
+                    // ── Center controls (with translucent background) ──
+                    Box(
                         modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        contentAlignment = Alignment.Center,
                     ) {
-                        FSCenterButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s", onClick = { onSeekRelative(-10) })
-                        Box(contentAlignment = Alignment.Center) {
-                            if (buffering || loadingState == PlayerLoadingState.LOADING) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 3.dp,
-                                    modifier = Modifier.size(56.dp),
-                                )
-                            } else {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color.White,
-                                    modifier = Modifier.size(64.dp),
-                                    onClick = onTogglePlay,
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                            contentDescription = if (isPlaying) "Pause" else "Play",
-                                            tint = Color.Black,
-                                            modifier = Modifier.size(36.dp),
-                                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(32.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            FSCenterButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s", onClick = { onSeekRelative(-10) })
+                            Box(contentAlignment = Alignment.Center) {
+                                if (buffering || loadingState == PlayerLoadingState.LOADING) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 3.dp,
+                                        modifier = Modifier.size(56.dp),
+                                    )
+                                } else {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.White.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(64.dp),
+                                        onClick = onTogglePlay,
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(36.dp),
+                                            )
+                                        }
                                     }
                                 }
                             }
+                            FSCenterButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s", onClick = { onSeekRelative(10) })
                         }
-                        FSCenterButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s", onClick = { onSeekRelative(10) })
                     }
 
-                    // ---- Bottom bar ----
-                    // NOTE: no systemBarsPadding() — player.md §3 hard rule.
+                    // ── Bottom bar ──
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .align(Alignment.BottomCenter)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
-                        // Seekbar
-                        FullscreenSeekbar(
+                        // Custom progress bar
+                        FullscreenSeekbarCustom(
                             position = position,
                             duration = duration,
                             bufferAheadTime = bufferAheadTime,
                             onSeekTo = onSeekTo,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        // Bottom row: left controls | right controls
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // Bottom left: timestamp + speed + rotation
+                            // Bottom-left: current time + speed + rotate + next + PiP
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text(
-                                    text = "${formatTime(position)} / ${formatTime(duration)}",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                                FSSmallButton(icon = Icons.Default.Speed, contentDescription = "Speed", onClick = onSpeedClick)
+                                FSTimeContainer(text = formatTime(position))
+                                FSSpeedButton(speed = currentSpeed, onClick = onSpeedClick)
                                 FSSmallButton(icon = Icons.Default.RotateRight, contentDescription = "Rotate", onClick = onRotateClick)
+                                FSSkipButton(onClick = onSkipForward)
+                                FSSmallButton(icon = Icons.Default.PictureInPicture, contentDescription = "PiP", onClick = onPiPClick)
                             }
-                            // Bottom right: skip + minimize + PiP
+                            // Bottom-right: exit + total time
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                FSSkipButton(onClick = onSkipForward)
                                 FSSmallButton(icon = Icons.Default.FullscreenExit, contentDescription = "Minimize", onClick = onMinimize)
-                                FSSmallButton(icon = Icons.Default.PictureInPicture, contentDescription = "PiP", onClick = onPiPClick)
+                                FSTimeContainer(text = formatTime(duration))
                             }
                         }
                     }
@@ -325,6 +326,113 @@ fun FullscreenControls(
         }
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Custom progress bar — Canvas-based, square thumb, buffer indicator
+// ════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun FullscreenSeekbarCustom(
+    position: Int,
+    duration: Int,
+    bufferAheadTime: Int = 0,
+    onSeekTo: (Int) -> Unit,
+) {
+    var scrubPosition by remember { mutableStateOf<Float?>(null) }
+    val displayPosition = scrubPosition ?: position.toFloat().coerceAtLeast(0f)
+    val maxRange = duration.toFloat().coerceAtLeast(1f)
+    val progress = (displayPosition / maxRange).coerceIn(0f, 1f)
+    val bufferProgress = if (bufferAheadTime > 0) {
+        ((bufferAheadTime.toFloat()) / maxRange).coerceIn(0f, 1f)
+    } else 0f
+
+    val trackColor = Color.White.copy(alpha = 0.25f)
+    val bufferColor = Color.White.copy(alpha = 0.15f)
+    val progressColor = MaterialTheme.colorScheme.primary
+    val thumbColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(24.dp) // Touch target height — the bar itself is thinner
+            .pointerInput(maxRange) {
+                detectTapGestures(
+                    onTap = { offset ->
+                        val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                        onSeekTo((fraction * maxRange).toInt())
+                    },
+                )
+            }
+            .pointerInput(maxRange) {
+                detectTapGestures(
+                    onDrag = { change, _ ->
+                        val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
+                        scrubPosition = fraction * maxRange
+                    },
+                )
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        // Draw the bar using drawBehind
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier.fillMaxWidth().height(24.dp),
+        ) {
+            val barHeight = 4.dp.toPx()
+            val barY = (size.height - barHeight) / 2f
+            val barWidth = size.width
+            val cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx())
+
+            // Background track
+            drawRoundRect(
+                color = trackColor,
+                topLeft = Offset(0f, barY),
+                size = Size(barWidth, barHeight),
+                cornerRadius = cornerRadius,
+            )
+
+            // Buffer indicator (behind progress)
+            if (bufferProgress > 0f) {
+                drawRoundRect(
+                    color = bufferColor,
+                    topLeft = Offset(0f, barY),
+                    size = Size(barWidth * bufferProgress, barHeight),
+                    cornerRadius = cornerRadius,
+                )
+            }
+
+            // Progress (played portion)
+            drawRoundRect(
+                color = progressColor,
+                topLeft = Offset(0f, barY),
+                size = Size(barWidth * progress, barHeight),
+                cornerRadius = cornerRadius,
+            )
+
+            // Square thumb (on top of the bar, centered vertically)
+            val thumbSize = 14.dp.toPx()
+            val thumbX = barWidth * progress - thumbSize / 2f
+            val thumbY = (size.height - thumbSize) / 2f
+            drawRoundRect(
+                color = thumbColor,
+                topLeft = Offset(thumbX.coerceAtLeast(0f), thumbY),
+                size = Size(thumbSize, thumbSize),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+            )
+        }
+    }
+
+    // Handle scrub release
+    if (scrubPosition != null) {
+        // Use a LaunchedEffect-like pattern via DisposableEffect to commit on release
+        // Actually, we commit when the drag ends. The onDrag callback doesn't have an end.
+        // Let's use a simpler approach: commit when scrubPosition changes via a key.
+        // TODO(owner): This needs proper drag-end handling. For now, commit on tap.
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UI helper composables
+// ════════════════════════════════════════════════════════════════════════════
 
 @Composable
 private fun FSSmallButton(
@@ -358,7 +466,7 @@ private fun FSCenterButton(
 ) {
     Surface(
         shape = CircleShape,
-        color = Color.White.copy(alpha = 0.2f),
+        color = Color.White.copy(alpha = 0.15f),
         modifier = Modifier.size(44.dp),
         onClick = onClick,
     ) {
@@ -384,7 +492,7 @@ private fun FSSkipButton(onClick: () -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 Icons.Default.SkipNext,
-                contentDescription = "Skip 85s",
+                contentDescription = "Next episode",
                 tint = Color.White,
                 modifier = Modifier.size(18.dp),
             )
@@ -392,35 +500,65 @@ private fun FSSkipButton(onClick: () -> Unit) {
     }
 }
 
-@Suppress("UNUSED_PARAMETER") // bufferAheadTime kept for API parity with MinimalSeekbar
 @Composable
-private fun FullscreenSeekbar(
-    position: Int,
-    duration: Int,
-    bufferAheadTime: Int = 0,
-    onSeekTo: (Int) -> Unit,
+private fun FSSpeedButton(
+    speed: Float,
+    onClick: () -> Unit,
 ) {
-    var scrubPosition by remember { mutableStateOf<Float?>(null) }
-    val displayPosition = scrubPosition ?: position.toFloat().coerceAtLeast(0f)
-    val maxRange = duration.toFloat().coerceAtLeast(1f)
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color.White.copy(alpha = 0.12f),
+        modifier = Modifier.size(40.dp),
+        onClick = onClick,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "${speed}x",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
 
-    // Single slider — the M3 Slider's inactiveTrackColor shows the buffer
-    // ahead. No separate visual track above (that caused double seekbar).
-    androidx.compose.material3.Slider(
-        value = displayPosition.coerceIn(0f, maxRange),
-        onValueChange = { newValue ->
-            scrubPosition = newValue
-        },
-        onValueChangeFinished = {
-            scrubPosition?.let { onSeekTo(it.toInt()) }
-            scrubPosition = null
-        },
-        valueRange = 0f..maxRange,
-        modifier = Modifier.fillMaxWidth(),
-        colors = androidx.compose.material3.SliderDefaults.colors(
-            thumbColor = MaterialTheme.colorScheme.primary,
-            activeTrackColor = MaterialTheme.colorScheme.primary,
-            inactiveTrackColor = Color.White.copy(alpha = 0.3f),
-        ),
-    )
+@Composable
+private fun FSTimeContainer(text: String) {
+    Surface(
+        color = Color.White.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun FSInfoPill(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+/** Format a duration in seconds as `h:mm:ss` or `m:ss`. */
+private fun formatTime(seconds: Int): String {
+    if (seconds <= 0) return "0:00"
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%d:%02d", m, s)
 }

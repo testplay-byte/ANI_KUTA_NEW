@@ -1207,9 +1207,36 @@ private fun FullscreenControlsOverlay(
     onSubtitleClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    var showSpeedSheet by remember { mutableStateOf(false) }
+
+    // Current playback speed (read from MPV for the speed button label)
+    var currentSpeed by remember { mutableStateOf(1.0f) }
+    LaunchedEffect(Unit) {
+        try {
+            currentSpeed = MPVLib.getPropertyDouble("speed")?.toFloat() ?: 1.0f
+        } catch (e: Exception) {
+            currentSpeed = 1.0f
+        }
+    }
+
+    // Episode info for the top-left display
+    val currentEpIndex by stateHolder.currentEpisodeIndex.collectAsStateWithLifecycle()
+    val currentEp = watchRequest.episodeList.getOrNull(currentEpIndex)
+    val episodeInfo = currentEp?.let { ep ->
+        val epNum = ep.episode_number.toInt()
+        "EP $epNum" + (ep.name?.takeIf { it.isNotBlank() }?.let { " - $it" } ?: "")
+    } ?: ""
+
+    // Quality info
+    val qualityInfo = watchRequest.videoQuality.takeIf { it > 0 }?.let { "${it}p" } ?: ""
+
     app.confused.anikuta.core.player.controls.FullscreenControls(
         stateHolder = stateHolder,
         playerPreferences = playerPreferences,
+        animeTitle = watchRequest.animeTitle,
+        episodeInfo = episodeInfo,
+        qualityInfo = qualityInfo,
+        currentSpeed = currentSpeed,
         onBack = {
             stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
             (context as? Activity)?.requestedOrientation =
@@ -1238,11 +1265,19 @@ private fun FullscreenControlsOverlay(
         onSubtitleClick = onSubtitleClick,
         onAudioClick = { /* TODO: open audio sheet */ },
         onQualityClick = onQualityClick,
-        onSpeedClick = { /* TODO: open speed sheet */ },
+        onSpeedClick = { showSpeedSheet = true },
         onServerClick = { /* TODO: open server sheet */ },
         onMoreClick = { /* TODO: open more sheet */ },
         onSkipForward = {
-            try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
+            // Next episode: find the next episode in the list and switch to it
+            val nextIndex = currentEpIndex + 1
+            if (nextIndex < watchRequest.episodeList.size) {
+                // Trigger episode switch via the state holder
+                stateHolder.setCurrentEpisodeIndex(nextIndex)
+            } else {
+                // No next episode — skip forward by the skip duration
+                try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
+            }
         },
         onRotateClick = {
             (context as? Activity)?.requestedOrientation =
@@ -1256,6 +1291,30 @@ private fun FullscreenControlsOverlay(
             } catch (e: Exception) { Log.w(TAG, "PiP not available", e) }
         },
     )
+
+    // ── Speed selection sheet ──
+    if (showSpeedSheet) {
+        app.confused.anikuta.feature.watch.sheets.SpeedSheet(
+            currentSpeed = currentSpeed,
+            onSpeedSelected = { speed ->
+                try {
+                    MPVLib.setPropertyDouble("speed", speed.toDouble())
+                    currentSpeed = speed
+                    // Save to the appropriate preference based on audio version
+                    val audioVersion = watchRequest.videoAudio
+                    if (audioVersion.contains("dub", ignoreCase = true)) {
+                        playerPreferences.speedDub().set(speed)
+                    } else {
+                        playerPreferences.speedSub().set(speed)
+                    }
+                    Log.i(TAG, "Speed set to $speed (audio: $audioVersion)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to set speed", e)
+                }
+            },
+            onDismiss = { showSpeedSheet = false },
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
