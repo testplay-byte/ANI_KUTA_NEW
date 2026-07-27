@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,10 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.coverUrl
-import app.confused.anikuta.core.anilist.model.displayTitle
-import app.confused.anikuta.core.anilist.model.nextAiringDisplay
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
+import app.confused.anikuta.core.common.model.details.UnifiedStatus
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import coil3.compose.AsyncImage
 
@@ -52,16 +49,27 @@ import coil3.compose.AsyncImage
  *
  * Per design language §4: edge-to-edge (status bar overlays), 8dp blur,
  * gradient black 20% → transparent → background.
+ *
+ * Consumes [UnifiedAnime] — works for both AniList and extension data sources.
+ * Conditional rendering per doc 04 Table 3:
+ * - Score/status/episode-count meta row: shown only if non-null.
+ * - Next-airing pill: shown only if [UnifiedAnime.nextAiringEpisode] != null (AniList-only).
+ *
+ * @param onMore the three-dot menu callback (wired to [SourceSwitcherMenu]).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DetailBanner(
-    anime: AniListAnime,
+    anime: UnifiedAnime,
     coverColor: Color,
     saved: Boolean,
+    currentDataSource: app.confused.anikuta.core.common.model.details.DataSource,
     onBack: () -> Unit,
     onToggleSave: () -> Unit,
     onLongPressSave: () -> Unit = {},
+    onSwitchDataSource: (app.confused.anikuta.core.common.model.details.DataSource) -> Unit = {},
+    onSwitchExtension: () -> Unit = {},
+    onRefresh: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         Box(
@@ -113,7 +121,15 @@ fun DetailBanner(
                     onClick = onToggleSave,
                     onLongClick = onLongPressSave,
                 )
-                ActionButton(icon = Icons.Filled.MoreHoriz, contentDescription = "More", onClick = {})
+                // Three-dot source-switcher menu (replaces the no-op stub).
+                // SourceSwitcherMenu renders its own trigger button + dropdown.
+                SourceSwitcherMenu(
+                    anime = anime,
+                    currentDataSource = currentDataSource,
+                    onSwitchDataSource = onSwitchDataSource,
+                    onSwitchExtension = onSwitchExtension,
+                    onRefresh = onRefresh,
+                )
             }
         }
 
@@ -127,7 +143,7 @@ fun DetailBanner(
             if (anime.coverUrl != null) {
                 AsyncImage(
                     model = anime.coverUrl,
-                    contentDescription = anime.displayTitle,
+                    contentDescription = anime.title,
                     modifier = Modifier
                         .size(width = 100.dp, height = 150.dp)
                         .clip(RoundedCornerShape(12.dp)),
@@ -136,7 +152,7 @@ fun DetailBanner(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = anime.displayTitle,
+                    text = anime.title,
                     fontFamily = RobotoFamily,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -145,10 +161,12 @@ fun DetailBanner(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.height(6.dp))
+                // Meta row: score (AniList-only) · status · episode count.
+                val statusLabel = anime.status.displayLabel()
                 val metaParts = buildList {
                     anime.averageScore?.let { add("\u2605 $it%") }
-                    anime.status?.let { add(it.replace("_", " ").lowercase()) }
-                    anime.episodes?.let { add("$it eps") }
+                    statusLabel?.let { add(it.lowercase()) }
+                    anime.episodeCount?.let { add("$it eps") }
                 }
                 if (metaParts.isNotEmpty()) {
                     Text(
@@ -159,25 +177,53 @@ fun DetailBanner(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                anime.nextAiringDisplay?.let { display ->
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(50),
-                    ) {
-                        Text(
-                            text = display,
-                            fontFamily = RobotoFamily,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        )
+                // Next-airing pill (AniList-only — extensions can't provide this).
+                anime.nextAiringEpisode?.let { airing ->
+                    val display = formatNextAiring(airing)
+                    if (display != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(50),
+                        ) {
+                            Text(
+                                text = display,
+                                fontFamily = RobotoFamily,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** Formats the next-airing countdown (e.g. "EP 3 in 2d 5h"). Returns null if data is incomplete. */
+private fun formatNextAiring(airing: app.confused.anikuta.core.common.model.details.NextAiringEpisode): String? {
+    val ep = airing.episode
+    val secs = airing.timeUntilAiring
+    if (secs <= 0) return "EP $ep soon"
+    val days = secs / 86400
+    val hours = (secs % 86400) / 3600
+    return when {
+        days >= 1 -> "EP $ep in ${days}d ${hours}h"
+        hours >= 1 -> "EP $ep in ${hours}h"
+        else -> "EP $ep in ${secs / 60}m"
+    }
+}
+
+/** Display label for [UnifiedStatus] — null for UNKNOWN (the badge is hidden). */
+private fun UnifiedStatus.displayLabel(): String? = when (this) {
+    UnifiedStatus.FINISHED -> "Finished"
+    UnifiedStatus.RELEASING -> "Releasing"
+    UnifiedStatus.NOT_YET_RELEASED -> "Not yet released"
+    UnifiedStatus.CANCELLED -> "Cancelled"
+    UnifiedStatus.HIATUS -> "On hiatus"
+    UnifiedStatus.UNKNOWN -> null
 }
 
 @OptIn(ExperimentalFoundationApi::class)

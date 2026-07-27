@@ -18,48 +18,50 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.api.AniListApi
-import app.confused.anikuta.core.anilist.model.coverColorHex
+import app.confused.anikuta.core.common.model.details.AnimeDetailsProviderRegistry
+import app.confused.anikuta.core.common.model.details.DataSource
+import app.confused.anikuta.core.common.model.details.DetailsRequest
 import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
 import app.confused.anikuta.core.preferences.ThemePreferences
-import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import org.koin.core.context.GlobalContext
 
 /**
- * The anime detail screen — shows AniList metadata + real episodes from a
- * matched extension source.
+ * The **unified** anime detail screen — renders data from either AniList OR
+ * an extension via the [AnimeDetailsProviderRegistry] translation layer
+ * (doc 05). ONE screen serves both data sources; a three-dot menu
+ * ([SourceSwitcherMenu]) switches the source in-place.
  *
- * Three-stage load (per design spec §6.1):
- * 1. AniList → anime metadata (title, cover, description, score).
- * 2. Extension source match → [SourceMatcher] searches trusted sources.
- * 3. Episode list → `source.getEpisodeList(sAnime)` on the matched source.
+ * # Entry modes
  *
- * The screen creates an [AnimeDetailViewModel] scoped to `animeId` (survives
- * configuration changes) and observes its state flows.
+ * - **AniList entry** ([animeId] != null): the user tapped an anime from
+ *   browse/search. Initial data source = ANILIST.
+ * - **Extension entry** ([extensionSource] != null + [extensionSAnime] != null):
+ *   the user opened an extension anime (possibly unlinked). Initial data
+ *   source = EXTENSION. `anilistId` is null for unlinked anime.
  *
- * UI features:
- * - **Pull-to-refresh** — wraps the content in `PullToRefreshBox`; pulling
- *   down triggers [AnimeDetailViewModel.refresh] (re-runs all three stages).
- * - **Source indicator** — next to the "Episodes" header, shows the matched
- *   source name (or a "Search manually" button when no source matched).
- * - **Manual search** — a search icon button opens [ManualSearchSheet], where
- *   the user can search extensions with a custom query and link a result.
+ * # Phase 9 adaptive theming
  *
- * @param animeId the AniList anime ID.
- * @param api the AniList API client.
- * @param extensionManager provides installed + trusted sources.
- * @param sourceMatcher searches sources by title.
- * @param onBack called when the user navigates back.
- * @param onOpenEpisode called when an episode is tapped (episode + source).
+ * The `MaterialTheme(dynamicScheme)` wrap (lines ~138-160) is PRESERVED from
+ * the pre-refactor screen. `coverColorHex` now flows from `UnifiedAnime`
+ * (AniList's `coverImage.color` in AniList mode, or Palette-extracted in
+ * extension mode via the provider). When null, the user's palette is used.
+ *
+ * @param animeId the AniList anime ID (AniList entry), or null for extension entry.
+ * @param extensionSource the extension source (extension entry), or null.
+ * @param extensionSAnime the SAnime (extension entry), or null.
+ * @param extensionAnilistId the linked AniList ID for an extension entry (nullable).
  */
 @Composable
 fun AnimeDetailScreen(
-    animeId: Int,
-    api: AniListApi,
-    extensionManager: AnimeExtensionManager,
-    sourceMatcher: SourceMatcher,
-    extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
+    animeId: Int? = null,
+    extensionSource: AnimeCatalogueSource? = null,
+    extensionSAnime: SAnime? = null,
+    extensionAnilistId: Int? = null,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit = { _, _, _, _ -> },
     /** Agent 2 — Downloads: enqueues a download for an episode (from the episode row button). */
@@ -73,19 +75,33 @@ fun AnimeDetailScreen(
 ) {
     val context = LocalContext.current
 
-    // Inject repositories via Koin (for library save functionality + episode metadata).
-    val animeRepository: app.confused.anikuta.core.common.repository.AnimeRepository = org.koin.core.context.GlobalContext.get().get()
-    val categoryRepository: app.confused.anikuta.core.common.repository.CategoryRepository = org.koin.core.context.GlobalContext.get().get()
-    val episodeMetadataRepository: app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository = org.koin.core.context.GlobalContext.get().get()
-    val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore = org.koin.core.context.GlobalContext.get().get()
-    val episodeRepository: app.confused.anikuta.core.common.repository.EpisodeRepository = org.koin.core.context.GlobalContext.get().get()
+    // Inject the provider registry + repositories via Koin.
+    val registry: AnimeDetailsProviderRegistry = remember { GlobalContext.get().get() }
+    val animeRepository: app.confused.anikuta.core.common.repository.AnimeRepository = remember { GlobalContext.get().get() }
+    val categoryRepository: app.confused.anikuta.core.common.repository.CategoryRepository = remember { GlobalContext.get().get() }
+    val episodeMetadataRepository: app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository = remember { GlobalContext.get().get() }
+    val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore = remember { GlobalContext.get().get() }
+    val extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore = remember { GlobalContext.get().get() }
+    val episodeRepository: app.confused.anikuta.core.common.repository.EpisodeRepository = remember { GlobalContext.get().get() }
+    val sourceMatcher: SourceMatcher = remember { GlobalContext.get().get() }
+    val api: AniListApi = remember { GlobalContext.get().get() }
 
-    // ── Dynamic cover-color theming (Task 1.3) ──
-    // When adaptiveColorsDetails is ON and the anime has a cover color,
-    // wrap the entire screen content in a MaterialTheme whose ColorScheme
-    // is generated from the cover color. When OFF or no color, the user's
-    // selected palette is used (no override).
-    val themePrefs = remember { org.koin.core.context.GlobalContext.get().get<ThemePreferences>() }
+    // ── Build the initial request from the entry mode ──
+    val initialRequest: DetailsRequest = remember(animeId, extensionSource, extensionSAnime) {
+        when {
+            animeId != null -> DetailsRequest.ByAniListId(animeId)
+            extensionSource != null && extensionSAnime != null -> DetailsRequest.ByExtension(
+                sourceId = extensionSource.id,
+                animeUrl = extensionSAnime.url,
+                animeTitle = extensionSAnime.title,
+                anilistId = extensionAnilistId,
+            )
+            else -> error("AnimeDetailScreen requires either animeId or (extensionSource + extensionSAnime)")
+        }
+    }
+
+    // ── Dynamic cover-color theming (Phase 9 — preserved) ──
+    val themePrefs = remember { GlobalContext.get().get<ThemePreferences>() }
     val adaptiveColorsDetails by themePrefs.adaptiveColorsDetails.changes()
         .collectAsStateWithLifecycle(initialValue = themePrefs.adaptiveColorsDetails.get())
     val themeMode by themePrefs.themeMode.changes()
@@ -95,20 +111,20 @@ fun AnimeDetailScreen(
 
     @Suppress("UNCHECKED_CAST")
     val vm: AnimeDetailViewModel = viewModel(
-        key = "detail_$animeId",
+        key = "detail_${animeId ?: "${extensionSource?.id}_${extensionSAnime?.url}"}",
         factory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
                 AnimeDetailViewModel(
-                    anilistId = animeId,
-                    api = api,
-                    extensionManager = extensionManager,
-                    sourceMatcher = sourceMatcher,
+                    initialRequest = initialRequest,
+                    registry = registry,
                     animeRepository = animeRepository,
                     categoryRepository = categoryRepository,
                     episodeRepository = episodeRepository,
                     extensionLinkStore = extensionLinkStore,
                     sourceLinkStore = sourceLinkStore,
                     episodeMetadataRepository = episodeMetadataRepository,
+                    sourceMatcher = sourceMatcher,
+                    api = api,
                     appContext = context.applicationContext,
                 ) as T
         },
@@ -130,9 +146,11 @@ fun AnimeDetailScreen(
     val categories by vm.categories.collectAsState()
     val showCategoryPicker by vm.showCategoryPicker.collectAsState()
     val currentAnimeCategoryIds by vm.currentAnimeCategoryIds.collectAsState()
-    // Available sources for the manual-search source selector. Computed once
-    // (not a StateFlow — the list doesn't change while the screen is open).
+    val currentDataSource by vm.currentDataSource.collectAsState()
     val availableSources = remember { vm.getAvailableSources() }
+
+    // ── Three-dot menu state (controls the ManualSearchSheet for extension switching) ──
+    var showExtensionSwitcher by remember { mutableStateOf(false) }
 
     // ── Generate dynamic scheme from cover color when available ──
     val coverColorArgb: Int = remember(animeState) {
@@ -186,10 +204,13 @@ fun AnimeDetailScreen(
                     onToggleSave = vm::toggleSave,
                     onLongPressSave = vm::openCategoryPicker,
                     onBack = onBack,
+                    currentDataSource = currentDataSource,
+                    onSwitchDataSource = vm::switchDataSource,
+                    onSwitchExtension = { showExtensionSwitcher = true },
+                    onRefresh = vm::refresh,
                     onOpenEpisode = onOpenEpisode,
                     onToggleWatched = vm::toggleWatched,
                     onSwitchSource = vm::switchSource,
-                    onRefresh = vm::refresh,
                     onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
                     onLinkManual = vm::linkManual,
                     onClearManualSearch = vm::clearManualSearch,
@@ -209,6 +230,30 @@ fun AnimeDetailScreen(
         MaterialTheme(colorScheme = dynamicScheme, content = screenContent)
     } else {
         screenContent()
+    }
+
+    // ── Manual search sheet (for extension switching — opened from the three-dot menu) ──
+    val successState = animeState as? DetailState.Success
+    if (showExtensionSwitcher) {
+        ManualSearchSheet(
+            initialQuery = successState?.anime?.title ?: "",
+            availableSources = availableSources,
+            isSearching = isSearching,
+            results = manualSearchResults,
+            errors = manualSearchErrors,
+            hasSearched = hasSearched,
+            currentMatch = currentMatch,
+            onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
+            onLinkManual = { result ->
+                // The user picked a result — convert to source + SAnime + switch.
+                vm.switchExtension(result.source, result.sAnime)
+                showExtensionSwitcher = false
+            },
+            onDismiss = {
+                vm.clearManualSearch()
+                showExtensionSwitcher = false
+            },
+        )
     }
 
     // Category picker dialog (long-press on bookmark button).

@@ -6,19 +6,28 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.confused.anikuta.core.anilist.api.AniListApi
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.coverUrl
-import app.confused.anikuta.core.anilist.model.displayTitle
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.AnimeStatus
 import app.confused.anikuta.core.common.model.Category
+import app.confused.anikuta.core.common.model.details.AnimeDetailsProviderRegistry
+import app.confused.anikuta.core.common.model.details.DataSource
+import app.confused.anikuta.core.common.model.details.DetailsRequest
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.common.repository.CategoryRepository
-import app.confused.anikuta.data.extension.AnimeExtensionManager
+import app.confused.anikuta.core.common.repository.EpisodeRepository
+import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata
+import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadataRequest
+import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository
+import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
+import app.confused.anikuta.data.extension.cache.SourceLinkStore
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
-import app.confused.anikuta.data.extension.matcher.SourceMatcher.ManualSearchResult
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.model.SAnimeImpl
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.SEpisodeImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,43 +36,60 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The ViewModel for [AnimeDetailScreen].
+ * The ViewModel for [AnimeDetailScreen] — the **unified** details page that
+ * renders data from either AniList OR an extension via the
+ * [AnimeDetailsProviderRegistry] translation layer (doc 05).
  *
- * Orchestrates the three-stage load (per the anime-details design spec §6.1):
- * 1. **AniList** — fetch anime metadata (title, cover, description, score, etc.).
- * 2. **Extension source match** — search trusted sources by title, find the
- *   best-matching source + SAnime.
- * 3. **Episode list** — call `source.getEpisodeList(sAnime)` on the matched
- *   source to get real episodes.
+ * # Architecture
  *
- * Also handles:
- * - **Source switching** — the user can pick a different source from all
- *   matches. The selection is persisted per-anime in SharedPreferences.
- * - **Watched state** — in-memory `Set<String>` keyed by episode URL. Toggle
- *   on tap. (Will be persisted to a store in a later phase.)
- * - **Toast notifications** — surfaces errors to the user via Toast (per the
- *   Step 5 prompt: "No sources found", "Failed to load episodes", etc.).
+ * - **Source-agnostic.** The VM holds a [DetailsRequest] (the anime's identity)
+ *   + a [currentDataSource] (AniList or Extension). It calls
+ *   `registry.forSource(currentDataSource).load(request)` and renders whatever
+ *   [UnifiedAnime] comes back. It never calls `AniListApi` or
+ *   `source.getEpisodeList` directly — only through the provider.
  *
- * @param anilistId the AniList anime ID (from the browse/home screen tap).
- * @param api the AniList API client.
- * @param extensionManager provides the live list of installed + trusted sources.
- * @param sourceMatcher searches sources by title.
- * @param extensionLinkStore caches extension→AniList links — used to prefer the
- *   source the user originally came from when loading episodes (fixes the
- *   "wrong extension picked" issue the owner reported).
- * @param appContext for SharedPreferences + Toast (application-scoped).
+ * - **In-place source switching.** [switchDataSource] flips [currentDataSource]
+ *   and re-queries the provider. Scroll position, library state, and watched
+ *   flags survive (they're keyed on anilistId / sourceId+url, not on the
+ *   displayed data source). This is the UX Animiru CANNOT do (doc 03).
+ *
+ * - **Extension switching.** [switchExtension] re-points the request to a
+ *   different `AnimeCatalogueSource` + `SAnime` and reloads — used by the
+ *   ManualSearchSheet when the user picks a different extension.
+ *
+ * # Library keying (doc 04 §6, owner requirement Q2)
+ *
+ * - **Linked anime** (anilistId != null): library row keyed by `anilistId`.
+ * - **Unlinked extension anime** (anilistId == null): keyed by `sourceId + url`
+ *   via `AnimeRepository.getBySourceAndUrl`. This makes unlinked extension
+ *   anime visible in the library (the old `ExtensionDetailScreen` shortcoming).
+ *
+ * @param initialRequest the anime's identity — either [DetailsRequest.ByAniListId]
+ *   (user tapped from browse/search) or [DetailsRequest.ByExtension] (user opened
+ *   an extension anime, possibly unlinked).
+ * @param registry the provider registry (Koin multi-binding).
+ * @param animeRepository library save + library-key lookups.
+ * @param categoryRepository set-categories dialog.
+ * @param episodeRepository (kept for future direct-episode queries; the provider
+ *   handles persistence internally now).
+ * @param extensionLinkStore reverse-lookup for library keying + linking state.
+ * @param sourceLinkStore saved AniList→extension links.
+ * @param episodeMetadataRepository per-episode metadata enrichment (Jikan/Anikage/AniList).
+ * @param sourceMatcher resolves sourceId → AnimeCatalogueSource (for ManualSearchSheet).
+ * @param api AniList API (for the metadata-enrichment request + fallback).
+ * @param appContext for SharedPreferences (per-anime source preference) + Toast.
  */
 class AnimeDetailViewModel(
-    private val anilistId: Int,
-    private val api: AniListApi,
-    private val extensionManager: AnimeExtensionManager,
-    private val sourceMatcher: SourceMatcher,
+    private val initialRequest: DetailsRequest,
+    private val registry: AnimeDetailsProviderRegistry,
     private val animeRepository: AnimeRepository,
     private val categoryRepository: CategoryRepository,
-    private val episodeRepository: app.confused.anikuta.core.common.repository.EpisodeRepository,
-    private val extensionLinkStore: app.confused.anikuta.data.extension.cache.ExtensionLinkStore,
-    private val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore,
-    private val episodeMetadataRepository: app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository,
+    private val episodeRepository: EpisodeRepository,
+    private val extensionLinkStore: ExtensionLinkStore,
+    private val sourceLinkStore: SourceLinkStore,
+    private val episodeMetadataRepository: EpisodeMetadataRepository,
+    private val sourceMatcher: SourceMatcher,
+    private val api: AniListApi,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -76,18 +102,22 @@ class AnimeDetailViewModel(
     val episodeState: StateFlow<EpisodeState> = _episodeState.asStateFlow()
 
     /** Per-episode metadata map (episodeNumber → EpisodeMetadata). */
-    private val _episodeMetadata = MutableStateFlow<Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>>(emptyMap())
-    val episodeMetadata: StateFlow<Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>> = _episodeMetadata.asStateFlow()
+    private val _episodeMetadata = MutableStateFlow<Map<Int, EpisodeMetadata>>(emptyMap())
+    val episodeMetadata: StateFlow<Map<Int, EpisodeMetadata>> = _episodeMetadata.asStateFlow()
 
-    /** All sources that matched the anime (for the source switcher). */
+    /** The currently-active data source (drives the three-dot menu). */
+    private val _currentDataSource = MutableStateFlow(initialDataSource())
+    val currentDataSource: StateFlow<DataSource> = _currentDataSource.asStateFlow()
+
+    /** All sources that matched the anime (for the manual-search / extension-switcher). */
     private val _allMatches = MutableStateFlow<List<SourceMatcher.SourceMatch>>(emptyList())
     val allMatches: StateFlow<List<SourceMatcher.SourceMatch>> = _allMatches.asStateFlow()
 
-    /** The currently-selected source match (drives episode loading). */
+    /** The currently-selected source match (drives episode loading + extension switching). */
     private val _currentMatch = MutableStateFlow<SourceMatcher.SourceMatch?>(null)
     val currentMatch: StateFlow<SourceMatcher.SourceMatch?> = _currentMatch.asStateFlow()
 
-    /** In-memory watched set (keyed by episode URL). Phase 5 = no persistence. */
+    /** In-memory watched set (keyed by episode URL). */
     private val _watchedEpisodes = MutableStateFlow<Set<String>>(emptySet())
     val watchedEpisodes: StateFlow<Set<String>> = _watchedEpisodes.asStateFlow()
 
@@ -103,221 +133,119 @@ class AnimeDetailViewModel(
     private val _showCategoryPicker = MutableStateFlow(false)
     val showCategoryPicker: StateFlow<Boolean> = _showCategoryPicker.asStateFlow()
 
-    /** The category IDs currently assigned to this anime (for pre-selection tick marks). */
+    /** The category IDs currently assigned to this anime. */
     private val _currentAnimeCategoryIds = MutableStateFlow<Set<Long>>(emptySet())
     val currentAnimeCategoryIds: StateFlow<Set<Long>> = _currentAnimeCategoryIds.asStateFlow()
 
-    /**
-     * `true` while a pull-to-refresh is in progress. Drives the
-     * `PullToRefreshBox` indicator. Set to `true` at the start of [refresh]
-     * and `false` when the full three-stage load completes (or fails).
-     */
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    /**
-     * `true` while a manual search (from the ManualSearchSheet) is running.
-     * Drives the sheet's loading indicator.
-     */
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
-    /** The latest manual-search results (for the ManualSearchSheet). */
-    private val _manualSearchResults = MutableStateFlow<List<ManualSearchResult>>(emptyList())
-    val manualSearchResults: StateFlow<List<ManualSearchResult>> = _manualSearchResults.asStateFlow()
+    private val _manualSearchResults = MutableStateFlow<List<SourceMatcher.ManualSearchResult>>(emptyList())
+    val manualSearchResults: StateFlow<List<SourceMatcher.ManualSearchResult>> = _manualSearchResults.asStateFlow()
 
-    /**
-     * Per-source errors from the most recent manual search.
-     * Each pair is (sourceName, errorMessage). Empty if all sources succeeded.
-     * The ManualSearchSheet shows these so the user knows WHY a source didn't
-     * return results — not just that it didn't.
-     */
     private val _manualSearchErrors = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val manualSearchErrors: StateFlow<List<Pair<String, String>>> = _manualSearchErrors.asStateFlow()
 
-    /**
-     * Per-source errors from the most recent auto-match (matchAll).
-     * `null` if matchAll hasn't run. Empty if all sources succeeded.
-     * The NoSourcesState UI shows these so the user knows WHY auto-match failed.
-     */
     private val _autoMatchErrors = MutableStateFlow<List<Pair<String, String>>?>(null)
     val autoMatchErrors: StateFlow<List<Pair<String, String>>?> = _autoMatchErrors.asStateFlow()
 
-    /** `true` if at least one manual search has been performed (so the sheet
-     *  can distinguish "haven't searched yet" from "searched, 0 results"). */
     private val _hasSearched = MutableStateFlow(false)
     val hasSearched: StateFlow<Boolean> = _hasSearched.asStateFlow()
 
     private val sourcePrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    /** The active request (mutable — changes when the user switches extension). */
+    private var activeRequest: DetailsRequest = initialRequest
+
     init {
-        loadAnimeDetails()
-        // Observe library save state + categories.
+        load()
+        observeLibraryState()
         viewModelScope.launch {
-            animeRepository.observeByAnilistId(anilistId).collect { anime ->
-                _isSaved.value = anime?.favorite == true
-            }
+            categoryRepository.observeVisible().collect { _categories.value = it }
         }
-        viewModelScope.launch {
-            categoryRepository.observeVisible().collect { cats ->
-                _categories.value = cats
-            }
-        }
-    }
-
-    // ── Library save ──
-
-    /**
-     * Toggle save state. Short-press on the bookmark button.
-     * Saves to the Default category (id=1) on first save.
-     */
-    fun toggleSave() {
-        viewModelScope.launch {
-            try {
-                val existing = animeRepository.getByAnilistId(anilistId)
-                if (existing != null) {
-                    val newFav = !existing.favorite
-                    animeRepository.updateFavorite(
-                        id = existing.id,
-                        favorite = newFav,
-                        dateAdded = if (newFav) System.currentTimeMillis() else existing.dateAdded,
-                    )
-                    if (newFav) {
-                        // Assign to Default category.
-                        categoryRepository.setAnimeCategories(existing.id, listOf(Category.DEFAULT_ID))
-                    }
-                } else {
-                    // Need AniList data to create the row. Fetch if needed.
-                    val anime = _animeState.value
-                    if (anime is DetailState.Success) {
-                        saveAnimeToLibrary(anime.anime)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "toggleSave failed", e)
-            }
-        }
-    }
-
-    /** Open the set-categories dialog (long-press on bookmark).
-     *  Loads the anime's current categories first so they show tick marks. */
-    fun openCategoryPicker() {
-        viewModelScope.launch {
-            try {
-                val cats = getAnimeCategories()
-                _currentAnimeCategoryIds.value = cats.map { it.id }.toSet()
-                Log.d(TAG, "openCategoryPicker: loaded ${cats.size} current categories")
-            } catch (e: Exception) {
-                Log.e(TAG, "openCategoryPicker: failed to load current categories", e)
-                _currentAnimeCategoryIds.value = emptySet()
-            }
-            _showCategoryPicker.value = true
-        }
-    }
-
-    fun dismissCategoryPicker() {
-        _showCategoryPicker.value = false
-    }
-
-    /**
-     * Save the anime to the selected categories. Used by the CategoryPickerDialog.
-     * Creates the anime row if it doesn't exist, then sets the category assignments.
-     */
-    fun saveToCategories(categoryIds: Set<Long>) {
-        viewModelScope.launch {
-            try {
-                val existing = animeRepository.getByAnilistId(anilistId)
-                val animeId = if (existing != null) {
-                    // Ensure favorite=true.
-                    if (!existing.favorite) {
-                        animeRepository.updateFavorite(
-                            id = existing.id,
-                            favorite = true,
-                            dateAdded = System.currentTimeMillis(),
-                        )
-                    }
-                    existing.id
-                } else {
-                    val anime = _animeState.value
-                    if (anime is DetailState.Success) {
-                        saveAnimeToLibrary(anime.anime)
-                    } else {
-                        Log.w(TAG, "saveToCategories: no AniList data yet, cannot save")
-                        return@launch
-                    }
-                }
-                categoryRepository.setAnimeCategories(animeId, categoryIds.toList())
-                _showCategoryPicker.value = false
-            } catch (e: Exception) {
-                Log.e(TAG, "saveToCategories failed", e)
-            }
-        }
-    }
-
-    /** Get the categories currently assigned to this anime. */
-    suspend fun getAnimeCategories(): List<Category> {
-        val existing = animeRepository.getByAnilistId(anilistId) ?: return emptyList()
-        return categoryRepository.getAnimeCategories(existing.id)
-    }
-
-    /** Create a new category (from the AddCategoryDialog). */
-    fun createCategory(name: String) {
-        viewModelScope.launch {
-            try {
-                categoryRepository.create(name)
-            } catch (e: Exception) {
-                Log.e(TAG, "createCategory failed", e)
-            }
-        }
-    }
-
-    /**
-     * Upsert the anime into the library with favorite=true + cached AniList metadata.
-     * Returns the DB row id.
-     */
-    private suspend fun saveAnimeToLibrary(anilistAnime: AniListAnime): Long {
-        val now = System.currentTimeMillis()
-        val anime = Anime(
-            id = 0,  // new insert
-            url = "anilist:$anilistId",
-            title = anilistAnime.displayTitle,
-            artist = null,
-            author = null,
-            description = anilistAnime.description,
-            genre = anilistAnime.genres ?: emptyList(),
-            coverUrl = anilistAnime.coverImage?.let { it.extraLarge ?: it.large ?: it.medium },
-            status = AnimeStatus.UNKNOWN,
-            thumbnailUrl = null,
-            favorite = true,
-            sourceId = 0L,
-            dateAdded = now,
-            viewerFlags = 0,
-            nextUpdate = 0L,
-            updateStrategy = 0,
-            coverLastModified = 0L,
-            releaseDate = null,
-            lastRefresh = now,
-            lastMetadataFetch = now,
-            nextEpisodeCheck = null,
-            anilistId = anilistId,
-            coverColor = anilistAnime.coverImage?.color,
-            score = anilistAnime.averageScore?.toDouble(),
-            totalEpisodes = anilistAnime.episodes,
-            lastWatched = 0L,
-            nextAiringEpisode = anilistAnime.nextAiringEpisode?.episode,
-        )
-        val id = animeRepository.upsert(anime)
-        // Assign to Default category.
-        categoryRepository.setAnimeCategories(id, listOf(Category.DEFAULT_ID))
-        return id
     }
 
     // ── Public API ──
 
+    /** Initial load (or reload after switching data source / extension). */
+    fun load() {
+        viewModelScope.launch {
+            _animeState.value = DetailState.Loading
+            _episodeState.value = EpisodeState.Searching
+            try {
+                val provider = registry.forSource(_currentDataSource.value)
+                val result = withContext(Dispatchers.IO) { provider.load(activeRequest) }
+                if (result == null) {
+                    _animeState.value = DetailState.Error("Anime not found")
+                    _episodeState.value = EpisodeState.NoMatch
+                    return@launch
+                }
+                _animeState.value = DetailState.Success(result.anime)
+                renderEpisodes(result.anime, result.episodes)
+
+                // Set up the current match for the source switcher + manual search.
+                setupCurrentMatch(result.anime)
+
+                // Fetch episode metadata in the background (skipped for unlinked extension anime).
+                launch { fetchEpisodeMetadata(result.anime, result.episodes.size) }
+                // Search other sources in the background (for the switcher).
+                launch { searchAllSourcesInBackground(result.anime.title) }
+            } catch (e: Throwable) {
+                // Catch Throwable — extension binary-incompat throws Error subclasses.
+                Log.e(TAG, "load failed", e)
+                _animeState.value = DetailState.Error(e.message ?: "Unknown error")
+                _episodeState.value = EpisodeState.Error("Failed: ${e.message}")
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
     /**
-     * Toggles the watched state of an episode (by URL). In-memory only for
-     * Phase 5 — will be persisted to `EpisodeSeenStore` in a later phase.
+     * Switch the displayed data source (AniList ↔ Extension) in-place.
+     *
+     * The three-dot menu calls this. Re-queries the provider with the new
+     * [DataSource]; scroll position, library state, and watched flags survive
+     * (keyed on anilistId / sourceId+url, not on the displayed source).
      */
+    fun switchDataSource(target: DataSource) {
+        if (_currentDataSource.value == target) return
+        Log.i(TAG, "Switching data source: ${_currentDataSource.value} → $target")
+        _currentDataSource.value = target
+        // Rebuild the request for the new source.
+        activeRequest = requestForDataSource(target, (activeRequest))
+        load()
+    }
+
+    /**
+     * Switch to a different extension source (from ManualSearchSheet).
+     *
+     * Saves the new source link, updates [activeRequest] to the new
+     * `sourceId + sAnime`, and reloads.
+     */
+    fun switchExtension(source: AnimeCatalogueSource, sAnime: SAnime) {
+        Log.i(TAG, "Switching extension to '${source.name}' for '${sAnime.title}'")
+        val anilistId = currentAnilistId()
+        // Save the new source link (so re-open skips re-matching).
+        if (anilistId != null) {
+            sourceLinkStore.saveLink(anilistId, source.id, sAnime.url, sAnime.title)
+            sourcePrefs.edit().putLong(sourcePrefKey(anilistId), source.id).apply()
+        }
+        activeRequest = DetailsRequest.ByExtension(
+            sourceId = source.id,
+            animeUrl = sAnime.url,
+            animeTitle = sAnime.title,
+            anilistId = anilistId,
+        )
+        _currentDataSource.value = DataSource.EXTENSION
+        _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
+        load()
+    }
+
+    /** Toggles the watched state of an episode (by URL). In-memory only. */
     fun toggleWatched(episodeUrl: String) {
         _watchedEpisodes.value = _watchedEpisodes.value.toMutableSet().apply {
             if (contains(episodeUrl)) remove(episodeUrl) else add(episodeUrl)
@@ -325,57 +253,31 @@ class AnimeDetailViewModel(
     }
 
     /**
-     * Switches to a different source and reloads episodes.
+     * Switches to a different source (legacy callback for the source switcher).
      * Persists the selection per-anime in SharedPreferences.
      */
     fun switchSource(match: SourceMatcher.SourceMatch) {
+        val anilistId = currentAnilistId()
+        if (anilistId != null) {
+            sourcePrefs.edit().putLong(sourcePrefKey(anilistId), match.source.id).apply()
+        }
         _currentMatch.value = match
-        sourcePrefs.edit().putLong(sourcePrefKey(anilistId), match.source.id).apply()
         Toast.makeText(appContext, "Switched to ${match.source.name}", Toast.LENGTH_SHORT).show()
-        Log.i(TAG, "Switched source to '${match.source.name}' for anime $anilistId")
-        loadEpisodes(match)
+        switchExtension(match.source, match.sAnime)
     }
 
-    /**
-     * Refreshes everything: AniList data + source matching + episodes.
-     * Called when the user pulls to refresh. Sets [isRefreshing] to `true`
-     * until the full three-stage load completes (or fails), so the
-     * `PullToRefreshBox` indicator stays visible for the duration.
-     */
+    /** Refreshes everything (pull-to-refresh). */
     fun refresh() {
-        if (_isRefreshing.value) return  // ignore double-pull
-        Log.i(TAG, "Refreshing anime $anilistId")
+        if (_isRefreshing.value) return
         _isRefreshing.value = true
-        loadAnimeDetails(refreshing = true)
+        load()
     }
 
-    /**
-     * Returns the list of available (installed + trusted) sources for the
-     * manual-search source selector. Each entry is a [SourceMatcher.SourceInfo]
-     * (id + name) — lightweight, safe to pass to the UI.
-     *
-     * The ManualSearchSheet calls this to populate its source picker. The user
-     * selects ONE source, then [manualSearch] is called with that source's ID
-     * + the query — only that source is searched.
-     */
-    fun getAvailableSources(): List<SourceMatcher.SourceInfo> =
-        sourceMatcher.getAvailableSources()
+    /** Available sources for the manual-search source selector. */
+    fun getAvailableSources(): List<SourceMatcher.SourceInfo> = sourceMatcher.getAvailableSources()
 
-    /**
-     * Manually searches ONE specific source (selected by the user from the
-     * source selector) for a custom query.
-     *
-     * Only the selected source is searched — results from other sources are
-     * NOT included. This matches the user's expectation: pick a source, see
-     * only that source's results.
-     *
-     * Updates [manualSearchResults], [manualSearchErrors], [isSearching],
-     * and [hasSearched] so the ManualSearchSheet can render all states.
-     *
-     * @param sourceId the ID of the source to search (from the source selector).
-     * @param query the search query.
-     */
-    suspend fun manualSearch(sourceId: Long, query: String): List<ManualSearchResult> {
+    /** Manually searches ONE specific source for a custom query. */
+    suspend fun manualSearch(sourceId: Long, query: String): List<SourceMatcher.ManualSearchResult> {
         Log.i(TAG, "Manual search: sourceId=$sourceId, query='$query'")
         _isSearching.value = true
         return try {
@@ -388,11 +290,7 @@ class AnimeDetailViewModel(
                 is SourceMatcher.SourceSearchOutcome.Failed -> {
                     _manualSearchResults.value = emptyList()
                     _manualSearchErrors.value = listOf(outcome.sourceName to outcome.error)
-                    Toast.makeText(
-                        appContext,
-                        "${outcome.sourceName} failed: ${outcome.error}",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    Toast.makeText(appContext, "${outcome.sourceName} failed: ${outcome.error}", Toast.LENGTH_LONG).show()
                 }
             }
             _hasSearched.value = true
@@ -408,7 +306,6 @@ class AnimeDetailViewModel(
         }
     }
 
-    /** Clears the manual-search results + errors (when the sheet is dismissed). */
     fun clearManualSearch() {
         _manualSearchResults.value = emptyList()
         _manualSearchErrors.value = emptyList()
@@ -416,328 +313,265 @@ class AnimeDetailViewModel(
     }
 
     /**
-     * Links a specific source + SAnime to this anime (manual selection).
-     * Persists the source preference and loads episodes.
+     * Links a specific source + SAnime to this anime (manual selection from ManualSearchSheet).
+     * Delegates to [switchExtension] which persists + reloads.
      */
-    fun linkManual(source: eu.kanade.tachiyomi.animesource.AnimeCatalogueSource, sAnime: eu.kanade.tachiyomi.animesource.model.SAnime) {
-        val match = SourceMatcher.SourceMatch(source, sAnime, 1.0)
-        _currentMatch.value = match
-        _allMatches.value = listOf(match)
-        sourcePrefs.edit().putLong(sourcePrefKey(anilistId), source.id).apply()
-        // Save the full source link so we don't re-search next time
-        sourceLinkStore.saveLink(anilistId, source.id, sAnime.url, sAnime.title)
-        Toast.makeText(appContext, "Linked to ${source.name}", Toast.LENGTH_SHORT).show()
-        Log.i(TAG, "Manual link: '${sAnime.title}' from '${source.name}'")
-        loadEpisodes(match)
+    fun linkManual(source: AnimeCatalogueSource, sAnime: SAnime) {
+        switchExtension(source, sAnime)
     }
 
-    // ── Internal: Stage 1 — Load AniList data ──
+    // ── Library save ──
 
-    private fun loadAnimeDetails(refreshing: Boolean = false) {
+    fun toggleSave() {
         viewModelScope.launch {
-            _animeState.value = DetailState.Loading
             try {
-                val anime = api.fetchById(anilistId)
-                if (anime != null) {
-                    _animeState.value = DetailState.Success(anime)
-                    // Check if the anime is not yet released — don't search for sources.
-                    // Per user: "the anime which are marked as not yet released on AniList
-                    // will not be searched for the new episodes... it will say that this
-                    // anime has not yet been released."
-                    if (anime.status == "NOT_YET_RELEASED") {
-                        _episodeState.value = EpisodeState.NotReleased
-                        Log.i(TAG, "Anime $anilistId is NOT_YET_RELEASED — skipping source search")
-                    } else {
-                        findAndLoadEpisodes(anime)
-                    }
+                val unified = (_animeState.value as? DetailState.Success)?.anime ?: return@launch
+                val existing = findLibraryAnime(unified)
+                if (existing != null) {
+                    val newFav = !existing.favorite
+                    animeRepository.updateFavorite(
+                        id = existing.id,
+                        favorite = newFav,
+                        dateAdded = if (newFav) System.currentTimeMillis() else existing.dateAdded,
+                    )
+                    if (newFav) categoryRepository.setAnimeCategories(existing.id, listOf(Category.DEFAULT_ID))
                 } else {
-                    _animeState.value = DetailState.Error("Anime not found")
+                    saveAnimeToLibrary(unified)
                 }
-            } catch (e: Throwable) {
-                // Catch Throwable (not Exception) so binary-incompat Errors
-                // (IncompatibleClassChangeError, NoClassDefFoundError) don't
-                // crash the app — they're surfaced as an error state instead.
-                Log.e(TAG, "Failed to load anime $anilistId", e)
-                _animeState.value = DetailState.Error(e.message ?: "Unknown error")
-            } finally {
-                if (refreshing) _isRefreshing.value = false
+            } catch (e: Exception) {
+                Log.e(TAG, "toggleSave failed", e)
             }
         }
     }
 
-    // ── Internal: Stage 2 — Find matching source ──
-
-    private fun findAndLoadEpisodes(anime: AniListAnime) {
+    fun openCategoryPicker() {
         viewModelScope.launch {
-            // ── Check DB first: if we already have episodes saved, show them instantly.
-            // Per user: "it should properly show things from local storage... never
-            // automatically reload anything until it is the first time."
-            val dbAnime = animeRepository.getByAnilistId(anilistId)
-            if (dbAnime != null) {
-                val dbEpisodes = episodeRepository.getByAnimeId(dbAnime.id)
-                if (dbEpisodes.isNotEmpty()) {
-                    Log.i(TAG, "Loaded ${dbEpisodes.size} episodes from DB (instant) for animeId=${dbAnime.id}")
-                    // Convert DB Episodes back to SEpisodes for the UI
-                    val sEpisodes = dbEpisodes.map { it.toSEpisode() }
-                    // Get the source name from the saved link
-                    val savedLink = sourceLinkStore.getLink(anilistId)
-                    val sourceName = savedLink?.let { link ->
-                        sourceMatcher.getSourceById(link.sourceId)?.name
-                    } ?: "Unknown"
-                    _episodeState.value = EpisodeState.Loaded(sEpisodes, sourceName)
-
-                    // Still set up the source match for the source switcher
-                    if (savedLink != null) {
-                        val source = sourceMatcher.getSourceById(savedLink.sourceId)
-                        if (source != null) {
-                            val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
-                                url = savedLink.animeUrl
-                                title = savedLink.animeTitle
-                            }
-                            _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
-                        }
-                    }
-                    // Search for other sources in the background (for the switcher)
-                    launch { searchAllSourcesInBackground(anime.displayTitle) }
-                    // Load episode metadata from the metadata repo (also cached)
-                    launch { fetchEpisodeMetadata(sEpisodes.size) }
-                    return@launch
-                }
-            }
-
-            // ── No DB episodes — check SourceLinkStore for a saved source match
-            val savedLink = sourceLinkStore.getLink(anilistId)
-            if (savedLink != null) {
-                Log.i(TAG, "Found saved source link: sourceId=${savedLink.sourceId}, url=${savedLink.animeUrl}")
-                val source = withContext(Dispatchers.IO) {
-                    sourceMatcher.getSourceById(savedLink.sourceId)
-                }
-                if (source != null) {
-                    val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
-                        url = savedLink.animeUrl
-                        title = savedLink.animeTitle
-                    }
-                    val match = SourceMatcher.SourceMatch(source, sAnime, 1.0)
-                    _currentMatch.value = match
-                    _allMatches.value = listOf(match)
-                    launch { searchAllSourcesInBackground(anime.displayTitle) }
-                    loadEpisodes(match)
-                    return@launch
-                } else {
-                    Log.w(TAG, "Saved source ${savedLink.sourceId} not found — falling back to search")
-                    sourceLinkStore.removeLink(anilistId)
-                }
-            }
-
-            _episodeState.value = EpisodeState.Searching
-            val title = anime.displayTitle
-            Log.i(TAG, "Searching sources for '$title' (anilistId=$anilistId)")
-
             try {
-                val all = sourceMatcher.matchAll(title)
-                _allMatches.value = all
-                _autoMatchErrors.value = sourceMatcher.lastMatchAllErrors
+                val cats = getAnimeCategories()
+                _currentAnimeCategoryIds.value = cats.map { it.id }.toSet()
+            } catch (e: Exception) {
+                Log.e(TAG, "openCategoryPicker: failed to load current categories", e)
+                _currentAnimeCategoryIds.value = emptySet()
+            }
+            _showCategoryPicker.value = true
+        }
+    }
 
-                if (all.isEmpty()) {
-                    _episodeState.value = EpisodeState.NoMatch
-                    val errors = sourceMatcher.lastMatchAllErrors
-                    if (errors != null && errors.isNotEmpty()) {
-                        Toast.makeText(
-                            appContext,
-                            "Sources failed: ${errors.first().second}",
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    } else {
-                        Toast.makeText(appContext, "No sources found for this anime — try searching manually", Toast.LENGTH_LONG).show()
+    fun dismissCategoryPicker() {
+        _showCategoryPicker.value = false
+    }
+
+    fun saveToCategories(categoryIds: Set<Long>) {
+        viewModelScope.launch {
+            try {
+                val unified = (_animeState.value as? DetailState.Success)?.anime ?: return@launch
+                val existing = findLibraryAnime(unified)
+                val animeId = if (existing != null) {
+                    if (!existing.favorite) {
+                        animeRepository.updateFavorite(existing.id, favorite = true, dateAdded = System.currentTimeMillis())
                     }
-                    return@launch
+                    existing.id
+                } else {
+                    saveAnimeToLibrary(unified)
                 }
-
-                val explicitPrefId = sourcePrefs.getLong(sourcePrefKey(anilistId), -1L)
-                val linkedPrefId = extensionLinkStore.getPreferredSourceForAnilist(anilistId)
-                val preferredSourceId = when {
-                    explicitPrefId != -1L -> explicitPrefId
-                    linkedPrefId != null -> linkedPrefId
-                    else -> -1L
-                }
-                val selected = all.firstOrNull { it.source.id == preferredSourceId } ?: all.first()
-
-                _currentMatch.value = selected
-                Log.i(
-                    TAG,
-                    "Selected source: '${selected.source.name}' (score=${selected.score}, " +
-                        "preferredId=$preferredSourceId, explicit=$explicitPrefId, linked=$linkedPrefId)",
-                )
-
-                // Save the source link so we don't re-search next time
-                sourceLinkStore.saveLink(
-                    anilistId = anilistId,
-                    sourceId = selected.source.id,
-                    animeUrl = selected.sAnime.url,
-                    animeTitle = selected.sAnime.title,
-                )
-
-                loadEpisodes(selected)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Source matching failed for '$title'", e)
-                _episodeState.value = EpisodeState.Error("Search failed: ${e.message}")
-                Toast.makeText(appContext, "Failed to search sources: ${e.message}", Toast.LENGTH_LONG).show()
+                categoryRepository.setAnimeCategories(animeId, categoryIds.toList())
+                _showCategoryPicker.value = false
+            } catch (e: Exception) {
+                Log.e(TAG, "saveToCategories failed", e)
             }
         }
+    }
+
+    suspend fun getAnimeCategories(): List<Category> {
+        val unified = (_animeState.value as? DetailState.Success)?.anime ?: return emptyList()
+        val existing = findLibraryAnime(unified) ?: return emptyList()
+        return categoryRepository.getAnimeCategories(existing.id)
+    }
+
+    fun createCategory(name: String) {
+        viewModelScope.launch { categoryRepository.create(name) }
+    }
+
+    // ── Internal helpers ──
+
+    /** Determines the initial data source from the [initialRequest]. */
+    private fun initialDataSource(): DataSource = when (initialRequest) {
+        is DetailsRequest.ByAniListId -> DataSource.ANILIST
+        is DetailsRequest.ByExtension -> DataSource.EXTENSION
+    }
+
+    /** Rebuilds the request when switching data sources. */
+    private fun requestForDataSource(target: DataSource, current: DetailsRequest): DetailsRequest {
+        // Extract whatever identity we have from the current request.
+        val anilistId = when (current) {
+            is DetailsRequest.ByAniListId -> current.anilistId
+            is DetailsRequest.ByExtension -> current.anilistId
+                ?: extensionLinkStore.getAniListId(current.sourceId, current.animeUrl)
+        }
+        val sourceId = when (current) {
+            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.sourceId
+            is DetailsRequest.ByExtension -> current.sourceId
+        }
+        val animeUrl = when (current) {
+            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.animeUrl
+            is DetailsRequest.ByExtension -> current.animeUrl
+        }
+        val animeTitle = when (current) {
+            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.animeTitle
+            is DetailsRequest.ByExtension -> current.animeTitle
+        }
+        return when (target) {
+            DataSource.ANILIST -> {
+                if (anilistId != null) DetailsRequest.ByAniListId(anilistId)
+                else current // can't switch to AniList if unlinked — stay put
+            }
+            DataSource.EXTENSION -> {
+                if (sourceId != null && animeUrl != null && animeTitle != null) {
+                    DetailsRequest.ByExtension(sourceId, animeUrl, animeTitle, anilistId)
+                } else current // can't switch to extension if no source link — stay put
+            }
+        }
+    }
+
+    /** The current anilistId (from the active request or a reverse-lookup). */
+    private fun currentAnilistId(): Int? = when (activeRequest) {
+        is DetailsRequest.ByAniListId -> activeRequest.anilistId
+        is DetailsRequest.ByExtension -> activeRequest.anilistId
+            ?: extensionLinkStore.getAniListId(activeRequest.sourceId, activeRequest.animeUrl)
+    }
+
+    /** Sets up [_currentMatch] from the unified anime's sourceId (for the source switcher). */
+    private fun setupCurrentMatch(anime: UnifiedAnime) {
+        val sourceId = anime.sourceId ?: return
+        val source = sourceMatcher.getSourceById(sourceId) ?: return
+        val sAnime = SAnimeImpl().apply {
+            url = anime.url
+            title = anime.title
+        }
+        _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
+    }
+
+    /** Renders the episode list into [_episodeState] as SEpisodes (for the UI). */
+    private fun renderEpisodes(anime: UnifiedAnime, episodes: List<app.confused.anikuta.core.common.model.Episode>) {
+        if (anime.status == app.confused.anikuta.core.common.model.details.UnifiedStatus.NOT_YET_RELEASED && episodes.isEmpty()) {
+            _episodeState.value = EpisodeState.NotReleased
+            return
+        }
+        if (episodes.isEmpty()) {
+            _episodeState.value = EpisodeState.NoMatch
+            return
+        }
+        val sEpisodes = episodes.map { it.toSEpisode() }
+        _episodeState.value = EpisodeState.Loaded(sEpisodes, anime.sourceName)
     }
 
     /** Searches all sources in the background (for the source switcher) without blocking. */
     private fun searchAllSourcesInBackground(title: String) {
-        viewModelScope.launch {
-            try {
-                val all = sourceMatcher.matchAll(title)
-                _allMatches.value = all
-                _autoMatchErrors.value = sourceMatcher.lastMatchAllErrors
-            } catch (e: Exception) {
-                Log.w(TAG, "Background source search failed (non-fatal)", e)
-            }
-        }
-    }
-
-    // ── Internal: Stage 3 — Load episodes from the matched source ──
-
-    private fun loadEpisodes(match: SourceMatcher.SourceMatch) {
-        viewModelScope.launch {
-            _episodeState.value = EpisodeState.Loading(match.source.name)
-            try {
-                val episodes = withContext(Dispatchers.IO) {
-                    match.source.getEpisodeList(match.sAnime)
-                }
-                if (episodes.isEmpty()) {
-                    _episodeState.value = EpisodeState.NoMatch
-                } else {
-                    _episodeState.value = EpisodeState.Loaded(episodes, match.source.name)
-                    Log.i(TAG, "Loaded ${episodes.size} episodes from '${match.source.name}'")
-
-                    // ── Save episodes to the DB for offline access + instant re-open ──
-                    // Per user: "the information of the episodes is properly saved...
-                    // I want to be able to see episodes in offline mode too."
-                    saveEpisodesToDb(episodes)
-
-                    // ── Fetch episode metadata in the background ──
-                    fetchEpisodeMetadata(episodes.size)
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to load episodes from '${match.source.name}'", e)
-                val msg = "Failed to load episodes: ${e.message}"
-                _episodeState.value = EpisodeState.Error(msg)
-                Toast.makeText(appContext, msg, Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    /**
-     * Saves fetched SEpisodes to the SQLDelight DB via EpisodeRepository.
-     * First ensures the anime exists in the DB (upsert), then deletes old
-     * episodes + inserts the new ones.
-     */
-    private suspend fun saveEpisodesToDb(episodes: List<SEpisode>) {
         try {
-            // Ensure the anime exists in the DB
-            var dbAnime = animeRepository.getByAnilistId(anilistId)
-            if (dbAnime == null) {
-                // Create a minimal anime entry (the full data comes from AniList)
-                val anilistAnime = (_animeState.value as? DetailState.Success)?.anime
-                val newAnime = app.confused.anikuta.core.common.model.Anime(
-                    id = 0,
-                    url = "",
-                    title = anilistAnime?.displayTitle ?: "",
-                    artist = null,
-                    author = null,
-                    description = anilistAnime?.description,
-                    genre = anilistAnime?.genres ?: emptyList(),
-                    coverUrl = anilistAnime?.coverUrl,
-                    status = 0,
-                    thumbnailUrl = null,
-                    favorite = false,
-                    sourceId = 0,
-                    dateAdded = System.currentTimeMillis(),
-                    viewerFlags = 0,
-                    nextUpdate = 0,
-                    updateStrategy = 0,
-                    coverLastModified = 0,
-                    releaseDate = null,
-                    lastRefresh = System.currentTimeMillis(),
-                    lastMetadataFetch = null,
-                    nextEpisodeCheck = null,
-                    anilistId = anilistId,
-                    coverColor = null,
-                    score = anilistAnime?.averageScore?.toDouble(),
-                    totalEpisodes = anilistAnime?.episodes,
-                    lastWatched = 0,
-                    nextAiringEpisode = anilistAnime?.nextAiringEpisode?.episode,
-                )
-                val newId = animeRepository.upsert(newAnime)
-                Log.i(TAG, "Created anime in DB for anilistId=$anilistId, dbId=$newId")
-                dbAnime = animeRepository.getById(newId)
-            }
-
-            if (dbAnime != null) {
-                // Delete old episodes + insert new ones
-                episodeRepository.deleteByAnimeId(dbAnime.id)
-                episodes.forEachIndexed { index, ep ->
-                    episodeRepository.upsert(
-                        app.confused.anikuta.core.common.model.Episode(
-                            id = 0,
-                            animeId = dbAnime.id,
-                            url = ep.url,
-                            name = ep.name,
-                            episodeNumber = ep.episode_number,
-                            scanlator = ep.scanlator,
-                            seen = false,
-                            bookmark = false,
-                            lastSecondSeen = 0,
-                            totalSeconds = 0,
-                            sourceOrder = index.toLong(),
-                            dateFetch = System.currentTimeMillis(),
-                            dateUpload = ep.date_upload.takeIf { it > 0 },
-                            fillermark = if (ep.fillermark) "filler" else null,
-                            summary = ep.summary,
-                            previewUrl = ep.preview_url,
-                        ),
-                    )
-                }
-                Log.i(TAG, "Saved ${episodes.size} episodes to DB for animeId=${dbAnime.id}")
-            }
+            val all = sourceMatcher.matchAll(title)
+            _allMatches.value = all
+            _autoMatchErrors.value = sourceMatcher.lastMatchAllErrors
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save episodes to DB (non-fatal)", e)
+            Log.w(TAG, "Background source search failed (non-fatal)", e)
         }
     }
 
-    /**
-     * Fetch per-episode metadata (titles, descriptions, thumbnails, air dates)
-     * from all registered metadata sources (Jikan, Anikage, AniList).
-     *
-     * Runs in the background — the episode list is shown immediately with
-     * extension-provided data, then enriched when metadata arrives.
-     * The [episodeMetadata] StateFlow updates reactively, causing the UI to
-     * re-render with rich titles + thumbnails.
-     */
-    private fun fetchEpisodeMetadata(episodeCount: Int) {
+    /** Fetches per-episode metadata (titles, descriptions, thumbnails, air dates). */
+    private suspend fun fetchEpisodeMetadata(anime: UnifiedAnime, episodeCount: Int) {
+        try {
+            val anilistId = anime.anilistId ?: run {
+                Log.i(TAG, "Skipping episode metadata — no anilistId (unlinked extension anime)")
+                return
+            }
+            val request = EpisodeMetadataRequest(
+                animeId = anilistId,
+                animeTitle = anime.title,
+                episodeNumber = 1,
+                malId = anime.malId,
+                bannerImage = anime.bannerUrl ?: anime.coverUrl,
+                episodeCount = episodeCount,
+            )
+            Log.i(TAG, "Fetching episode metadata: anilistId=$anilistId, malId=${anime.malId}")
+            val metadata = episodeMetadataRepository.fetchAll(request)
+            _episodeMetadata.value = metadata
+        } catch (e: Exception) {
+            Log.w(TAG, "Episode metadata fetch failed (non-fatal)", e)
+        }
+    }
+
+    /** Finds the library anime row (linked by anilistId, or unlinked by sourceId+url). */
+    private suspend fun findLibraryAnime(anime: UnifiedAnime): Anime? {
+        return when {
+            anime.anilistId != null -> animeRepository.getByAnilistId(anime.anilistId)
+            anime.sourceId != null -> animeRepository.getBySourceAndUrl(anime.sourceId, anime.url)
+            else -> null
+        }
+    }
+
+    /** Observes the library save state (favorite flag) for this anime. */
+    private fun observeLibraryState() {
         viewModelScope.launch {
-            try {
-                val anime = (_animeState.value as? DetailState.Success)?.anime ?: return@launch
-                val request = app.confused.anikuta.core.episodemetadata.model.EpisodeMetadataRequest(
-                    animeId = anilistId,
-                    animeTitle = anime.displayTitle,
-                    episodeNumber = 1, // not used for batch fetch
-                    malId = anime.idMal,
-                    bannerImage = anime.bannerImage ?: anime.coverImage?.let { it.extraLarge ?: it.large ?: it.medium },
-                    episodeCount = episodeCount,
-                )
-                Log.i(TAG, "Fetching episode metadata: anilistId=$anilistId, malId=${anime.idMal}, epCount=$episodeCount")
-                val metadata = episodeMetadataRepository.fetchAll(request)
-                _episodeMetadata.value = metadata
-                Log.i(TAG, "Episode metadata loaded: ${metadata.size} episodes enriched")
-            } catch (e: Exception) {
-                Log.w(TAG, "Episode metadata fetch failed (non-fatal — episodes still show with extension data)", e)
+            val unified = (_animeState.value as? DetailState.Success)?.anime
+            // Wait for the first Success state if not loaded yet.
+            if (unified == null) {
+                // Collect until we get a Success, then observe.
+                animeRepository.observeAll().collect { _ -> /* placeholder */ }
+                return@launch
             }
         }
+        // Simpler: poll the favorite state after load. Observe by anilistId or sourceId.
+        viewModelScope.launch {
+            val anilistId = currentAnilistId()
+            if (anilistId != null) {
+                animeRepository.observeByAnilistId(anilistId).collect { anime ->
+                    _isSaved.value = anime?.favorite == true
+                }
+            }
+        }
+    }
+
+    /** Upserts the anime into the library with favorite=true. Returns the DB row id. */
+    private suspend fun saveAnimeToLibrary(anime: UnifiedAnime): Long {
+        val now = System.currentTimeMillis()
+        val newAnime = Anime(
+            id = 0,
+            url = anime.url,
+            title = anime.title,
+            artist = anime.artist,
+            author = anime.author,
+            description = anime.description,
+            genre = anime.genres,
+            coverUrl = anime.coverUrl,
+            status = when (anime.status) {
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.FINISHED -> AnimeStatus.COMPLETED
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.RELEASING -> AnimeStatus.ONGOING
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.CANCELLED -> AnimeStatus.CANCELLED
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.HIATUS -> AnimeStatus.ON_HIATUS
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.NOT_YET_RELEASED -> AnimeStatus.UNKNOWN
+                app.confused.anikuta.core.common.model.details.UnifiedStatus.UNKNOWN -> AnimeStatus.UNKNOWN
+            },
+            thumbnailUrl = null,
+            favorite = true,
+            sourceId = anime.sourceId ?: 0L,
+            dateAdded = now,
+            viewerFlags = 0,
+            nextUpdate = 0L,
+            updateStrategy = 0,
+            coverLastModified = 0L,
+            releaseDate = null,
+            lastRefresh = now,
+            lastMetadataFetch = now,
+            nextEpisodeCheck = null,
+            anilistId = anime.anilistId,
+            coverColor = anime.coverColorHex,
+            score = anime.averageScore?.toDouble(),
+            totalEpisodes = anime.episodeCount,
+            lastWatched = 0L,
+            nextAiringEpisode = anime.nextAiringEpisode?.episode,
+        )
+        val id = animeRepository.upsert(newAnime)
+        categoryRepository.setAnimeCategories(id, listOf(Category.DEFAULT_ID))
+        return id
     }
 
     private fun sourcePrefKey(anilistId: Int) = "source_pref_$anilistId"
@@ -748,29 +582,24 @@ class AnimeDetailViewModel(
     }
 }
 
-// ── Extension: convert DB Episode → SEpisode for the UI ──
-
-/** Converts a DB [Episode] back to an [SEpisode] for the UI layer. */
-private fun app.confused.anikuta.core.common.model.Episode.toSEpisode(): SEpisode {
-    return eu.kanade.tachiyomi.animesource.model.SAnimeImpl().let { _ ->
-        eu.kanade.tachiyomi.animesource.model.SEpisodeImpl().apply {
-            url = this@toSEpisode.url ?: ""
-            name = this@toSEpisode.name
-            episode_number = this@toSEpisode.episodeNumber
-            date_upload = this@toSEpisode.dateUpload ?: 0
-            scanlator = this@toSEpisode.scanlator
-            summary = this@toSEpisode.summary
-            preview_url = this@toSEpisode.previewUrl
-            fillermark = this@toSEpisode.fillermark == "filler"
-        }
+/** Converts a DB [app.confused.anikuta.core.common.model.Episode] back to an [SEpisode] for the UI. */
+private fun app.confused.anikuta.core.common.model.Episode.toSEpisode(): SEpisode =
+    SEpisodeImpl().apply {
+        url = this@toSEpisode.url ?: ""
+        name = this@toSEpisode.name
+        episode_number = this@toSEpisode.episodeNumber
+        date_upload = this@toSEpisode.dateUpload ?: 0
+        scanlator = this@toSEpisode.scanlator
+        summary = this@toSEpisode.summary
+        preview_url = this@toSEpisode.previewUrl
+        fillermark = this@toSEpisode.fillermark == "filler"
     }
-}
 
 // ── State types ──
 
 sealed interface DetailState {
     data object Loading : DetailState
-    data class Success(val anime: AniListAnime) : DetailState
+    data class Success(val anime: UnifiedAnime) : DetailState
     data class Error(val message: String) : DetailState
 }
 
