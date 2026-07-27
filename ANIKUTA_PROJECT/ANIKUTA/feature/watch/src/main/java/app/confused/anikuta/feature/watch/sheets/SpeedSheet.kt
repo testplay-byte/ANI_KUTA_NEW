@@ -1,16 +1,16 @@
 package app.confused.anikuta.feature.watch.sheets
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -26,7 +26,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,16 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
-/**
- * Speed selection bottom sheet — shows preset speeds + a slider for custom speed.
- *
- * Per owner spec (Phase 9 Round 2): NO text input — ONLY a slider for custom speed.
- *
- * @param currentSpeed The currently active playback speed.
- * @param onSpeedSelected Called with the chosen speed (applied immediately).
- * @param onDismiss Called when the sheet is dismissed.
- */
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpeedSheet(
     currentSpeed: Float,
@@ -68,11 +58,8 @@ fun SpeedSheet(
                 .heightIn(max = 500.dp)
                 .padding(top = 20.dp),
         ) {
-            // ── Header ──
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -88,65 +75,55 @@ fun SpeedSheet(
                     shape = RoundedCornerShape(50),
                     modifier = Modifier.size(32.dp).clickable(onClick = onDismiss),
                 ) {
-                    androidx.compose.foundation.layout.Box(
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
+                    androidx.compose.foundation.layout.Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
                 }
             }
 
-            // ── Current speed display ──
-            Text(
-                text = "${String.format("%.2f", sliderValue)}x",
-                fontFamily = RobotoFamily,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-            )
-
-            // ── Preset speeds ──
-            FlowRow(
+            // Current speed display + presets in a single horizontal scroll Row (no wrapping)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             ) {
+                // Current speed display (bold, themed)
+                Text(
+                    text = "${String.format("%.2f", sliderValue)}x",
+                    fontFamily = RobotoFamily,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                // Presets — all on one line (scrollable, never wraps)
                 presets.forEach { speed ->
                     val isSelected = kotlin.math.abs(speed - sliderValue) < 0.01f
                     Surface(
-                        color = if (isSelected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.primaryContainer,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(50),
                         modifier = Modifier.clickable {
                             sliderValue = speed
                             onSpeedSelected(speed)
                         },
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "${speed}x",
-                                fontFamily = RobotoFamily,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                       else MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
+                        Text(
+                            text = "${speed}x",
+                            fontFamily = RobotoFamily,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
                     }
                 }
             }
 
-            // ── Custom speed slider ──
-            Spacer(modifier = Modifier.padding(8.dp))
+            // Custom speed slider
+            Spacer(modifier = Modifier.padding(4.dp))
             Text(
                 text = "Custom speed",
                 fontFamily = RobotoFamily,
@@ -158,19 +135,14 @@ fun SpeedSheet(
             Slider(
                 value = sliderValue,
                 onValueChange = { sliderValue = it },
-                onValueChangeFinished = {
-                    onSpeedSelected(sliderValue)
-                },
+                onValueChangeFinished = { onSpeedSelected(sliderValue) },
                 valueRange = 0.1f..5.0f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
                 ),
             )
-
             Spacer(modifier = Modifier.padding(8.dp))
         }
     }

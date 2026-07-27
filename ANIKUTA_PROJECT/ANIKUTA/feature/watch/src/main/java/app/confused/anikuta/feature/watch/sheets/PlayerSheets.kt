@@ -172,7 +172,7 @@ fun QualitySheet(
                         Surface(
                             color = when {
                                 isExpanded -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                isCurrentServer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                isCurrentServer -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                                 else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                             },
                             border = if (isCurrentServer) {

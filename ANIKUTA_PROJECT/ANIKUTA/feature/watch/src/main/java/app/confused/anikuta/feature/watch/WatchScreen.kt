@@ -6,6 +6,9 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -54,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -901,6 +905,7 @@ private fun WatchScreenContent(
                     onBack = onBack,
                     onQualityClick = onQualityClick,
                     onSubtitleClick = onSubtitleClick,
+                    onSwitchEpisode = onSwitchEpisode,
                 )
             }
         }
@@ -928,24 +933,35 @@ private fun WatchScreenContent(
             }
         }
 
+        // Animate the header height smoothly (not AnimatedVisibility — that
+        // causes layout jumps). Height animates from full to 0.
+        val headerHeight by animateDpAsState(
+            targetValue = if (isCollapsed) 0.dp else 56.dp,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "headerHeight",
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
             // Collapsible top navigation bar.
-            // Uses AnimatedVisibility for smooth slide-up + fade when collapsed.
-            // When collapsed, the bar is completely removed from layout so the
-            // player moves up to take its space.
-            AnimatedVisibility(
-                visible = !isCollapsed,
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+            // Uses height animation — the bar stays in the layout but shrinks
+            // to 0dp, so the player slides up smoothly without jumping.
+            // Alpha fades proportionally to the height.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(headerHeight)
+                    .clipToBounds(),
             ) {
-                WatchTopBar(
-                    title = "ANIKUTA",
-                    onBack = onBack,
-                )
+                if (headerHeight > 0.dp) {
+                    WatchTopBar(
+                        title = "ANIKUTA",
+                        onBack = onBack,
+                    )
+                }
             }
 
             // Player area — 16:9, rounded corners, horizontal padding.
@@ -1132,18 +1148,15 @@ private fun WatchScreenContent(
 
     // ── Bottom-up sheets (rendered on top of everything) ──
     if (showQualitySheet) {
-        // Extract the current server name + audio version from the video title
-        // (format: "Server - SUB - 1080p" or "Server - 1080p")
-        val titleParts = stateHolder.currentVideoTitle.value.split(" - ")
-        val currentServerName = titleParts.getOrNull(0)?.trim() ?: ""
-        val currentAudioVersion = titleParts.getOrNull(1)?.trim() ?: ""
+        // Use the server name + audio version from WatchRequest (properly set
+        // in AppController.onVideoSelected — not parsed from the title string).
         app.confused.anikuta.feature.watch.sheets.QualitySheet(
             servers = resolvedServers,
             currentVideoTitle = stateHolder.currentVideoTitle.value,
             onQualitySelected = onQualitySelected,
             onDismiss = onDismissSheet,
-            currentServerName = currentServerName,
-            currentAudioVersion = currentAudioVersion,
+            currentServerName = watchRequest.videoServer,
+            currentAudioVersion = watchRequest.videoAudio,
         )
     }
 
@@ -1260,6 +1273,7 @@ private fun FullscreenControlsOverlay(
     onBack: () -> Unit,
     onQualityClick: () -> Unit = {},
     onSubtitleClick: () -> Unit = {},
+    onSwitchEpisode: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
     var showSpeedSheet by remember { mutableStateOf(false) }
@@ -1274,15 +1288,22 @@ private fun FullscreenControlsOverlay(
         }
     }
 
-    // Episode info for the top-left display
+    // Episode info for the top-left display — uses metadata-enriched title
     val currentEpIndex by stateHolder.currentEpisodeIndex.collectAsStateWithLifecycle()
     val currentEp = watchRequest.episodeList.getOrNull(currentEpIndex)
+    val epNumInt = currentEp?.episode_number?.toInt() ?: 0
+    val metadataTitle = watchRequest.episodeMetadata[epNumInt]?.title
+    val parsedTitle = metadataTitle
+        ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
+            currentEp?.name ?: "", currentEp?.episode_number ?: 0f,
+        )
     val episodeInfo = currentEp?.let { ep ->
         val epNum = ep.episode_number.toInt()
-        "EP $epNum" + (ep.name?.takeIf { it.isNotBlank() }?.let { " - $it" } ?: "")
+        val title = parsedTitle ?: ep.name
+        "EP $epNum" + (title?.takeIf { it.isNotBlank() }?.let { " - $it" } ?: "")
     } ?: ""
 
-    // Quality info
+    // Quality info — from WatchRequest (now properly set in AppController)
     val qualityInfo = watchRequest.videoQuality.takeIf { it > 0 }?.let { "${it}p" } ?: ""
 
     app.confused.anikuta.core.player.controls.FullscreenControls(
@@ -1324,19 +1345,26 @@ private fun FullscreenControlsOverlay(
         onServerClick = { /* TODO: open server sheet */ },
         onMoreClick = { /* TODO: open more sheet */ },
         onSkipForward = {
-            // Next episode: find the next episode in the list and switch to it
+            // Next episode: switch to the next episode using the real switch flow
             val nextIndex = currentEpIndex + 1
             if (nextIndex < watchRequest.episodeList.size) {
-                // Trigger episode switch via the state holder
-                stateHolder.setCurrentEpisodeIndex(nextIndex)
+                Log.i(TAG, "Next episode button: switching to index $nextIndex")
+                onSwitchEpisode(nextIndex)
             } else {
                 // No next episode — skip forward by the skip duration
                 try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
             }
         },
         onRotateClick = {
-            (context as? Activity)?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            // Toggle between landscape and portrait
+            val currentOrientation = (context as? Activity)?.requestedOrientation
+            if (currentOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+                (context as? Activity)?.requestedOrientation =
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            } else {
+                (context as? Activity)?.requestedOrientation =
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
         },
         onPiPClick = {
             try {

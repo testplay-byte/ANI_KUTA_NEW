@@ -261,7 +261,7 @@ class AppController(
                                 anilistId = anilistId,
                                 animeTitle = watchCtx.animeTitle,
                                 coverUrl = watchCtx.coverUrl,
-                                coverColor = null,
+                                coverColor = watchCtx.coverColorArgb.takeIf { it != 0 },
                                 episodeUrl = episode.url,
                                 episodeNumber = episode.episode_number,
                                 sourceId = source.id,
@@ -325,6 +325,22 @@ class AppController(
         val target = resolveTarget
         resolverState = VideoResolverState.Hidden
         if (target != null) {
+            // Find which server + audio version contains this video
+            var serverName = ""
+            var audioVersion = ""
+            for (server in servers) {
+                for (audio in server.audioVersions) {
+                    if (audio.videos.any { it.url == video.url }) {
+                        serverName = server.name
+                        audioVersion = audio.label
+                        break
+                    }
+                }
+                if (serverName.isNotEmpty()) break
+            }
+            // Parse quality int from the quality string (e.g. "1080p" → 1080)
+            val qualityInt = video.quality.replace("p", "").toIntOrNull() ?: 0
+
             pushWatch(
                 WatchRequest(
                     videoUrl = video.url,
@@ -333,14 +349,14 @@ class AppController(
                     anilistId = target.anilistId,
                     animeTitle = target.watchCtx.animeTitle,
                     coverUrl = target.watchCtx.coverUrl,
-                    coverColor = null, // TODO: extract from coverUrl via Palette
+                    coverColor = target.watchCtx.coverColorArgb.takeIf { it != 0 },
                     episodeUrl = target.episode.url,
                     episodeNumber = target.episode.episode_number,
                     sourceId = target.source.id,
                     source = target.source,
-                    videoServer = "",
-                    videoAudio = "",
-                    videoQuality = 0,
+                    videoServer = serverName,
+                    videoAudio = audioVersion,
+                    videoQuality = qualityInt,
                     episodeList = target.episodeList,
                     episodeMetadata = target.watchCtx.episodeMetadata,
                     subtitleTracks = video.subtitleTracks,

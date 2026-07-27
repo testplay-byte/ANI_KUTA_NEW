@@ -18,5 +18,6 @@ import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata
 data class WatchEpisodeContext(
     val animeTitle: String,
     val coverUrl: String?,
+    val coverColorArgb: Int = 0,
     val episodeMetadata: Map<Int, EpisodeMetadata> = emptyMap(),
 )
