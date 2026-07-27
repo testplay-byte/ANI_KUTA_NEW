@@ -3,13 +3,13 @@
 package app.confused.anikuta.feature.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,11 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -60,21 +58,25 @@ import org.koin.compose.koinInject
 /**
  * The Appearance → General screen.
  *
- * Per owner spec (Session 1): the actual theme settings live here. Layout:
+ * Per owner spec (Session 1 + feedback): the actual theme settings live here.
+ * Layout (top to bottom):
  * 1. **Theme mode** (Light / Dark / System) — 3-way segmented toggle.
- * 2. **AMOLED** toggle — only shown when dark mode is active (hidden in light).
- * 3. **Palettes** — skeleton-screen preview cards (mini details-page mock).
- *    The first card is "Custom" — tapping it opens the [CustomColorDialog].
- * 4. **Episode settings** link (moved here from the root Settings page).
+ * 2. **Palettes** — horizontal carousel (LazyRow) of skeleton-screen preview
+ *    cards. Custom is first, with a unique highlight. Tapping Custom opens
+ *    the [CustomColorSheet].
+ * 3. **AMOLED** toggle — shown BELOW the palettes, only in dark mode.
+ *    Smoothly expands/collapses with slide+fade when dark mode toggles.
+ *
+ * The Episode settings link is NOT here — it's on the Appearance list screen
+ * (per owner feedback: "there was still the episode list showing inside the
+ * General options too so that needs to be properly fixed").
  *
  * All changes apply live with a smooth cross-fade transition.
  *
- * @param onOpenEpisodeSettings Navigates to the Episode Settings hub.
  * @param onBack Pops this screen.
  */
 @Composable
 fun AppearanceGeneralScreen(
-    onOpenEpisodeSettings: () -> Unit,
     onBack: () -> Unit,
 ) {
     val prefs = koinInject<ThemePreferences>()
@@ -97,7 +99,7 @@ fun AppearanceGeneralScreen(
     val customTextArgb by prefs.customTextColor.changes()
         .collectAsStateWithLifecycle(initialValue = prefs.customTextColor.get())
 
-    var showCustomDialog by remember { mutableStateOf(false) }
+    var showCustomSheet by remember { mutableStateOf(false) }
 
     // Resolve the effective dark mode (System follows the device setting).
     val isDark = when (themeMode) {
@@ -125,30 +127,13 @@ fun AppearanceGeneralScreen(
                 )
             }
 
-            // ── AMOLED (only in dark mode — smoothly fades in/out) ──
-            item {
-                AnimatedVisibility(
-                    visible = isDark,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    Column {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        AmoledCard(
-                            checked = amoled,
-                            onCheckedChange = { prefs.amoled.set(it) },
-                        )
-                    }
-                }
-            }
-
-            // ── Palettes (skeleton-screen preview cards) ──
+            // ── Palettes (horizontal carousel) ──
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 SettingsSectionLabel("Palettes")
             }
             item {
-                PalettesCard(
+                PalettesCarousel(
                     currentPreset = accentPreset,
                     customColor = Color(customColorArgb.toLong() and 0xFFFFFFFF),
                     isDark = isDark,
@@ -156,30 +141,43 @@ fun AppearanceGeneralScreen(
                     customBg = Color(customBgArgb.toLong() and 0xFFFFFFFF),
                     customCard = Color(customCardArgb.toLong() and 0xFFFFFFFF),
                     customText = Color(customTextArgb.toLong() and 0xFFFFFFFF),
-                    onSelectPreset = { prefs.accentPreset.set(it) },
-                    onOpenCustom = { showCustomDialog = true },
+                    onSelectPreset = { preset ->
+                        // Selecting a preset switches back to SIMPLIFIED mode
+                        // so the custom bg/card/text no longer apply (per owner
+                        // feedback: custom palette should only apply if the user
+                        // has selected the custom option).
+                        if (paletteMode == PaletteMode.FULL) {
+                            prefs.paletteMode.set(PaletteMode.SIMPLIFIED)
+                        }
+                        prefs.accentPreset.set(preset)
+                    },
+                    onOpenCustom = { showCustomSheet = true },
                 )
             }
 
-            // ── Episode List section (moved from root Settings) ──
+            // ── AMOLED (below palettes, only in dark mode — smooth expand/collapse) ──
             item {
-                Spacer(modifier = Modifier.height(16.dp))
-                SettingsSectionLabel("Episode List")
-            }
-            item {
-                ClickableNavRow(
-                    icon = Icons.Filled.Tune,
-                    title = "Episode settings",
-                    subtitle = "Display, layout, and metadata",
-                    onClick = onOpenEpisodeSettings,
-                )
+                AnimatedVisibility(
+                    visible = isDark,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically(),
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SettingsSectionLabel("Display")
+                        AmoledCard(
+                            checked = amoled,
+                            onCheckedChange = { prefs.amoled.set(it) },
+                        )
+                    }
+                }
             }
         }
     }
 
-    // ── Custom color dialog ──
-    if (showCustomDialog) {
-        CustomColorDialog(
+    // ── Custom color bottom sheet ──
+    if (showCustomSheet) {
+        CustomColorSheet(
             initialAccent = if (accentPreset == AccentPreset.CUSTOM) {
                 Color(customColorArgb.toLong() and 0xFFFFFFFF)
             } else {
@@ -195,9 +193,9 @@ fun AppearanceGeneralScreen(
                 prefs.customCardColor.set(card.toArgb())
                 prefs.customTextColor.set(text.toArgb())
                 prefs.paletteMode.set(mode)
-                showCustomDialog = false
+                showCustomSheet = false
             },
-            onDismiss = { showCustomDialog = false },
+            onDismiss = { showCustomSheet = false },
         )
     }
 }
@@ -227,7 +225,72 @@ private fun ThemeModeCard(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  AMOLED card (switch — only shown in dark mode)
+//  Palettes carousel (horizontal LazyRow)
+// ════════════════════════════════════════════════════════════════════════════
+
+@Composable
+private fun PalettesCarousel(
+    currentPreset: AccentPreset,
+    customColor: Color,
+    isDark: Boolean,
+    paletteMode: PaletteMode,
+    customBg: Color,
+    customCard: Color,
+    customText: Color,
+    onSelectPreset: (AccentPreset) -> Unit,
+    onOpenCustom: () -> Unit,
+) {
+    val baseBg = if (isDark) BgDark else BgLight
+    val baseCard = if (isDark) Surface1Dark else Surface1Light
+    val baseText = if (isDark) TextDark else TextLight
+
+    // The custom preview shows the current custom colors (or the base if not FULL).
+    val customPreviewBg = if (paletteMode == PaletteMode.FULL) customBg else baseBg
+    val customPreviewCard = if (paletteMode == PaletteMode.FULL) customCard else baseCard
+    val customPreviewText = if (paletteMode == PaletteMode.FULL) customText else baseText
+
+    SettingsCard {
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            // ── Custom (first, unique highlight) ──
+            item {
+                PalettePreviewCard(
+                    label = "Custom",
+                    backgroundColor = customPreviewBg,
+                    cardColor = customPreviewCard,
+                    accentColor = customColor,
+                    textColor = customPreviewText,
+                    isSelected = currentPreset == AccentPreset.CUSTOM,
+                    isCustom = true,
+                    onClick = onOpenCustom,
+                )
+            }
+
+            // ── Presets ──
+            items(
+                count = AccentPreset.entries.size - 1, // exclude CUSTOM
+            ) { idx ->
+                Spacer(modifier = Modifier.width(12.dp))
+                val preset = AccentPreset.entries[idx + 1] // skip CUSTOM (index 5)
+                PalettePreviewCard(
+                    label = preset.displayName,
+                    backgroundColor = baseBg,
+                    cardColor = baseCard,
+                    accentColor = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF),
+                    textColor = baseText,
+                    isSelected = currentPreset == preset,
+                    isCustom = false,
+                    onClick = { onSelectPreset(preset) },
+                )
+            }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  AMOLED card (switch — only shown in dark mode, below palettes)
 // ════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -266,77 +329,6 @@ private fun AmoledCard(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Palettes card (skeleton-screen preview cards)
-// ════════════════════════════════════════════════════════════════════════════
-
-@Composable
-private fun PalettesCard(
-    currentPreset: AccentPreset,
-    customColor: Color,
-    isDark: Boolean,
-    paletteMode: PaletteMode,
-    customBg: Color,
-    customCard: Color,
-    customText: Color,
-    onSelectPreset: (AccentPreset) -> Unit,
-    onOpenCustom: () -> Unit,
-) {
-    SettingsCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-        ) {
-            // FlowRow of palette preview cards. Custom is FIRST (per owner spec item 5).
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                // ── Custom (first position) ──
-                // The preview shows the current custom colors (or the dark/light
-                // base if the user hasn't customized yet).
-                val customPreviewBg = if (paletteMode == PaletteMode.FULL) customBg
-                    else if (isDark) BgDark else BgLight
-                val customPreviewCard = if (paletteMode == PaletteMode.FULL) customCard
-                    else if (isDark) Surface1Dark else Surface1Light
-                val customPreviewText = if (paletteMode == PaletteMode.FULL) customText
-                    else if (isDark) TextDark else TextLight
-                PalettePreviewCard(
-                    label = "Custom",
-                    backgroundColor = customPreviewBg,
-                    cardColor = customPreviewCard,
-                    accentColor = customColor,
-                    textColor = customPreviewText,
-                    isSelected = currentPreset == AccentPreset.CUSTOM,
-                    onClick = onOpenCustom,
-                )
-
-                // ── Presets ──
-                AccentPreset.entries.filter { it != AccentPreset.CUSTOM }.forEach { preset ->
-                    val presetAccent = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF)
-                    PalettePreviewCard(
-                        label = preset.displayName,
-                        backgroundColor = if (isDark) BgDark else BgLight,
-                        cardColor = if (isDark) Surface1Dark else Surface1Light,
-                        accentColor = presetAccent,
-                        textColor = if (isDark) TextDark else TextLight,
-                        isSelected = currentPreset == preset,
-                        onClick = {
-                            onSelectPreset(preset)
-                            // Switching to a preset exits full-palette mode.
-                            if (paletteMode == PaletteMode.FULL) {
-                                // Handled by the preference write — SIMPLIFIED is the default for presets.
-                            }
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
 //  Shared UI helpers (match the design language)
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -365,61 +357,6 @@ private fun SettingsSectionLabel(text: String) {
     )
 }
 
-@Composable
-private fun ClickableNavRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    SettingsCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(36.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontFamily = RobotoFamily,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = subtitle,
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
 /** A simple segmented toggle (3-way). Matches the episode-settings SegmentedRow design. */
 @Composable
 private fun SegmentedToggle(
@@ -434,7 +371,6 @@ private fun SegmentedToggle(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             options.forEachIndexed { idx, label ->
                 val selected = idx == selectedIndex

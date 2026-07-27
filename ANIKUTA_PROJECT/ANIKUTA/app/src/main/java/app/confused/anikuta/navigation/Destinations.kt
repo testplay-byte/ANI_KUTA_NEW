@@ -399,14 +399,14 @@ object AppearanceDestination : Screen {
 
 /**
  * The Appearance → General page — the actual theme settings (theme mode,
- * AMOLED, palettes, episode settings link). Per owner spec (Session 1).
+ * palettes, AMOLED). Per owner spec (Session 1 + feedback): no episode settings
+ * link here (it's on the Appearance list screen).
  */
 object AppearanceGeneralDestination : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         app.confused.anikuta.feature.settings.AppearanceGeneralScreen(
-            onOpenEpisodeSettings = { navigator.push(EpisodeSettingsHubDestination) },
             onBack = { navigator.pop() },
         )
     }
