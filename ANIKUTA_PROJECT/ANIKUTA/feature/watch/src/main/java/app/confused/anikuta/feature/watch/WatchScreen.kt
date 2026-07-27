@@ -342,6 +342,16 @@ fun WatchScreen(
                             stateHolder.setLoadingState(PlayerLoadingState.READY)
                             stateHolder.setErrorMessage(null)
 
+                            // ── Auto-play: start playback when the file loads ──
+                            if (playerPreferences.autoPlay().get()) {
+                                try {
+                                    MPVLib.setPropertyBoolean("pause", false)
+                                    Log.i(TAG, "Auto-play: starting playback")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Auto-play: failed to start playback", e)
+                                }
+                            }
+
                             // ── Load external subtitle tracks via sub-add ──
                             // CRITICAL: sub-add MUST be sent AFTER FILE_LOADED.
                             // Sending before causes MPV to silently drop the track.
@@ -689,14 +699,24 @@ fun WatchScreen(
     } }
 
     // ── Cover-color dynamic theming (watch-page.md §7) ──
-    // Respects the adaptiveColorsPlayer preference — when OFF, the watch page
+    // Respects the adaptiveColorsPlayer preference AND the user's actual theme
+    // mode (dark/light/system) + AMOLED setting. When OFF, the watch page
     // uses the user's selected palette (no dynamic override).
     val themePreferences = koinInject<app.confused.anikuta.core.preferences.ThemePreferences>()
     val adaptiveColorsPlayer by themePreferences.adaptiveColorsPlayer.changes()
         .collectAsStateWithLifecycle(initialValue = themePreferences.adaptiveColorsPlayer.get())
+    val themeMode by themePreferences.themeMode.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.themeMode.get())
+    val amoledPref by themePreferences.amoled.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.amoled.get())
+    val isDarkTheme = when (themeMode) {
+        app.confused.anikuta.core.preferences.ThemeMode.LIGHT -> false
+        app.confused.anikuta.core.preferences.ThemeMode.DARK -> true
+        app.confused.anikuta.core.preferences.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
     val dynamicScheme = if (adaptiveColorsPlayer) {
         watchRequest.coverColor?.takeIf { it != 0 }?.let {
-            generateDynamicScheme(it, darkTheme = true, amoled = false)
+            generateDynamicScheme(it, darkTheme = isDarkTheme, amoled = amoledPref)
         }
     } else {
         null
