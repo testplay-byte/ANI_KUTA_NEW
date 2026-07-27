@@ -204,7 +204,7 @@ class AniListDetailsProvider(
     private suspend fun fetchAndPersistEpisodes(
         source: eu.kanade.tachiyomi.animesource.AnimeCatalogueSource,
         sAnime: eu.kanade.tachiyomi.animesource.model.SAnime,
-        anilistId: Int,
+        anilistId: Int?,
     ): List<Episode> {
         return try {
             val sEpisodes = withContext(Dispatchers.IO) { source.getEpisodeList(sAnime) }
