@@ -119,6 +119,14 @@ class ExtensionDetailsProvider(
         // ── Stage A: enrich via getAnimeDetails (the gap ANIKUTA had — doc 04 §4) ──
         val enriched = enrichAnimeDetails(source, sAnime)
 
+        // ── Cover robustness: log when an extension doesn't provide a cover ──
+        // The AniList merge (Stage D) will fill coverUrl for linked anime. For unlinked,
+        // the UI shows a placeholder (surfaceVariant box). No blind AniList-title-search
+        // fallback — showing no cover is safer than showing the wrong one.
+        if (enriched.thumbnail_url.isNullOrBlank()) {
+            Log.w(TAG, "Extension '${source.name}' provided no cover for '${enriched.title}' — UI will show placeholder")
+        }
+
         // ── Stage B: Palette-extract cover color (Phase 9 integration) ──
         val coverColorHex = extractCoverColorHex(enriched.thumbnail_url)
 

@@ -91,6 +91,10 @@ import org.koin.androidx.compose.koinViewModel
 fun LibraryScreen(
     onOpenAnime: (Int) -> Unit,
     onOpenContinueWatching: (ContinueWatchingItem) -> Unit,
+    /** Called when the user taps an unlinked extension anime in the library
+     *  (anilistId == null). The [AppController.openLibraryAnime] resolves the
+     *  source + pushes ExtensionAnimeDetailDestination. */
+    onOpenExtensionAnime: (app.confused.anikuta.core.common.model.Anime) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: LibraryViewModel = koinViewModel(),
 ) {
@@ -203,7 +207,11 @@ fun LibraryScreen(
                         },
                         onItemClick = { anime ->
                             if (state.selectionMode) viewModel.toggleSelection(anime.id)
-                            else onOpenAnime(anime.anilistId ?: return@ListContent)
+                            else {
+                                val anilistId = anime.anilistId
+                                if (anilistId != null) onOpenAnime(anilistId)
+                                else onOpenExtensionAnime(anime)
+                            }
                         },
                         onItemLongClick = { anime ->
                             viewModel.toggleSelection(anime.id)
@@ -224,7 +232,11 @@ fun LibraryScreen(
                         },
                         onItemClick = { anime ->
                             if (state.selectionMode) viewModel.toggleSelection(anime.id)
-                            else onOpenAnime(anime.anilistId ?: return@GridContent)
+                            else {
+                                val anilistId = anime.anilistId
+                                if (anilistId != null) onOpenAnime(anilistId)
+                                else onOpenExtensionAnime(anime)
+                            }
                         },
                         onItemLongClick = { anime ->
                             viewModel.toggleSelection(anime.id)

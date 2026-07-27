@@ -62,6 +62,7 @@ object LibraryTabDestination : Screen {
         LibraryScreen(
             onOpenAnime = { id -> appController.pushDetail(id) },
             onOpenContinueWatching = { item -> appController.pushDetail(item.anilistId) },
+            onOpenExtensionAnime = { anime -> appController.openLibraryAnime(anime) },
         )
     }
 }
@@ -130,6 +131,10 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             onDownloadResume = { episodeUrl -> appController.resumeDownload(animeId, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(animeId, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(animeId, episodeUrl) },
+            // AniList mode: "Switch anime" opens the AniList search sheet → navigate to the picked anime.
+            onNavigateToAnilistAnime = { newId -> navigator.replace(AnimeDetailDestination(newId)) },
+            // "Link to AniList" is not shown in AniList mode (only in extension mode).
+            onLinkToAniList = {},
         )
     }
 }
@@ -179,6 +184,10 @@ data class ExtensionAnimeDetailDestination(
             onDownloadResume = { episodeUrl -> appController.resumeDownload(downloadKey, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(downloadKey, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
+            // Extension mode: "Link to AniList" / "Switch anime" opens the AniList linking sheet overlay.
+            onLinkToAniList = { appController.startLinking(source, sAnime) },
+            // If the AniList search sheet is used (rare in extension mode), navigate to the picked anime.
+            onNavigateToAnilistAnime = { newId -> navigator.replace(AnimeDetailDestination(newId)) },
         )
     }
 }

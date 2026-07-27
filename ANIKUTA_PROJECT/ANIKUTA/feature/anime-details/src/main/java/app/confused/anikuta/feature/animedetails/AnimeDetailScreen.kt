@@ -72,6 +72,12 @@ fun AnimeDetailScreen(
     onDownloadResume: (String) -> Unit = {},
     onDownloadRetry: (String) -> Unit = {},
     onDownloadDelete: (String) -> Unit = {},
+    /** Called when the user picks "Link to AniList" / "Switch anime" (extension mode) —
+     *  opens the AniList linking sheet overlay via AppController.startLinking. */
+    onLinkToAniList: () -> Unit = {},
+    /** Called when the user picks a new anime from the AniList search sheet (AniList mode
+     *  "Switch anime"). The destination navigates to the new AniList anime's details page. */
+    onNavigateToAnilistAnime: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -149,8 +155,8 @@ fun AnimeDetailScreen(
     val currentDataSource by vm.currentDataSource.collectAsState()
     val availableSources = remember { vm.getAvailableSources() }
 
-    // ── Three-dot menu state (controls the ManualSearchSheet for extension switching) ──
-    var showExtensionSwitcher by remember { mutableStateOf(false) }
+    // ── AniList search sheet state (for the three-dot menu's "Switch anime" option in AniList mode) ──
+    var showAniListSearch by remember { mutableStateOf(false) }
 
     // ── Generate dynamic scheme from cover color when available ──
     val coverColorArgb: Int = remember(animeState) {
@@ -206,7 +212,8 @@ fun AnimeDetailScreen(
                     onBack = onBack,
                     currentDataSource = currentDataSource,
                     onSwitchDataSource = vm::switchDataSource,
-                    onSwitchExtension = { showExtensionSwitcher = true },
+                    onLinkToAniList = onLinkToAniList,
+                    onSwitchAnilistAnime = { showAniListSearch = true },
                     onRefresh = vm::refresh,
                     onOpenEpisode = onOpenEpisode,
                     onToggleWatched = vm::toggleWatched,
@@ -232,27 +239,14 @@ fun AnimeDetailScreen(
         screenContent()
     }
 
-    // ── Manual search sheet (for extension switching — opened from the three-dot menu) ──
+    // ── AniList search sheet (for the three-dot menu's "Switch anime" option in AniList mode) ──
     val successState = animeState as? DetailState.Success
-    if (showExtensionSwitcher) {
-        ManualSearchSheet(
+    if (showAniListSearch) {
+        AniListSearchSheet(
+            anilistApi = api,
             initialQuery = successState?.anime?.title ?: "",
-            availableSources = availableSources,
-            isSearching = isSearching,
-            results = manualSearchResults,
-            errors = manualSearchErrors,
-            hasSearched = hasSearched,
-            currentMatch = currentMatch,
-            onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
-            onLinkManual = { result ->
-                // The user picked a result — convert to source + SAnime + switch.
-                vm.switchExtension(result.source, result.sAnime)
-                showExtensionSwitcher = false
-            },
-            onDismiss = {
-                vm.clearManualSearch()
-                showExtensionSwitcher = false
-            },
+            onPicked = { newId -> onNavigateToAnilistAnime(newId) },
+            onDismiss = { showAniListSearch = false },
         )
     }
 

@@ -68,7 +68,8 @@ fun DetailBanner(
     onToggleSave: () -> Unit,
     onLongPressSave: () -> Unit = {},
     onSwitchDataSource: (app.confused.anikuta.core.common.model.details.DataSource) -> Unit = {},
-    onSwitchExtension: () -> Unit = {},
+    onLinkToAniList: () -> Unit = {},
+    onSwitchAnilistAnime: () -> Unit = {},
     onRefresh: () -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -127,7 +128,8 @@ fun DetailBanner(
                     anime = anime,
                     currentDataSource = currentDataSource,
                     onSwitchDataSource = onSwitchDataSource,
-                    onSwitchExtension = onSwitchExtension,
+                    onLinkToAniList = onLinkToAniList,
+                    onSwitchAnilistAnime = onSwitchAnilistAnime,
                     onRefresh = onRefresh,
                 )
             }

@@ -59,7 +59,8 @@ fun DetailContent(
     onBack: () -> Unit,
     currentDataSource: DataSource,
     onSwitchDataSource: (DataSource) -> Unit,
-    onSwitchExtension: () -> Unit,
+    onLinkToAniList: () -> Unit,
+    onSwitchAnilistAnime: () -> Unit,
     onRefresh: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit,
     onToggleWatched: (String) -> Unit,
@@ -112,7 +113,8 @@ fun DetailContent(
                     onToggleSave = onToggleSave,
                     onLongPressSave = onLongPressSave,
                     onSwitchDataSource = onSwitchDataSource,
-                    onSwitchExtension = onSwitchExtension,
+                    onLinkToAniList = onLinkToAniList,
+                    onSwitchAnilistAnime = onSwitchAnilistAnime,
                     onRefresh = onRefresh,
                 )
             }

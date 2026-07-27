@@ -179,6 +179,43 @@ class AppController(
         navigator?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId))
     }
 
+    /**
+     * Opens a library anime's details page. Handles BOTH linked + unlinked anime:
+     * - **Linked** (`anilistId != null`): pushes [AnimeDetailDestination] (AniList mode).
+     * - **Unlinked** (`anilistId == null`): resolves the extension source from
+     *   `anime.sourceId`, reconstructs the `SAnime` from `anime.url` + `anime.title`,
+     *   and pushes [ExtensionAnimeDetailDestination] (extension mode).
+     *
+     * If the source is no longer installed, shows a toast + falls back to pushing
+     * the AniList details page with `anilistId = 0` (which will show an error state).
+     *
+     * This fixes the bug where unlinked extension anime saved to the library were
+     * not openable on tap (the old `onOpenAnime(anilistId ?: return)` silently bailed).
+     */
+    fun openLibraryAnime(anime: app.confused.anikuta.core.common.model.Anime) {
+        val anilistId = anime.anilistId
+        if (anilistId != null) {
+            pushDetail(anilistId)
+            return
+        }
+        // Unlinked extension anime — resolve the source.
+        val source = sourceMatcher.getSourceById(anime.sourceId)
+        if (source != null) {
+            val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+                url = anime.url
+                title = anime.title
+            }
+            pushExtensionDetail(source, sAnime, anilistId = null)
+        } else {
+            android.widget.Toast.makeText(
+                context,
+                "Source no longer installed for '${anime.title}'",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            Log.w("AnikutaLibrary", "Cannot open library anime: source ${anime.sourceId} not installed")
+        }
+    }
+
     fun pushWatch(watchRequest: WatchRequest) {
         navigator?.push(WatchDestination(watchRequest))
     }
