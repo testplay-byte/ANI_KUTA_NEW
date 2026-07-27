@@ -1,44 +1,47 @@
 package app.confused.anikuta.core.designsystem.theme
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.compositeOver
 import androidx.palette.graphics.Palette
 
 /**
  * Generates a dynamic [ColorScheme] from an anime's cover color for
  * cover-color theming (per watch-page.md §7 + themes-and-colors.md §6).
  *
- * The watch page + fullscreen player wrap their subtree in
- * `MaterialTheme(colorScheme = generateDynamicScheme(coverColor))` so the
- * player chrome is tinted with the anime's identity. Backing out restores
- * the user's selected palette.
+ * The watch page + fullscreen player + anime details page wrap their subtree
+ * in `MaterialTheme(colorScheme = generateDynamicScheme(coverColor))` so the
+ * chrome is tinted with the anime's identity. Backing out restores the user's
+ * selected palette.
+ *
+ * **Fallback behavior:** Returns `null` when [coverColor] is `0` (no color
+ * available). The caller is responsible for falling back to the user's
+ * selected palette — this function does NOT hardcode any default palette.
  *
  * @param coverColor the ARGB int color extracted from the cover art
  *   (e.g. from AniList's `coverImage.color` field, or from Palette)
  * @param darkTheme whether to generate a dark scheme (default true — ANIKUTA
  *   defaults to dark)
  * @param amoled whether to use pure-black surfaces (AMOLED mode)
+ * @return a [ColorScheme] tinted with the cover color, or `null` if no color
+ *   is available (caller falls back to the user's palette).
  */
 fun generateDynamicScheme(
     coverColor: Int,
     darkTheme: Boolean = true,
     amoled: Boolean = false,
-): ColorScheme {
-    if (coverColor == 0) {
-        // No cover color — return the default ANIKUTA scheme
-        return if (darkTheme) AnikutaDarkColorScheme else AnikutaLightColorScheme
-    }
+): ColorScheme? {
+    if (coverColor == 0) return null
 
-    // Use the cover color directly (AniList provides it as an ARGB hex string)
     val dominant = ComposeColor(coverColor)
+    val luminance = dominant.luminance()
 
-    // Derive a harmonious palette from the dominant color
+    // Primary = the cover color itself
     val primary = dominant
-    val onPrimary = if (dominant.luminance() > 0.5f) ComposeColor.Black else ComposeColor.White
+    val onPrimary = if (luminance > 0.5f) ComposeColor.Black else ComposeColor.White
     val primaryContainer = dominant.copy(alpha = 0.3f).compositeOver(ComposeColor.Black)
     val onPrimaryContainer = ComposeColor.White
 
@@ -112,22 +115,3 @@ private fun ComposeColor.compositeOver(background: ComposeColor): ComposeColor {
         alpha = 1f,
     )
 }
-
-// Default ANIKUTA color scheme (lime green #B1F256)
-private val AnikutaPrimary = ComposeColor(0xFFB1F256)
-private val AnikutaDarkColorScheme = darkColorScheme(
-    primary = AnikutaPrimary,
-    onPrimary = ComposeColor.Black,
-    primaryContainer = ComposeColor(0xFF1B1729),
-    onPrimaryContainer = AnikutaPrimary,
-    background = ComposeColor(0xFF0D0D0D),
-    onBackground = ComposeColor.White,
-    surface = ComposeColor(0xFF1A1A1A),
-    onSurface = ComposeColor.White,
-    surfaceVariant = ComposeColor(0xFF222222),
-    onSurfaceVariant = ComposeColor(0xFFAAAAAA),
-)
-private val AnikutaLightColorScheme = lightColorScheme(
-    primary = AnikutaPrimary,
-    onPrimary = ComposeColor.Black,
-)

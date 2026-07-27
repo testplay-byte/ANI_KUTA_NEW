@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.animedetails
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +16,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.api.AniListApi
+import app.confused.anikuta.core.designsystem.theme.generateDynamicScheme
+import app.confused.anikuta.core.preferences.ThemePreferences
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -75,6 +79,19 @@ fun AnimeDetailScreen(
     val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore = org.koin.core.context.GlobalContext.get().get()
     val episodeRepository: app.confused.anikuta.core.common.repository.EpisodeRepository = org.koin.core.context.GlobalContext.get().get()
 
+    // ── Dynamic cover-color theming (Task 1.3) ──
+    // When adaptiveColorsDetails is ON and the anime has a cover color,
+    // wrap the entire screen content in a MaterialTheme whose ColorScheme
+    // is generated from the cover color. When OFF or no color, the user's
+    // selected palette is used (no override).
+    val themePrefs = remember { org.koin.core.context.GlobalContext.get().get<ThemePreferences>() }
+    val adaptiveColorsDetails by themePrefs.adaptiveColorsDetails.changes()
+        .collectAsStateWithLifecycle(initialValue = themePrefs.adaptiveColorsDetails.get())
+    val themeMode by themePrefs.themeMode.changes()
+        .collectAsStateWithLifecycle(initialValue = themePrefs.themeMode.get())
+    val amoled by themePrefs.amoled.changes()
+        .collectAsStateWithLifecycle(initialValue = themePrefs.amoled.get())
+
     @Suppress("UNCHECKED_CAST")
     val vm: AnimeDetailViewModel = viewModel(
         key = "detail_$animeId",
@@ -116,47 +133,76 @@ fun AnimeDetailScreen(
     // (not a StateFlow — the list doesn't change while the screen is open).
     val availableSources = remember { vm.getAvailableSources() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        when (val state = animeState) {
-            is DetailState.Loading -> LoadingState()
-            is DetailState.Error -> ErrorState(message = state.message)
-            is DetailState.Success -> DetailContent(
-                anime = state.anime,
-                episodeState = episodeState,
-                currentMatch = currentMatch,
-                allMatches = allMatches,
-                watchedEpisodes = watchedEpisodes,
-                episodeMetadata = episodeMetadata,
-                isRefreshing = isRefreshing,
-                isSearching = isSearching,
-                manualSearchResults = manualSearchResults,
-                manualSearchErrors = manualSearchErrors,
-                autoMatchErrors = autoMatchErrors,
-                hasSearched = hasSearched,
-                availableSources = availableSources,
-                saved = isSaved,
-                onToggleSave = vm::toggleSave,
-                onLongPressSave = vm::openCategoryPicker,
-                onBack = onBack,
-                onOpenEpisode = onOpenEpisode,
-                onToggleWatched = vm::toggleWatched,
-                onSwitchSource = vm::switchSource,
-                onRefresh = vm::refresh,
-                onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
-                onLinkManual = vm::linkManual,
-                onClearManualSearch = vm::clearManualSearch,
-                onDownloadEpisode = onDownloadEpisode,
-                downloadStates = downloadStates,
-                onDownloadCancel = onDownloadCancel,
-                onDownloadResume = onDownloadResume,
-                onDownloadRetry = onDownloadRetry,
-                onDownloadDelete = onDownloadDelete,
-            )
+    // ── Generate dynamic scheme from cover color when available ──
+    val coverColorArgb = remember(animeState) {
+        if (animeState is DetailState.Success) {
+            val hex = (animeState as DetailState.Success).anime.coverColorHex
+            hex?.let {
+                runCatching { AndroidColor.parseColor(it) }.getOrNull() ?: 0
+            } ?: 0
+        } else 0
+    }
+    val isDark = when (themeMode) {
+        app.confused.anikuta.core.preferences.ThemeMode.LIGHT -> false
+        app.confused.anikuta.core.preferences.ThemeMode.DARK -> true
+        app.confused.anikuta.core.preferences.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    val dynamicScheme = if (adaptiveColorsDetails && coverColorArgb != 0) {
+        generateDynamicScheme(coverColorArgb, darkTheme = isDark, amoled = amoled)
+    } else {
+        null
+    }
+
+    val screenContent: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+            when (val state = animeState) {
+                is DetailState.Loading -> LoadingState()
+                is DetailState.Error -> ErrorState(message = state.message)
+                is DetailState.Success -> DetailContent(
+                    anime = state.anime,
+                    episodeState = episodeState,
+                    currentMatch = currentMatch,
+                    allMatches = allMatches,
+                    watchedEpisodes = watchedEpisodes,
+                    episodeMetadata = episodeMetadata,
+                    isRefreshing = isRefreshing,
+                    isSearching = isSearching,
+                    manualSearchResults = manualSearchResults,
+                    manualSearchErrors = manualSearchErrors,
+                    autoMatchErrors = autoMatchErrors,
+                    hasSearched = hasSearched,
+                    availableSources = availableSources,
+                    saved = isSaved,
+                    onToggleSave = vm::toggleSave,
+                    onLongPressSave = vm::openCategoryPicker,
+                    onBack = onBack,
+                    onOpenEpisode = onOpenEpisode,
+                    onToggleWatched = vm::toggleWatched,
+                    onSwitchSource = vm::switchSource,
+                    onRefresh = vm::refresh,
+                    onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
+                    onLinkManual = vm::linkManual,
+                    onClearManualSearch = vm::clearManualSearch,
+                    onDownloadEpisode = onDownloadEpisode,
+                    downloadStates = downloadStates,
+                    onDownloadCancel = onDownloadCancel,
+                    onDownloadResume = onDownloadResume,
+                    onDownloadRetry = onDownloadRetry,
+                    onDownloadDelete = onDownloadDelete,
+                )
+            }
         }
+    }
+
+    // ── Apply dynamic theme wrap (or use the user's palette) ──
+    if (dynamicScheme != null) {
+        MaterialTheme(colorScheme = dynamicScheme, content = screenContent)
+    } else {
+        screenContent()
     }
 
     // Category picker dialog (long-press on bookmark button).

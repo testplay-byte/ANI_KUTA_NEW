@@ -105,6 +105,22 @@ class ThemePreferences(
      */
     val customPaletteMode: Preference<PaletteMode> = store.getEnum("pref_custom_palette_mode", PaletteMode.SIMPLIFIED)
 
+    /**
+     * Whether to apply dynamic cover-color theming to the AniList anime details
+     * page. When `true` (default), the details page wraps in a MaterialTheme
+     * whose ColorScheme is generated from the anime's cover color via
+     * [generateDynamicScheme]. When `false`, the user's selected palette is used.
+     */
+    val adaptiveColorsDetails: Preference<Boolean> = store.getBoolean("pref_adaptive_colors_details", true)
+
+    /**
+     * Whether to apply dynamic cover-color theming to the fullscreen video
+     * player controls. When `true` (default), the fullscreen controls overlay
+     * uses a ColorScheme generated from the anime's cover color. When `false`,
+     * the app's default theme colors are used.
+     */
+    val adaptiveColorsPlayer: Preference<Boolean> = store.getBoolean("pref_adaptive_colors_player", true)
+
     /** Convenience: set a custom accent color + switch to CUSTOM preset. */
     fun setCustomAccent(argb: Int) {
         customAccentColor.set(argb)

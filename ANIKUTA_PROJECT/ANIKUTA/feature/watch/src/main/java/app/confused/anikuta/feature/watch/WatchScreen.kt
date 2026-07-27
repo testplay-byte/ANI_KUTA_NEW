@@ -680,8 +680,17 @@ fun WatchScreen(
     } }
 
     // ── Cover-color dynamic theming (watch-page.md §7) ──
-    val dynamicScheme = watchRequest.coverColor?.takeIf { it != 0 }?.let {
-        generateDynamicScheme(it, darkTheme = true, amoled = false)
+    // Respects the adaptiveColorsPlayer preference — when OFF, the watch page
+    // uses the user's selected palette (no dynamic override).
+    val themePreferences = koinInject<app.confused.anikuta.core.preferences.ThemePreferences>()
+    val adaptiveColorsPlayer by themePreferences.adaptiveColorsPlayer.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.adaptiveColorsPlayer.get())
+    val dynamicScheme = if (adaptiveColorsPlayer) {
+        watchRequest.coverColor?.takeIf { it != 0 }?.let {
+            generateDynamicScheme(it, darkTheme = true, amoled = false)
+        }
+    } else {
+        null
     }
 
     // ── Quality switching: use pre-resolved servers from WatchRequest, or resolve on-demand ──
