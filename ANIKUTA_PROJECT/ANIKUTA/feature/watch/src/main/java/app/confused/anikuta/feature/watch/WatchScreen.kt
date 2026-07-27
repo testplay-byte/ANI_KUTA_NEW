@@ -938,7 +938,7 @@ private fun WatchScreenContent(
             // When collapsed, the bar is completely removed from layout so the
             // player moves up to take its space.
             AnimatedVisibility(
-                visible = !isCollapsed.value,
+                visible = !isCollapsed,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
             ) {
