@@ -193,6 +193,27 @@ class AnimeRepositoryImpl(
         )
     }
 
+    override suspend fun updatePreferredCoverByAnilistId(anilistId: Int, coverUrl: String?, coverColor: String?) {
+        withContext(dispatchers.io) {
+            database.animesQueries.updatePreferredCoverByAnilistId(
+                coverUrl = coverUrl,
+                coverColor = coverColor,
+                anilistId = anilistId.toLong(),
+            )
+        }
+    }
+
+    override suspend fun updatePreferredCoverBySourceAndUrl(sourceId: Long, url: String, coverUrl: String?, coverColor: String?) {
+        withContext(dispatchers.io) {
+            database.animesQueries.updatePreferredCoverBySourceAndUrl(
+                coverUrl = coverUrl,
+                coverColor = coverColor,
+                sourceId = sourceId,
+                url = url,
+            )
+        }
+    }
+
     override suspend fun delete(id: Long) {
         Log.d(TAG, "delete: id=$id")
         database.animesQueries.delete(id)

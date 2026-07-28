@@ -119,9 +119,12 @@ fun SourceSwitcherMenu(
             }
         }
 
-        // ── Link / Switch anime — ONLY for extension entry ──
-        // If the user opened from AniList directly, there's no link to correct.
-        if (entryMode == DataSource.EXTENSION) {
+        // ── Link / Switch anime — shown whenever there's a source link ──
+        // The user may have opened from extensions (auto-link landed on AniList page)
+        // OR opened from AniList (auto-matched a source). In both cases, the auto-match
+        // link might be wrong, so the user should be able to correct it.
+        // entryMode is kept for future use but doesn't gate this option.
+        if (anime.sourceId != null || entryMode == DataSource.EXTENSION) {
             if (anime.anilistId != null) {
                 // Linked — "Switch anime" to correct a wrong auto-match.
                 DropdownMenuItem(
@@ -156,24 +159,29 @@ fun SourceSwitcherMenu(
         )
 
         // ── Data-source indicator (informational — visually faded/disabled) ──
-        // Per owner feedback: this item should look non-interactive (faded background
-        // + muted colors) to signal it's not a clickable feature.
+        // Per owner feedback: this item should look non-interactive (faded colors)
+        // to signal it's not a clickable feature. The two lines are wrapped in a
+        // Column with proper spacing to prevent overlap.
         DropdownMenuItem(
             text = {
-                Text(
-                    text = "Current: ${anime.sourceName}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                )
-                Text(
-                    text = "Data source: ${currentDataSource.name.lowercase()}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                )
+                androidx.compose.foundation.layout.Column(
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Current: ${anime.sourceName}",
+                        fontFamily = RobotoFamily,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Text(
+                        text = "Data source: ${currentDataSource.name.lowercase()}",
+                        fontFamily = RobotoFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    )
+                }
             },
             leadingIcon = {
                 Icon(

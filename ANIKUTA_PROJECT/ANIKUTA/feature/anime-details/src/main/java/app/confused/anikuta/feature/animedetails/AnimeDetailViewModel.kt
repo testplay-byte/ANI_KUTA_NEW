@@ -90,6 +90,7 @@ class AnimeDetailViewModel(
     private val episodeMetadataRepository: EpisodeMetadataRepository,
     private val sourceMatcher: SourceMatcher,
     private val api: AniListApi,
+    private val viewPreferenceStore: app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -189,6 +190,11 @@ class AnimeDetailViewModel(
                 // Set up the current match for the source switcher + manual search.
                 setupCurrentMatch(result.anime)
 
+                // Update the library cover to match the loaded view's cover — so the
+                // library reflects the user's preferred data source (extension cover if
+                // the user switched to Extension view, AniList cover if AniList view).
+                launch { updateCoverFromLoadedAnime(result.anime) }
+
                 // Fetch episode metadata in the background (skipped for unlinked extension anime).
                 launch { fetchEpisodeMetadata(result.anime, result.episodes.size) }
                 // Search other sources in the background (for the switcher).
@@ -217,7 +223,77 @@ class AnimeDetailViewModel(
         _currentDataSource.value = target
         // Rebuild the request for the new source.
         activeRequest = requestForDataSource(target, (activeRequest))
+        // Persist the per-anime preference (so re-open respects the user's choice).
+        saveViewPreference(target)
         load()
+    }
+
+    /**
+     * Saves the per-anime data-source preference + updates the library cover.
+     *
+     * When the user prefers Extension view, the library should show the extension's
+     * cover (not AniList's). When they switch back to AniList, restore the AniList cover.
+     * The DB row's coverUrl/coverColor is updated so the library naturally reflects it.
+     */
+    private fun saveViewPreference(dataSource: DataSource) {
+        viewModelScope.launch {
+            try {
+                val unified = (_animeState.value as? DetailState.Success)?.anime
+                val anilistId = currentAnilistId()
+                // Save the preference.
+                if (anilistId != null) {
+                    viewPreferenceStore.set(anilistId, dataSource)
+                } else if (unified?.sourceId != null) {
+                    viewPreferenceStore.set(unified.sourceId, unified.url, dataSource)
+                }
+                // Update the library cover to match the preferred source.
+                if (unified != null) {
+                    updateLibraryCover(unified, dataSource)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to save view preference (non-fatal)", e)
+            }
+        }
+    }
+
+    /**
+     * Updates the `Anime` DB row's coverUrl + coverColor to match the preferred
+     * data source. Called from [saveViewPreference] when the user switches views.
+     *
+     * The [unified] is the CURRENT view's anime (before the switch); [dataSource]
+     * is the TARGET view. We need to load the target view's cover after the switch
+     * completes. For simplicity, we update the cover AFTER the load() succeeds —
+     * the [load] method's success path calls [updateCoverFromLoadedAnime].
+     */
+    private suspend fun updateLibraryCover(unified: UnifiedAnime, dataSource: DataSource) {
+        // The cover update happens after load() — see updateCoverFromLoadedAnime.
+        // This method is a placeholder for any immediate pre-switch cover logic.
+    }
+
+    /**
+     * After [load] succeeds, updates the library cover to match the loaded anime's
+     * cover — so the library reflects the user's preferred data source.
+     */
+    private suspend fun updateCoverFromLoadedAnime(anime: UnifiedAnime) {
+        try {
+            val anilistId = anime.anilistId
+            if (anilistId != null) {
+                animeRepository.updatePreferredCoverByAnilistId(
+                    anilistId = anilistId,
+                    coverUrl = anime.coverUrl,
+                    coverColor = anime.coverColorHex,
+                )
+            } else if (anime.sourceId != null) {
+                animeRepository.updatePreferredCoverBySourceAndUrl(
+                    sourceId = anime.sourceId,
+                    url = anime.url,
+                    coverUrl = anime.coverUrl,
+                    coverColor = anime.coverColorHex,
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update library cover (non-fatal)", e)
+        }
     }
 
     /**
@@ -433,10 +509,28 @@ class AnimeDetailViewModel(
 
     // ── Internal helpers ──
 
-    /** Determines the initial data source from the [initialRequest]. */
-    private fun initialDataSource(): DataSource = when (initialRequest) {
-        is DetailsRequest.ByAniListId -> DataSource.ANILIST
-        is DetailsRequest.ByExtension -> DataSource.EXTENSION
+    /**
+     * Determines the initial data source — reads the per-anime preference first,
+     * falls back to the entry mode (AniList entry → ANILIST; Extension entry → EXTENSION).
+     *
+     * This makes re-opening an anime respect the user's previous "View from Extension" /
+     * "View from AniList" choice.
+     */
+    private fun initialDataSource(): DataSource {
+        // Check the per-anime preference.
+        val pref = when (initialRequest) {
+            is DetailsRequest.ByAniListId -> viewPreferenceStore.get(initialRequest.anilistId)
+            is DetailsRequest.ByExtension -> {
+                viewPreferenceStore.get(initialRequest.sourceId, initialRequest.animeUrl)
+                    ?: initialRequest.anilistId?.let { viewPreferenceStore.get(it) }
+            }
+        }
+        if (pref != null) return pref
+        // Fall back to the entry mode.
+        return when (initialRequest) {
+            is DetailsRequest.ByAniListId -> DataSource.ANILIST
+            is DetailsRequest.ByExtension -> DataSource.EXTENSION
+        }
     }
 
     /** Rebuilds the request when switching data sources. */

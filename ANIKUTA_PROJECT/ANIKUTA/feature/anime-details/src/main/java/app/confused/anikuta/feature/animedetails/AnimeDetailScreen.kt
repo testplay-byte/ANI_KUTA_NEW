@@ -142,6 +142,7 @@ fun AnimeDetailScreen(
                     episodeMetadataRepository = episodeMetadataRepository,
                     sourceMatcher = sourceMatcher,
                     api = api,
+                    viewPreferenceStore = org.koin.core.context.GlobalContext.get().get(),
                     appContext = context.applicationContext,
                 ) as T
         },

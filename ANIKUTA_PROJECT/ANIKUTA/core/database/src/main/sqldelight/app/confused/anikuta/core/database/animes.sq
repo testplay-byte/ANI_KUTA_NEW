@@ -123,6 +123,22 @@ UPDATE animes SET
     next_airing_episode = :nextAiringEpisode
 WHERE anilist_id = :anilistId;
 
+-- Updates only the cover URL + cover color (used when the user switches the
+-- per-anime data-source preference to Extension — the library should reflect
+-- the extension's cover, not AniList's). Does NOT touch title/score/etc.
+updatePreferredCoverByAnilistId:
+UPDATE animes SET
+    cover_url = :coverUrl,
+    cover_color = :coverColor
+WHERE anilist_id = :anilistId;
+
+-- Same, keyed by sourceId + url (for unlinked extension anime).
+updatePreferredCoverBySourceAndUrl:
+UPDATE animes SET
+    cover_url = :coverUrl,
+    cover_color = :coverColor
+WHERE source_id = :sourceId AND url = :url;
+
 lastInsertedRowId:
 SELECT last_insert_rowid();
 

@@ -138,8 +138,9 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             onDownloadResume = { episodeUrl -> appController.resumeDownload(animeId, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(animeId, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(animeId, episodeUrl) },
-            // "Link to AniList" is not shown in AniList mode (only for extension entry).
-            onLinkToAniList = {},
+            // "Switch anime" from the AniList page — resolve the source from the saved
+            // link + start the linking flow (corrects a wrong auto-match).
+            onLinkToAniList = { appController.startLinkingFromAnilist(animeId) },
         )
     }
 }

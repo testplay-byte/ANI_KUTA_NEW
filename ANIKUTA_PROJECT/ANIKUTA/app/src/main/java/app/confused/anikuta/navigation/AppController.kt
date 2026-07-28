@@ -254,6 +254,39 @@ class AppController(
         linkingTarget = source to sAnime
     }
 
+    /**
+     * Starts the AniList linking flow from the AniList details page (when the user
+     * taps "Switch anime" to correct the auto-match link). Resolves the extension
+     * source + SAnime from the saved [SourceLinkStore] link, then calls [startLinking].
+     *
+     * Used by [AnimeDetailDestination] when the user is on the AniList details page
+     * but wants to re-link to a different AniList entry (the auto-match picked the
+     * wrong one).
+     */
+    fun startLinkingFromAnilist(anilistId: Int) {
+        val link = sourceLinkStore.getLink(anilistId) ?: run {
+            android.widget.Toast.makeText(
+                context,
+                "No extension source linked — open from search to link one",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val source = sourceMatcher.getSourceById(link.sourceId) ?: run {
+            android.widget.Toast.makeText(
+                context,
+                "Source '${link.sourceId}' no longer installed",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+            url = link.animeUrl
+            title = link.animeTitle
+        }
+        startLinking(source, sAnime)
+    }
+
     fun dismissLinking() {
         linkingTarget = null
     }
