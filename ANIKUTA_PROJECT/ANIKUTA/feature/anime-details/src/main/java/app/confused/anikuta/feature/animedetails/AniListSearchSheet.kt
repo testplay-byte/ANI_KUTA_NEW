@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -66,6 +67,7 @@ import kotlinx.coroutines.withContext
  *   AniList ID. The caller updates the link + navigates.
  * @param onDismiss called when the sheet is dismissed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AniListSearchSheet(
     anilistApi: AniListApi,
