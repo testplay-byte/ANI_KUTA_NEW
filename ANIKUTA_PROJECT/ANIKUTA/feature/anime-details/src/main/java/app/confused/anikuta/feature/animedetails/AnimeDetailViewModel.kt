@@ -243,8 +243,11 @@ class AnimeDetailViewModel(
                 // Save the preference.
                 if (anilistId != null) {
                     viewPreferenceStore.set(anilistId, dataSource)
-                } else if (unified?.sourceId != null) {
-                    viewPreferenceStore.set(unified.sourceId, unified.url, dataSource)
+                } else {
+                    val sid = unified?.sourceId
+                    if (sid != null) {
+                        viewPreferenceStore.set(sid, unified.url, dataSource)
+                    }
                 }
                 // Update the library cover to match the preferred source.
                 if (unified != null) {
@@ -283,13 +286,16 @@ class AnimeDetailViewModel(
                     coverUrl = anime.coverUrl,
                     coverColor = anime.coverColorHex,
                 )
-            } else if (anime.sourceId != null) {
-                animeRepository.updatePreferredCoverBySourceAndUrl(
-                    sourceId = anime.sourceId,
-                    url = anime.url,
-                    coverUrl = anime.coverUrl,
-                    coverColor = anime.coverColorHex,
-                )
+            } else {
+                val sid = anime.sourceId
+                if (sid != null) {
+                    animeRepository.updatePreferredCoverBySourceAndUrl(
+                        sourceId = sid,
+                        url = anime.url,
+                        coverUrl = anime.coverUrl,
+                        coverColor = anime.coverColorHex,
+                    )
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to update library cover (non-fatal)", e)
