@@ -139,44 +139,58 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
     }
 }
 
-data class ExtensionDetailDestination(
-    val source: AnimeCatalogueSource,
-    val sAnime: SAnime,
-) : Screen {
+/**
+ * Extension detail destination — object (not data class) to avoid serialization
+ * issues with AnimeCatalogueSource.
+ */
+object ExtensionDetailDestination : Screen {
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
-        ExtensionDetailScreen(
-            source = source,
-            sAnime = sAnime,
-            onBack = { navigator.pop() },
-            onOpenEpisode = { episode, src, episodeList ->
-                appController.resolveEpisode(
-                    episode, src, episodeList,
-                    WatchEpisodeContext(
-                        animeTitle = sAnime.title,
-                        coverUrl = sAnime.thumbnail_url,
-                    ),
-                    anilistId = 0,
-                )
-            },
-            onRelinkAnilist = {
-                // Open the linking sheet as an overlay — don't close the extension page.
-                appController.startLinking(source, sAnime)
-            },
-        )
+        val source = appController.pendingExtensionSource
+        val sAnime = appController.pendingExtensionSAnime
+        if (source != null && sAnime != null) {
+            ExtensionDetailScreen(
+                source = source,
+                sAnime = sAnime,
+                onBack = { navigator.pop() },
+                onOpenEpisode = { episode, src, episodeList ->
+                    appController.resolveEpisode(
+                        episode, src, episodeList,
+                        WatchEpisodeContext(
+                            animeTitle = sAnime.title,
+                            coverUrl = sAnime.thumbnail_url,
+                        ),
+                        anilistId = 0,
+                    )
+                },
+                onRelinkAnilist = {
+                    appController.startLinking(source, sAnime)
+                },
+            )
+        }
     }
 }
 
-data class WatchDestination(val watchRequest: WatchRequest) : Screen {
+/**
+ * Watch destination — uses an object (not a data class) so Voyager doesn't try
+ * to serialize the WatchRequest (which contains non-Serializable fields like
+ * AnimeSource). The WatchRequest is stored in AppController.pendingWatchRequest
+ * and retrieved here via Koin injection.
+ */
+object WatchDestination : Screen {
     @Composable
     override fun Content() {
+        val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
-        WatchScreen(
-            watchRequest = watchRequest,
-            onBack = { navigator.pop() },
-        )
+        val watchRequest = appController.pendingWatchRequest
+        if (watchRequest != null) {
+            WatchScreen(
+                watchRequest = watchRequest,
+                onBack = { navigator.pop() },
+            )
+        }
     }
 }
 
@@ -262,19 +276,20 @@ object BackupDestination : Screen {
                 appController.navigateToLibraryTab()
             },
             onAniyomiRestore = { uri ->
-                navigator.push(AniyomiRestoreDestination(uri))
+                appController.pendingAniyomiFileUri = uri
+                navigator.push(AniyomiRestoreDestination)
             },
         )
     }
 }
 
-data class AniyomiRestoreDestination(val fileUri: Uri?) : Screen {
+object AniyomiRestoreDestination : Screen {
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
         AniyomiRestoreFlow(
-            fileUri = fileUri,
+            fileUri = appController.pendingAniyomiFileUri,
             onCancel = { navigator.pop() },
             onComplete = { appController.navigateToLibraryTab() },
         )

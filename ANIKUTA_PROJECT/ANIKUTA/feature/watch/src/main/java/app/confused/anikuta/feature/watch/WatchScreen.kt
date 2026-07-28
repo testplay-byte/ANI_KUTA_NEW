@@ -936,7 +936,7 @@ private fun WatchScreenContent(
         // Animate the header height — 0dp when collapsed, enough for the bar when expanded.
         // The WatchTopBar uses statusBarsPadding + internal padding so we need enough height.
         val headerHeight by animateDpAsState(
-            targetValue = if (isCollapsed) 0.dp else 80.dp,
+            targetValue = if (isCollapsed) 0.dp else 96.dp,
             animationSpec = tween(300, easing = FastOutSlowInEasing),
             label = "headerHeight",
         )
@@ -962,12 +962,12 @@ private fun WatchScreenContent(
             }
 
             // Player area — 16:9, rounded corners, horizontal padding.
-            // When header is collapsed, keep 25dp top padding so player doesn't
-            // go under the status bar (per owner request).
+            // When header is collapsed, keep 50dp top padding so player doesn't
+            // go under the status bar (per owner request — doubled from 25dp).
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = if (isCollapsed) 25.dp else 0.dp)
+                    .padding(top = if (isCollapsed) 50.dp else 0.dp)
                     .padding(horizontal = 6.dp),
             ) {
                 Box(

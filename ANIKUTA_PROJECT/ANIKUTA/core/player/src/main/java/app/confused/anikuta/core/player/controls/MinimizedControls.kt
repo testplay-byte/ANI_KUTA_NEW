@@ -302,11 +302,11 @@ fun MinimizedControls(
                     )
                 }
 
-                // ---- Center: square play/pause with themed tint ----
+                // ---- Center: square play/pause with frosted dark + themed tint ----
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .size(72.dp) // larger touch target
+                        .size(72.dp)
                         .pointerInput(Unit) {
                             detectTapGestures { onTogglePlay() }
                         },
@@ -314,14 +314,14 @@ fun MinimizedControls(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                        color = Color.Black.copy(alpha = 0.5f),
                         modifier = Modifier.size(56.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = Color.White,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(32.dp),
                             )
                         }

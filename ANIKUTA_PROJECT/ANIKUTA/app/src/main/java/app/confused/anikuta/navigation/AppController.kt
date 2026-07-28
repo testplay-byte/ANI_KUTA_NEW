@@ -170,12 +170,26 @@ class AppController(
     }
 
     fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime) {
-        navigator?.push(ExtensionDetailDestination(source, sAnime))
+        pendingExtensionSource = source
+        pendingExtensionSAnime = sAnime
+        navigator?.push(ExtensionDetailDestination)
     }
 
+    var pendingExtensionSource: AnimeCatalogueSource? = null
+        private set
+    var pendingExtensionSAnime: SAnime? = null
+        private set
+    var pendingAniyomiFileUri: android.net.Uri? = null
+
     fun pushWatch(watchRequest: WatchRequest) {
-        navigator?.push(WatchDestination(watchRequest))
+        pendingWatchRequest = watchRequest
+        navigator?.push(WatchDestination)
     }
+
+    /** The WatchRequest for the current/last watch session. Stored here (not in
+     *  the Voyager Screen) so it survives Activity recreation. */
+    var pendingWatchRequest: WatchRequest? = null
+        private set
 
     fun switchTab(route: String) {
         currentTab = route

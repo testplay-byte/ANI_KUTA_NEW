@@ -171,40 +171,46 @@ fun FullscreenControls(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // ── Top-left: lock + anime info (horizontal Row) ──
-                    Row(
+                    // Wrapped in a frosted container for readability
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = 4.dp, end = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .padding(start = 16.dp, top = 4.dp),
                     ) {
-                        FSSmallButton(
-                            icon = Icons.Default.Lock,
-                            contentDescription = "Lock",
-                            onClick = onLockToggle,
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            if (animeTitle.isNotEmpty()) {
-                                Text(
-                                    text = animeTitle,
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth(0.5f),
-                                )
-                            }
-                            // Episode + quality pills in a single Row (side by side)
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(top = 4.dp),
-                            ) {
-                                if (episodeInfo.isNotEmpty()) {
-                                    FSInfoPill(text = episodeInfo)
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            FSSmallButton(
+                                icon = Icons.Default.Lock,
+                                contentDescription = "Lock",
+                                onClick = onLockToggle,
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                if (animeTitle.isNotEmpty()) {
+                                    Text(
+                                        text = animeTitle,
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth(0.5f),
+                                    )
                                 }
-                                if (qualityInfo.isNotEmpty()) {
-                                    FSInfoPill(text = qualityInfo)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(top = 4.dp),
+                                ) {
+                                    if (episodeInfo.isNotEmpty()) {
+                                        FSInfoPill(text = episodeInfo)
+                                    }
+                                    if (qualityInfo.isNotEmpty()) {
+                                        FSInfoPill(text = qualityInfo)
+                                    }
                                 }
                             }
                         }
@@ -247,9 +253,9 @@ fun FullscreenControls(
                         horizontalArrangement = Arrangement.spacedBy(28.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // -10s button: rectangular with themed tint
+                        // -10s button: frosted dark background
                         FSSkipButton(label = "-10s", onClick = { onSeekRelative(-10) })
-                        // Play/pause: square with blur + themed tint
+                        // Play/pause: square with frosted dark + themed tint
                         Box(contentAlignment = Alignment.Center) {
                             if (buffering || loadingState == PlayerLoadingState.LOADING) {
                                 CircularProgressIndicator(
@@ -260,7 +266,7 @@ fun FullscreenControls(
                             } else {
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    color = Color.Black.copy(alpha = 0.5f),
                                     modifier = Modifier.size(60.dp),
                                     onClick = onTogglePlay,
                                 ) {
@@ -268,14 +274,14 @@ fun FullscreenControls(
                                         Icon(
                                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                             contentDescription = if (isPlaying) "Pause" else "Play",
-                                            tint = Color.White,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(32.dp),
                                         )
                                     }
                                 }
                             }
                         }
-                        // +10s button: rectangular with themed tint
+                        // +10s button: frosted dark background
                         FSSkipButton(label = "+10s", onClick = { onSeekRelative(10) })
                     }
                 }
@@ -491,7 +497,7 @@ private fun FSSmallButton(
 private fun FSSkipButton(label: String, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        color = Color.Black.copy(alpha = 0.5f),
         modifier = Modifier.size(width = 56.dp, height = 44.dp),
         onClick = onClick,
     ) {
@@ -547,10 +553,9 @@ private fun FSTimeContainer(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun FSExitButton(onClick: () -> Unit) {
-    // Themed background + frosted outer container per owner request
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+        color = Color.Black.copy(alpha = 0.5f),
         modifier = Modifier.size(36.dp),
         onClick = onClick,
     ) {
