@@ -46,6 +46,22 @@ class AnimeMapperTest {
             totalEpisodes = 24L,
             lastWatched = 1700070000L,
             nextAiringEpisode = 13L,
+            // ── Two-tier identity + provenance (ADR-050, Phase 1) ──
+            localId = "aniyomi:100:https://example.com/anime/1",
+            contentId = "al:12345",
+            system = "aniyomi",
+            repoUrl = "https://repo.example.com",
+            repoName = "Example Repo",
+            extensionPkgName = "eu.kanade.tachiyomi.animeextension.en.gogoanime",
+            extensionName = "Gogoanime",
+            extensionVersionName = "1.4.3",
+            extensionVersionCode = 14L,
+            extensionLang = "en",
+            isNsfw = 0L,
+            sourceName = "Gogoanime",
+            discoveredAt = 1700000000L,
+            lastResolvedAt = 1700080000L,
+            linkConfidence = 2L,
         )
 
         assertEquals(1L, anime.id)
@@ -88,6 +104,22 @@ class AnimeMapperTest {
             totalEpisodes = null,
             lastWatched = 0L,
             nextAiringEpisode = null,
+            // ── Two-tier identity + provenance — minimal/empty (pre-backfill row) ──
+            localId = null,
+            contentId = null,
+            system = null,
+            repoUrl = null,
+            repoName = null,
+            extensionPkgName = null,
+            extensionName = null,
+            extensionVersionName = null,
+            extensionVersionCode = null,
+            extensionLang = null,
+            isNsfw = 0L,
+            sourceName = null,
+            discoveredAt = 0L,
+            lastResolvedAt = 0L,
+            linkConfidence = 0L,
         )
 
         assertEquals(2L, anime.id)
@@ -129,6 +161,22 @@ class AnimeMapperTest {
             totalEpisodes = null,
             lastWatched = 0L,
             nextAiringEpisode = null,
+            // ── Two-tier identity + provenance — not yet backfilled ──
+            localId = null,
+            contentId = null,
+            system = null,
+            repoUrl = null,
+            repoName = null,
+            extensionPkgName = null,
+            extensionName = null,
+            extensionVersionName = null,
+            extensionVersionCode = null,
+            extensionLang = null,
+            isNsfw = 0L,
+            sourceName = null,
+            discoveredAt = 0L,
+            lastResolvedAt = 0L,
+            linkConfidence = 0L,
         )
 
         assertTrue(anime.genre.isEmpty())
@@ -164,6 +212,22 @@ class AnimeMapperTest {
             totalEpisodes = null,
             lastWatched = 0L,
             nextAiringEpisode = null,
+            // ── Two-tier identity + provenance — not yet backfilled ──
+            localId = null,
+            contentId = null,
+            system = null,
+            repoUrl = null,
+            repoName = null,
+            extensionPkgName = null,
+            extensionName = null,
+            extensionVersionName = null,
+            extensionVersionCode = null,
+            extensionLang = null,
+            isNsfw = 0L,
+            sourceName = null,
+            discoveredAt = 0L,
+            lastResolvedAt = 0L,
+            linkConfidence = 0L,
         )
 
         assertEquals(listOf("Action", "Comedy"), anime.genre)

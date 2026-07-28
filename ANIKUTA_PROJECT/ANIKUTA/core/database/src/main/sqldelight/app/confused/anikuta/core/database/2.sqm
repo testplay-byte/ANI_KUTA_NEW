@@ -1,0 +1,88 @@
+-- 2.sqm — migrate from v2 to v3: two-tier identity model (ADR-050) + ADR-024 fix
+--
+-- Adds:
+--   - animes: local_id, content_id, system, repo_url, repo_name, extension_pkg_name,
+--             extension_name, extension_version_name, extension_version_code,
+--             extension_lang, is_nsfw, source_name, discovered_at, last_resolved_at,
+--             link_confidence  (the full source provenance per ADR-050)
+--   - episodes: release_date, last_refresh, last_metadata_fetch, next_episode_check
+--               (ADR-024 compliance — these were missing on episodes per Doc 06 §2.2)
+--   - Unique index on animes(local_id) — one row per (anime, source)
+--   - Index on animes(content_id) — multiple rows can share a content_id (grouping)
+--   - Unique index on animes(source_id, url) — prevents duplicate unlinked entries
+--   - Unique index on episodes(anime_id, episode_number) — prevents duplicate episodes
+--
+-- This migration is ADDITIVE ONLY (no columns removed, no data transformed).
+-- The local_id + content_id columns are populated by a backfill step in
+-- AnimeRepositoryImpl.backfillIdentityColumns() on first launch post-migration.
+--
+-- Per ADR-050 (`_ARCHITECTURE_PLAN/proposals/01a_refined_id_system.md`).
+
+-- ═══ animes: Tier 1 + Tier 2 identity columns ═══
+ALTER TABLE animes ADD COLUMN local_id TEXT;
+ALTER TABLE animes ADD COLUMN content_id TEXT;
+
+-- ═══ animes: Source provenance (Tier 1 metadata, per ADR-050 §5.1) ═══
+ALTER TABLE animes ADD COLUMN system TEXT;              -- "aniyomi" | "cloudstream" | ...
+ALTER TABLE animes ADD COLUMN repo_url TEXT;            -- extension repo base URL (nullable if installed from APK)
+ALTER TABLE animes ADD COLUMN repo_name TEXT;           -- human-readable repo name
+ALTER TABLE animes ADD COLUMN extension_pkg_name TEXT;  -- e.g. "eu.kanade.tachiyomi.animeextension.en.gogoanime"
+ALTER TABLE animes ADD COLUMN extension_name TEXT;      -- human-readable extension name
+ALTER TABLE animes ADD COLUMN extension_version_name TEXT;  -- e.g. "1.4.3"
+ALTER TABLE animes ADD COLUMN extension_version_code INTEGER;
+ALTER TABLE animes ADD COLUMN extension_lang TEXT;      -- e.g. "en"
+ALTER TABLE animes ADD COLUMN is_nsfw INTEGER NOT NULL DEFAULT 0;  -- extension NSFW flag
+ALTER TABLE animes ADD COLUMN source_name TEXT;         -- the source's display name (distinct from extension name)
+
+-- ═══ animes: Bookkeeping ═══
+ALTER TABLE animes ADD COLUMN discovered_at INTEGER NOT NULL DEFAULT 0;    -- when this local_id was first created
+ALTER TABLE animes ADD COLUMN last_resolved_at INTEGER NOT NULL DEFAULT 0; -- when content_id was last re-resolved
+ALTER TABLE animes ADD COLUMN link_confidence INTEGER NOT NULL DEFAULT 0;  -- 0=none, 1=auto-matched, 2=user-confirmed
+
+-- ═══ episodes: ADR-024 status-tracking columns (were missing per Doc 06 §2.2) ═══
+ALTER TABLE episodes ADD COLUMN release_date INTEGER;
+ALTER TABLE episodes ADD COLUMN last_refresh INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE episodes ADD COLUMN last_metadata_fetch INTEGER;
+ALTER TABLE episodes ADD COLUMN next_episode_check INTEGER;
+
+-- ═══ Indexes ═══
+
+-- local_id is UNIQUE — one row per (anime, source). Nullable during the transition
+-- (backfilled on first launch); enforced NOT NULL in 3.sqm after backfill completes.
+-- For now, a partial unique index on non-null values.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_local_id
+ON animes(local_id) WHERE local_id IS NOT NULL;
+
+-- content_id is NOT unique — multiple rows (different sources) can share a content_id.
+CREATE INDEX IF NOT EXISTS idx_animes_content_id
+ON animes(content_id) WHERE content_id IS NOT NULL;
+
+-- (source_id, url) uniqueness — prevents duplicate unlinked extension entries.
+-- Partial (only where source_id != 0) to avoid colliding with AniList-only rows.
+--
+-- IMPORTANT: existing dev databases may already contain duplicate (source_id, url)
+-- pairs (the old `selectBySourceAndUrl` used LIMIT 1, implying duplicates were
+-- tolerated). We must dedup BEFORE creating the unique index, keeping the oldest
+-- row (lowest _id) per (source_id, url) and deleting newer duplicates.
+DELETE FROM animes
+WHERE _id NOT IN (
+    SELECT MIN(_id) FROM animes
+    WHERE source_id != 0
+    GROUP BY source_id, url
+)
+AND source_id != 0;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_source_url
+ON animes(source_id, url) WHERE source_id != 0;
+
+-- (anime_id, episode_number) uniqueness — prevents duplicate episodes per anime.
+--
+-- IMPORTANT: existing dev databases may contain duplicate (anime_id, episode_number)
+-- pairs because EpisodeRepositoryImpl.upsert didn't dedup. We must dedup BEFORE
+-- creating the unique index, keeping the oldest row (lowest _id) per pair.
+DELETE FROM episodes
+WHERE _id NOT IN (
+    SELECT MIN(_id) FROM episodes
+    GROUP BY anime_id, episode_number
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_anime_epnum
+ON episodes(anime_id, episode_number);

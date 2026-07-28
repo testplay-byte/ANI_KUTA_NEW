@@ -132,10 +132,33 @@ class App : Application() {
             Log.w(TAG, "Failed to ensure Default category exists", e)
         }
 
+        // ── Phase 1 (ADR-050): Backfill local_id + content_id columns ──
+        // The 2.sqm migration adds the columns (nullable); this backfill populates
+        // them for existing rows on first launch post-migration. Gated by a preference
+        // so it only runs once. The identity columns are dormant in Phase 1 — cross-cutting
+        // stores migrate to key off content_id in Phases 3–6.
+        try {
+            val animeRepo = GlobalContext.get().get<app.confused.anikuta.core.common.repository.AnimeRepository>()
+            val contentIdPrefs = GlobalContext.get().get<app.confused.anikuta.core.preferences.ContentIdPreferences>()
+            val prefStore = GlobalContext.get().get<app.confused.anikuta.core.preferences.PreferenceStore>()
+            val backfillDonePref = prefStore.getBoolean(KEY_IDENTITY_BACKFILL_DONE, false)
+            CoroutineScope(Dispatchers.IO).launch {
+                if (!backfillDonePref.get()) {
+                    Log.i(TAG, "Identity backfill: starting (first launch post-migration)")
+                    val count = animeRepo.backfillIdentityColumns(contentIdPrefs.getPriority())
+                    Log.i(TAG, "Identity backfill: complete — $count rows backfilled")
+                    backfillDonePref.set(true)
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to run identity backfill", e)
+        }
+
         Log.i(TAG, "ANIKUTA started — DI wired (Koin + Injekt for extensions)")
     }
 
     companion object {
         private const val TAG = "AnikutaApp"
+        private const val KEY_IDENTITY_BACKFILL_DONE = "pref_identity_backfill_v1_done"
     }
 }

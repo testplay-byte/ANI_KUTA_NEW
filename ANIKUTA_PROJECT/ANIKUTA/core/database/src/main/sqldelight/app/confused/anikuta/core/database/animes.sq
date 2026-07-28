@@ -1,4 +1,11 @@
--- animes.sq — Anime table with status-tracking columns (ADR-024) + library columns
+-- animes.sq — Anime table with two-tier identity (ADR-050) + status-tracking (ADR-024) + library columns
+--
+-- Schema version 3 (after 2.sqm migration). See `_ARCHITECTURE_PLAN/proposals/01a_refined_id_system.md`.
+--
+-- Identity columns (ADR-050):
+--   local_id   — Tier 1 per-source identity: "<system>:<extensionId>:<sourceContentId>"
+--   content_id — Tier 2 per-content grouping: "<providerKey>:<remoteId>" (or = local_id fallback)
+-- Both are nullable during the transition (backfilled on first launch post-migration).
 
 CREATE TABLE animes (
     _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -31,12 +38,49 @@ CREATE TABLE animes (
     score REAL,                      -- AniList average score (0-100)
     total_episodes INTEGER,          -- AniList total episodes count
     last_watched INTEGER NOT NULL DEFAULT 0,  -- epoch ms of last watch activity
-    next_airing_episode INTEGER               -- AniList next airing episode number (for released-episode count)
+    next_airing_episode INTEGER,     -- AniList next airing episode number (for released-episode count)
+
+    -- ═══ Two-tier identity (ADR-050) ═══
+    local_id TEXT,                   -- Tier 1: "<system>:<extensionId>:<sourceContentId>" | "<providerKey>:<remoteId>"
+    content_id TEXT,                 -- Tier 2: "<providerKey>:<remoteId>" (or = local_id fallback)
+
+    -- ═══ Source provenance (ADR-050 §5.1) ═══
+    system TEXT,                     -- "aniyomi" | "cloudstream" | ... (ExtensionSystem.key)
+    repo_url TEXT,                   -- extension repo base URL (nullable if installed from APK)
+    repo_name TEXT,                  -- human-readable repo name
+    extension_pkg_name TEXT,         -- e.g. "eu.kanade.tachiyomi.animeextension.en.gogoanime"
+    extension_name TEXT,             -- human-readable extension name
+    extension_version_name TEXT,     -- e.g. "1.4.3"
+    extension_version_code INTEGER,
+    extension_lang TEXT,             -- e.g. "en"
+    is_nsfw INTEGER NOT NULL DEFAULT 0,  -- extension NSFW flag
+    source_name TEXT,                -- the source's display name (distinct from extension name)
+
+    -- ═══ Bookkeeping ═══
+    discovered_at INTEGER NOT NULL DEFAULT 0,    -- when this local_id was first created
+    last_resolved_at INTEGER NOT NULL DEFAULT 0, -- when content_id was last re-resolved
+    link_confidence INTEGER NOT NULL DEFAULT 0   -- 0=none, 1=auto-matched, 2=user-confirmed
 );
+
+-- ═══ Indexes ═══
 
 -- Partial unique index: anilist_id is unique when not null
 CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_anilist_id
 ON animes(anilist_id) WHERE anilist_id IS NOT NULL;
+
+-- local_id is unique when not null (one row per (anime, source))
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_local_id
+ON animes(local_id) WHERE local_id IS NOT NULL;
+
+-- content_id is NOT unique (multiple rows/sources can share a content_id)
+CREATE INDEX IF NOT EXISTS idx_animes_content_id
+ON animes(content_id) WHERE content_id IS NOT NULL;
+
+-- (source_id, url) uniqueness for unlinked extension entries
+CREATE UNIQUE INDEX IF NOT EXISTS idx_animes_source_url
+ON animes(source_id, url) WHERE source_id != 0;
+
+-- ═══ Existing queries (unchanged — backward compat) ═══
 
 selectAll:
 SELECT * FROM animes;
@@ -144,3 +188,51 @@ SELECT last_insert_rowid();
 
 delete:
 DELETE FROM animes WHERE _id = :id;
+
+-- ═══ NEW: Identity queries (ADR-050) ═══
+
+selectByLocalId:
+SELECT * FROM animes WHERE local_id = :localId LIMIT 1;
+
+selectByContentId:
+SELECT * FROM animes WHERE content_id = :contentId;
+
+selectIdByContentId:
+SELECT _id FROM animes WHERE content_id = :contentId LIMIT 1;
+
+-- All rows that are missing local_id/content_id (for the backfill on first launch).
+selectRowsMissingIdentity:
+SELECT * FROM animes WHERE local_id IS NULL OR content_id IS NULL;
+
+-- Set the local_id + content_id for a row (used by the backfill + on new upserts).
+updateIdentity:
+UPDATE animes SET
+    local_id = :localId,
+    content_id = :contentId,
+    last_resolved_at = :lastResolvedAt
+WHERE _id = :id;
+
+-- Set the full source provenance for a row.
+updateProvenance:
+UPDATE animes SET
+    system = :system,
+    repo_url = :repoUrl,
+    repo_name = :repoName,
+    extension_pkg_name = :extensionPkgName,
+    extension_name = :extensionName,
+    extension_version_name = :extensionVersionName,
+    extension_version_code = :extensionVersionCode,
+    extension_lang = :extensionLang,
+    is_nsfw = :isNsfw,
+    source_name = :sourceName,
+    discovered_at = :discoveredAt,
+    link_confidence = :linkConfidence
+WHERE _id = :id;
+
+-- Update only the content_id (used when a provider link is added/removed — the
+-- ContentIdMigrator re-derives the content_id, then re-keys cross-cutting stores).
+updateContentId:
+UPDATE animes SET
+    content_id = :contentId,
+    last_resolved_at = :lastResolvedAt
+WHERE _id = :id;
