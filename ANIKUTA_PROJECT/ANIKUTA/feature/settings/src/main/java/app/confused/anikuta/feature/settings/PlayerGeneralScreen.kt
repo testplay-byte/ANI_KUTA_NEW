@@ -51,6 +51,12 @@ fun PlayerGeneralScreen(
     val autoPlay by prefs.autoPlay().changes()
         .collectAsStateWithLifecycle(initialValue = prefs.autoPlay().get())
 
+    val pauseOnAppExit by prefs.pauseOnAppExit().changes()
+        .collectAsStateWithLifecycle(initialValue = prefs.pauseOnAppExit().get())
+
+    val resumeOnAppReturn by prefs.resumeOnAppReturn().changes()
+        .collectAsStateWithLifecycle(initialValue = prefs.resumeOnAppReturn().get())
+
     val lazyListState = rememberLazyListState()
     val collapsed = lazyListState.firstVisibleItemScrollOffset > 20 || lazyListState.firstVisibleItemIndex > 0
 
@@ -71,6 +77,45 @@ fun PlayerGeneralScreen(
                     subtitle = "Start playing automatically when an episode loads",
                     checked = autoPlay,
                     onCheckedChange = { prefs.autoPlay().set(it) },
+                )
+            }
+
+            // ── App exit behavior section ──
+            // Per owner request (2026-07-28): when the user exits the app
+            // (closes but doesn't remove from recents), playback should pause
+            // by default — and there should be a setting to configure this.
+            item {
+                SettingsSectionLabel("App exit")
+            }
+            item {
+                PlayerToggleCard(
+                    title = "Pause on app exit",
+                    subtitle = "Pause playback when you leave the app (press Home / switch apps). Off = audio continues in background.",
+                    checked = pauseOnAppExit,
+                    onCheckedChange = { prefs.pauseOnAppExit().set(it) },
+                )
+            }
+            // "Resume on return" only makes sense if pause-on-exit is enabled.
+            // Greyed-out (but still visible) when pause-on-exit is off, so the
+            // user can see the option exists and enable both at once.
+            item {
+                PlayerToggleCard(
+                    title = "Resume on return",
+                    subtitle = "When you come back to the app, automatically resume from where you left off.",
+                    checked = resumeOnAppReturn && pauseOnAppExit,
+                    onCheckedChange = { newValue ->
+                        // Writing is only meaningful when pause-on-exit is on;
+                        // if the user toggles this while pause-on-exit is off,
+                        // we still persist the value so it takes effect when
+                        // they later enable pause-on-exit.
+                        prefs.resumeOnAppReturn().set(newValue)
+                        if (newValue && !pauseOnAppExit) {
+                            // Auto-enable pause-on-exit so this toggle has an
+                            // immediate visible effect (otherwise the card
+                            // would appear stuck off).
+                            prefs.pauseOnAppExit().set(true)
+                        }
+                    },
                 )
             }
         }

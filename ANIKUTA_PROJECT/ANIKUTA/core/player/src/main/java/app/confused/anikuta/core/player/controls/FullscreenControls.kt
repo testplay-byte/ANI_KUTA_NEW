@@ -53,6 +53,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -171,46 +172,43 @@ fun FullscreenControls(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     // ── Top-left: lock + anime info (horizontal Row) ──
-                    // Wrapped in a frosted container for readability
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.4f),
-                        shape = RoundedCornerShape(12.dp),
+                    // Per owner feedback (2026-07-28): the black frosted scrim
+                    // around the top-left info was NOT wanted — removed. The
+                    // info sits directly on the gradient scrim (transparent).
+                    Row(
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(start = 16.dp, top = 4.dp),
+                            .padding(start = 16.dp, top = 4.dp, end = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            FSSmallButton(
-                                icon = Icons.Default.Lock,
-                                contentDescription = "Lock",
-                                onClick = onLockToggle,
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                if (animeTitle.isNotEmpty()) {
-                                    Text(
-                                        text = animeTitle,
-                                        color = Color.White,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth(0.5f),
-                                    )
+                        FSSmallButton(
+                            icon = Icons.Default.Lock,
+                            contentDescription = "Lock",
+                            onClick = onLockToggle,
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            if (animeTitle.isNotEmpty()) {
+                                Text(
+                                    text = animeTitle,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth(0.5f),
+                                )
+                            }
+                            // Episode + quality pills in a single Row (side by side)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(top = 4.dp),
+                            ) {
+                                if (episodeInfo.isNotEmpty()) {
+                                    FSInfoPill(text = episodeInfo)
                                 }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.padding(top = 4.dp),
-                                ) {
-                                    if (episodeInfo.isNotEmpty()) {
-                                        FSInfoPill(text = episodeInfo)
-                                    }
-                                    if (qualityInfo.isNotEmpty()) {
-                                        FSInfoPill(text = qualityInfo)
-                                    }
+                                if (qualityInfo.isNotEmpty()) {
+                                    FSInfoPill(text = qualityInfo)
                                 }
                             }
                         }
@@ -253,9 +251,9 @@ fun FullscreenControls(
                         horizontalArrangement = Arrangement.spacedBy(28.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // -10s button: frosted dark background
+                        // -10s button: themed-dark glass (primary tinted toward black, translucent)
                         FSSkipButton(label = "-10s", onClick = { onSeekRelative(-10) })
-                        // Play/pause: square with frosted dark + themed tint
+                        // Play/pause: themed-dark glass with blur (API 31+) + themed primary icon
                         Box(contentAlignment = Alignment.Center) {
                             if (buffering || loadingState == PlayerLoadingState.LOADING) {
                                 CircularProgressIndicator(
@@ -266,8 +264,10 @@ fun FullscreenControls(
                             } else {
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = Color.Black.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(60.dp),
+                                    color = themedDarkGlassColor(),
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .frostedGlassBlur(),
                                     onClick = onTogglePlay,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -281,7 +281,7 @@ fun FullscreenControls(
                                 }
                             }
                         }
-                        // +10s button: frosted dark background
+                        // +10s button: themed-dark glass
                         FSSkipButton(label = "+10s", onClick = { onSeekRelative(10) })
                     }
                 }
@@ -353,6 +353,13 @@ fun FullscreenControls(
         }
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Themed-dark glass helpers — see ThemedGlass.kt (shared with MinimizedControls)
+// ════════════════════════════════════════════════════════════════════════════
+// (themedDarkGlassColor() and Modifier.frostedGlassBlur() are defined in
+//  ThemedGlass.kt so both FullscreenControls and MinimizedControls can share
+//  the exact same glass treatment.)
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Custom progress bar
@@ -497,8 +504,10 @@ private fun FSSmallButton(
 private fun FSSkipButton(label: String, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = Color.Black.copy(alpha = 0.5f),
-        modifier = Modifier.size(width = 56.dp, height = 44.dp),
+        color = themedDarkGlassColor(),
+        modifier = Modifier
+            .size(width = 56.dp, height = 44.dp)
+            .frostedGlassBlur(),
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -553,9 +562,13 @@ private fun FSTimeContainer(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun FSExitButton(onClick: () -> Unit) {
+    // Per owner feedback (2026-07-28): restore the themed color (was reverted
+    // to pure black in the previous iteration). Uses the themed-dark glass
+    // treatment so it matches the center controls but with the primary tint
+    // slightly stronger for visual emphasis.
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = Color.Black.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
         modifier = Modifier.size(36.dp),
         onClick = onClick,
     ) {

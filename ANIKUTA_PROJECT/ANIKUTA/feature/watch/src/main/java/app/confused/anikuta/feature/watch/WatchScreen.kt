@@ -29,8 +29,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -54,12 +56,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -176,6 +183,82 @@ fun WatchScreen(
     LaunchedEffect(isVideoFinished) {
         if (isVideoFinished) {
             stateHolder.setControlsVisible(true)
+        }
+    }
+
+    // ── App-exit pause / resume lifecycle observer ──
+    //
+    // Owner spec (2026-07-28):
+    //   "If the user exits the app then the video should stop playing and as
+    //    soon as he reenters the app again the video should start playing
+    //    again from where he left it. I would also like you to give a setting
+    //    for this same experience in settings too."
+    //
+    // Behavior:
+    //  - ON_STOP (app backgrounded — Home button, recents, app switch): if
+    //    `pauseOnAppExit` is enabled, pause MPV and record that WE paused it
+    //    (so we don't clobber a user-initiated pause state on return).
+    //  - ON_START (app returns to foreground): if `resumeOnAppReturn` is
+    //    enabled AND we were the ones who paused on exit, resume MPV.
+    //
+    // We use ON_STOP / ON_START (not ON_PAUSE / ON_RESUME) because:
+    //  - ON_PAUSE fires on multi-window focus loss etc. — too aggressive.
+    //  - ON_STOP fires when the app is genuinely leaving the foreground
+    //    (Activity no longer visible). This matches the user's "exit the app"
+    //    mental model.
+    //
+    // `wasPausedByUs` is a plain ref (not Compose state) — we don't want
+    // recomposition when it flips, just a side-effect flag scoped to this
+    // composable's lifetime. Using BooleanArray(1) as a cheap mutable holder.
+    val wasPausedByUs = remember { booleanArrayOf(false) }
+    DisposableEffect(Unit) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    if (playerPreferences.pauseOnAppExit().get()) {
+                        val view = mpvView
+                        if (view != null && mpvInitialized) {
+                            try {
+                                val currentlyPlaying = !(MPVLib.getPropertyBoolean("pause") ?: true)
+                                if (currentlyPlaying) {
+                                    MPVLib.setPropertyBoolean("pause", true)
+                                    stateHolder.setPlaying(false)
+                                    wasPausedByUs[0] = true
+                                    Log.i(TAG, "App backgrounded — pausing playback (pauseOnAppExit=true)")
+                                } else {
+                                    // User had already paused — don't claim ownership.
+                                    wasPausedByUs[0] = false
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to pause on app exit", e)
+                            }
+                        }
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    if (wasPausedByUs[0] && playerPreferences.resumeOnAppReturn().get()) {
+                        val view = mpvView
+                        if (view != null && mpvInitialized) {
+                            try {
+                                MPVLib.setPropertyBoolean("pause", false)
+                                stateHolder.setPlaying(true)
+                                Log.i(TAG, "App foregrounded — resuming playback (resumeOnAppReturn=true)")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to resume on app return", e)
+                            }
+                        }
+                    }
+                    // Always clear the flag after handling ON_START — we only
+                    // auto-resume once per exit cycle.
+                    wasPausedByUs[0] = false
+                }
+                else -> { /* no-op */ }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -933,20 +1016,70 @@ private fun WatchScreenContent(
             }
         }
 
-        // Animate the header height — 0dp when collapsed, enough for the bar when expanded.
-        // The WatchTopBar uses statusBarsPadding + internal padding so we need enough height.
+        // ── Collapsible top navigation bar — "slide up + fade" semantics ──
+        //
+        // The owner's spec (2026-07-28):
+        //   "The whole top navigation bar should move up and disappear smoothly
+        //    instead of collapsing or anything like that."
+        //
+        // Implementation strategy:
+        //  1. Animate `headerHeight` 96dp → 0dp so the Column reflows naturally
+        //     (the player + episode list move up together as one block — no
+        //     sequential "header collapses, THEN player moves" feel).
+        //  2. Inside the header Box, the WatchTopBar gets a `graphicsLayer` that
+        //     translates it UP by the amount the box has shrunk AND fades its
+        //     alpha proportionally. Combined with `clipToBounds()`, this makes
+        //     the bar visibly slide up + fade out (not shrink/squish).
+        //  3. The player's top padding animates 0 → statusBarHeight so the
+        //     player ends up sitting just below the status bar (NOT 50dp below
+        //     — that was too much and caused the player to look "stuck"). This
+        //     is animated with the SAME spec as the header so they move in
+        //     perfect sync.
+        //
+        // Net effect: when collapsed, the player moves up by ~72dp (96dp header
+        // − ~24dp status bar) — noticeably more than the previous 46dp, matching
+        // the owner's "move up a bit more" feedback.
         val headerHeight by animateDpAsState(
             targetValue = if (isCollapsed) 0.dp else 96.dp,
             animationSpec = tween(300, easing = FastOutSlowInEasing),
             label = "headerHeight",
         )
 
+        // Player top padding: animates to the status bar height when collapsed
+        // so the player ends up flush under the status bar (not floating 50dp
+        // below it). Using WindowInsets keeps it correct across notch/cutout
+        // devices.
+        val density = LocalDensity.current
+        val statusBarTopInsetPx = WindowInsets.statusBars.getTop(density)
+        val statusBarTopInset = with(density) { statusBarTopInsetPx.toDp() }.coerceAtLeast(0.dp)
+        // Fall back to 28dp if the inset is 0 (happens during preview / before
+        // the first layout pass). 28dp is the canonical Android status bar
+        // height on most density-420 devices.
+        val playerTopPaddingTarget = if (isCollapsed) {
+            if (statusBarTopInset > 0.dp) statusBarTopInset else 28.dp
+        } else {
+            0.dp
+        }
+        val playerTopPadding by animateDpAsState(
+            targetValue = playerTopPaddingTarget,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "playerTopPadding",
+        )
+
+        // The fraction of the header that's still "visible" (1 = fully visible,
+        // 0 = fully collapsed). Used for the slide-up + fade graphicsLayer.
+        val headerVisibleFraction = (headerHeight.value / 96f).coerceIn(0f, 1f)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Collapsible top navigation bar.
+            // ── Top navigation bar ──
+            // The Box height animates 96dp → 0dp so the Column reflows. Inside,
+            // the WatchTopBar is translated UP by the amount the box has shrunk
+            // and faded by the same fraction — giving a true "slide up +
+            // disappear" effect rather than a vertical squish.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -954,20 +1087,31 @@ private fun WatchScreenContent(
                     .clipToBounds(),
             ) {
                 if (headerHeight > 0.dp) {
+                    // The amount the header box has shrunk from its full 96dp.
+                    // TopBar is translated up by exactly this amount so it
+                    // "exits" the visible box at the same rate the box shrinks.
+                    val slideUpAmount = 96.dp - headerHeight
+                    val slideUpPx = with(density) { slideUpAmount.toPx() }
                     WatchTopBar(
                         title = "ANIKUTA",
                         onBack = onBack,
+                        modifier = Modifier.graphicsLayer(
+                            translationY = -slideUpPx,
+                            alpha = headerVisibleFraction,
+                        ),
                     )
                 }
             }
 
             // Player area — 16:9, rounded corners, horizontal padding.
-            // When header is collapsed, keep 50dp top padding so player doesn't
-            // go under the status bar (per owner request — doubled from 25dp).
+            // Top padding animates 0 → statusBarHeight so the player slides up
+            // to sit flush below the status bar when the header is collapsed.
+            // (Previously this was a discrete `if (isCollapsed) 50.dp else 0.dp`
+            // which caused a visible jump mid-animation — now it's smooth.)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = if (isCollapsed) 50.dp else 0.dp)
+                    .padding(top = playerTopPadding)
                     .padding(horizontal = 6.dp),
             ) {
                 Box(
@@ -1414,9 +1558,13 @@ private fun FullscreenControlsOverlay(
  * to the new project's design language (#B1F256, RobotoFamily ExtraBold).
  */
 @Composable
-private fun WatchTopBar(title: String, onBack: () -> Unit) {
+private fun WatchTopBar(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 6.dp),

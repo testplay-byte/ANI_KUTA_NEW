@@ -337,6 +337,36 @@ class PlayerPreferences(
         store.getBoolean("pref_player_autoplay", true)
 
     /**
+     * Pause playback when the user leaves the app (Activity goes to
+     * background — i.e. presses Home / recents / switches to another app).
+     *
+     * When enabled (default), MPV is paused `onStop` and the playback position
+     * is preserved; on re-entry the user resumes by tapping play (or auto-resume
+     * if [resumeOnAppReturn] is enabled).
+     *
+     * When disabled, playback continues in the background (audio-only) — useful
+     * for music / podcast-style listening, but breaks the standard video-app
+     * contract and may consume data/battery.
+     *
+     * Wired into [WatchScreen]'s lifecycle observer.
+     */
+    fun pauseOnAppExit(): Preference<Boolean> =
+        store.getBoolean("pref_pause_on_app_exit", true)
+
+    /**
+     * When [pauseOnAppExit] is enabled, automatically resume playback when the
+     * user returns to the app (Activity comes back to foreground).
+     *
+     * - `true`  (default): on return, MPV un-pauses automatically — true
+     *   "pick up where you left off" experience.
+     * - `false`: on return, the video stays paused and the user must tap play.
+     *   Useful if the user wants a moment to orient themselves before playback
+     *   resumes.
+     */
+    fun resumeOnAppReturn(): Preference<Boolean> =
+        store.getBoolean("pref_resume_on_app_return", true)
+
+    /**
      * Last used playback speed for Sub audio versions.
      * Persisted separately from Dub so the user can have different speeds per version.
      * Default: 1.0f.

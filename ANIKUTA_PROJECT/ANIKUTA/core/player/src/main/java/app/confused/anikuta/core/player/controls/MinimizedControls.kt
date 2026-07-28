@@ -302,7 +302,11 @@ fun MinimizedControls(
                     )
                 }
 
-                // ---- Center: square play/pause with frosted dark + themed tint ----
+                // ---- Center: square play/pause with themed-dark glass + blur ----
+                // Per owner feedback (2026-07-28): themed color in a darker tone
+                // (not pure black), with frosted-glass blur on API 31+.
+                // Shares the exact same treatment as FullscreenControls' center
+                // play/pause via the shared themedDarkGlassColor() helper.
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -314,8 +318,10 @@ fun MinimizedControls(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color.Black.copy(alpha = 0.5f),
-                        modifier = Modifier.size(56.dp),
+                        color = themedDarkGlassColor(),
+                        modifier = Modifier
+                            .size(56.dp)
+                            .frostedGlassBlur(),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
