@@ -265,9 +265,7 @@ fun FullscreenControls(
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
                                     color = themedDarkGlassColor(),
-                                    modifier = Modifier
-                                        .size(60.dp)
-                                        .frostedGlassBlur(),
+                                    modifier = Modifier.size(60.dp),
                                     onClick = onTogglePlay,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -355,11 +353,12 @@ fun FullscreenControls(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Themed-dark glass helpers — see ThemedGlass.kt (shared with MinimizedControls)
+//  Themed-dark glass color — see ThemedGlass.kt (shared with MinimizedControls)
 // ════════════════════════════════════════════════════════════════════════════
-// (themedDarkGlassColor() and Modifier.frostedGlassBlur() are defined in
-//  ThemedGlass.kt so both FullscreenControls and MinimizedControls can share
-//  the exact same glass treatment.)
+// (themedDarkGlassColor() is defined in ThemedGlass.kt so both FullscreenControls
+//  and MinimizedControls can share the exact same themed-dark treatment.
+//  Note: a blur helper was previously here too but was removed — blur made the
+//  rounded corners look muddy. See ThemedGlass.kt for the full rationale.)
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Custom progress bar
@@ -505,9 +504,7 @@ private fun FSSkipButton(label: String, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = themedDarkGlassColor(),
-        modifier = Modifier
-            .size(width = 56.dp, height = 44.dp)
-            .frostedGlassBlur(),
+        modifier = Modifier.size(width = 56.dp, height = 44.dp),
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {

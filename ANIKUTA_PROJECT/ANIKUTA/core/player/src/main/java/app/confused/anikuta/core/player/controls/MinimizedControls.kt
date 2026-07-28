@@ -319,9 +319,7 @@ fun MinimizedControls(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = themedDarkGlassColor(),
-                        modifier = Modifier
-                            .size(56.dp)
-                            .frostedGlassBlur(),
+                        modifier = Modifier.size(56.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(

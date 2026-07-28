@@ -2,25 +2,29 @@ package app.confused.anikuta.core.player.controls
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 
 /**
- * Shared "themed dark glass" helpers for the player controls overlays.
+ * Shared "themed dark glass" color helper for the player controls overlays.
  *
  * Introduced 2026-07-28 per owner feedback:
  *   "Make it a little bit less dark and make it a bit of a theme color mixed
  *    with things... I was hoping for it to be a themed color but in a darker
- *    tone. Maybe [blur] is an issue but still I don't want the dark color."
+ *    tone."
  *
  * Used by [FullscreenControls] (center play/pause + ±10s buttons) and
  * [MinimizedControls] (center play/pause) so the two modes share the exact
- * same glass treatment — keeping the visual language consistent across the
+ * same treatment — keeping the visual language consistent across the
  * MINIMIZED ↔ FULLSCREEN transition.
+ *
+ * NOTE on blur: a `Modifier.frostedGlassBlur()` helper was previously here
+ * and applied to the center controls. It was REMOVED 2026-07-28 per owner
+ * feedback: "remove the blur completely... the corners look sharp and bad".
+ * `Modifier.blur()` on a Surface with RoundedCornerShape blurs the entire
+ * rectangular bounds, which softened the rounded corners into a muddy
+ * rectangular halo. The themed-dark color alone looks clean and crisp, so
+ * blur is gone (not just disabled).
  */
 
 /**
@@ -41,20 +45,4 @@ internal fun themedDarkGlassColor(): Color {
     // 62% opacity: translucent enough to show video through it, opaque enough
     // to keep white icons/text legible.
     return darkened.copy(alpha = 0.62f)
-}
-
-/**
- * Applies a frosted-glass blur to the modifier.
- *
- * `Modifier.blur()` requires API 31+ (Android 12). Below that, it silently
- * no-ops — the surface will just show its solid `themedDarkGlassColor()`,
- * which still looks good (the dark themed tint provides the "glass" feel
- * even without true convolution blur).
- *
- * The default blur radius (8.dp) is intentionally subtle — large enough to
- * soften the video showing through, small enough to keep the button's outline
- * crisp.
- */
-internal fun Modifier.frostedGlassBlur(radiusDp: Dp = 8.dp): Modifier {
-    return this.blur(radiusDp)
 }
