@@ -211,8 +211,10 @@ fun WatchScreen(
     // recomposition when it flips, just a side-effect flag scoped to this
     // composable's lifetime. Using BooleanArray(1) as a cheap mutable holder.
     val wasPausedByUs = remember { booleanArrayOf(false) }
+    // Read LocalLifecycleOwner in the composable body (NOT inside the
+    // DisposableEffect lambda — that lambda is not a @Composable scope).
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(Unit) {
-        val lifecycleOwner = LocalLifecycleOwner.current
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
