@@ -72,7 +72,7 @@ interface ProviderPreferences {
  */
 class MetadataProviderRegistry(
     @PublishedApi internal val providers: List<MetadataProvider>,
-    private val preferences: ProviderPreferences,
+    @PublishedApi internal val preferences: ProviderPreferences,
 ) {
 
     /** All registered providers (rarely needed directly — use [forCapability]). */
@@ -99,7 +99,7 @@ class MetadataProviderRegistry(
         // fallback order, then any remaining providers in declaration order.
         val active = preferences.activeProviderFor(capability)
         val userFallback = preferences.fallbackOrder(capability)
-        val ordered = mutableListOf<MetadataProvider>()
+        val ordered = mutableListOf<T>()
 
         // 1. Active provider (if set).
         if (active != null) {
