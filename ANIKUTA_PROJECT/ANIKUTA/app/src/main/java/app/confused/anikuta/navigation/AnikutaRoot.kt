@@ -22,7 +22,6 @@ import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import cafe.adriel.voyager.navigator.Navigator
-import cafe.adriel.voyager.navigator.rememberNavigator
 import cafe.adriel.voyager.transitions.FadeTransition
 import org.koin.compose.koinInject
 
@@ -64,16 +63,14 @@ private val navItems = listOf(
 fun AnikutaRoot() {
     val appController = koinInject<AppController>()
 
-    // Use rememberNavigatorSaver to preserve the back stack across
-    // Activity recreation (e.g. when switching apps and coming back).
-    // This prevents the player from closing when the user briefly leaves
-    // the app and returns.
-    val navigator = rememberNavigator()
-
-    Navigator(navigator = navigator, content = { nav ->
+    // TODO(owner): Voyager 1.0.1 doesn't have rememberNavigator(). The app
+    // loses the back stack when the Activity is recreated (e.g. switching apps).
+    // This will be addressed in a future session with a custom Saver or by
+    // upgrading to a Voyager version that supports state restoration.
+    Navigator(BrowseTabDestination) { navigator ->
         // Wire the navigator into the AppController so it can push/pop.
         SideEffect {
-            appController.navigator = nav
+            appController.navigator = navigator
         }
 
         // ── Download error toast observer ──
