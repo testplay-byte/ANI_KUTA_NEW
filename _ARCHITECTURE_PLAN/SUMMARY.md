@@ -22,7 +22,9 @@ Plus this summary + an appendix.
 
 ## 2. The one-sentence headline
 
-**ANIKUTA's database schema is already AniList-optional, but 7 cross-cutting preference stores are AniList-required by type — and fixing this is a medium-effort restructuring centered on a typed `WatchableId` value class.**
+**ANIKUTA's database schema is already AniList-optional, but 7 cross-cutting preference stores are AniList-required by type — and fixing this is a medium-effort restructuring centered on a two-tier identity model: a per-source `local_id` (multi-component, with full provenance) + a per-content `content_id` (for grouping + source-switch survival).**
+
+> 📌 **Refined (rev 2):** The identity model was refined from a single `WatchableId` sealed class (ADR-040) to a **two-tier `local_id` + `content_id` model** (ADR-050), per the owner's direction to store full source provenance (system, repo, extension, source-content-id, name) + external provider IDs. See `proposals/01a_refined_id_system.md` for the active design.
 
 ---
 
@@ -65,15 +67,18 @@ The hybrid uses the **most stable available identifier** at any time — provide
 
 ---
 
-## 5. The 5 key proposals
+## 5. The 6 key proposals
 
 | # | Proposal | What it does | Effort |
 |---|---|---|---|
-| 01 | [Internal ID system](proposals/01_internal_id_system.md) | Typed `WatchableId` replacing `"$anilistId:$episodeUrl"` keys everywhere | Medium |
+| 01 | [Internal ID system (original)](proposals/01_internal_id_system.md) | ~~Typed `WatchableId`~~ — superseded by 01a | Medium |
+| **01a** | **[Refined ID system (ACTIVE)](proposals/01a_refined_id_system.md)** | **Two-tier `local_id` (per-source, multi-component) + `content_id` (per-content grouping) with full provenance + external IDs** | Medium |
 | 02 | [Provider abstraction](proposals/02_provider_abstraction.md) | `MetadataProvider` umbrella + registry so MAL/TMDB can be added as one module | Medium |
-| 03 | [Download redesign](proposals/03_download_system_redesign.md) | `WatchableId`-keyed downloads, source-switching fix, user-direct folder | Large |
+| 03 | [Download redesign](proposals/03_download_system_redesign.md) | `content_id`-keyed downloads, source-switching fix, user-direct folder | Large |
 | 04 | [Extension evolution](proposals/04_extension_evolution.md) | Parallel modules for CloudStream-style extensions (not a unified contract) | Future |
 | 05 | [Migration strategy](proposals/05_migration_strategy.md) | Automatic, idempotent, dual-read migration from v1 to v2 | Medium |
+
+> 📌 **The refined identity model (proposal 01a)** is the active design. It incorporates the owner's direction: a multi-component `local_id` derived from (system + repo + extension + source-content-id), with full provenance stored + external provider IDs (AniList, MAL, TMDB) alongside. The two-tier structure (local_id + content_id) solves source-switching while preserving maximum flexibility for future core systems.
 
 ---
 
@@ -100,13 +105,14 @@ See [plan/01_phased_implementation.md](plan/01_phased_implementation.md) for the
 
 ---
 
-## 7. The 10 proposed ADRs
+## 7. The 11 proposed ADRs
 
 | ADR | Decision |
 |---|---|
-| 040 | Internal content identity: typed `WatchableId` (hybrid) |
+| 040 | ~~Internal content identity: typed `WatchableId`~~ — **superseded by ADR-050** |
+| **050** | **Refined identity: two-tier `local_id` (per-source, multi-component) + `content_id` (per-content) with full provenance** ← ACTIVE |
 | 041 | Provider abstraction: `MetadataProvider` umbrella + registry |
-| 042 | Download identity: `WatchableId + episodeNumber` |
+| 042 | Download identity: `content_id + episodeNumber` |
 | 043 | Download folder: user-direct (no `ANIKUTA/` subfolder) |
 | 044 | Extension system: parallel modules for multi-format |
 | 045 | Migration: automatic, idempotent, dual-read |

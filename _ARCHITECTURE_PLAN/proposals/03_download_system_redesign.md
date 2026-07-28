@@ -1,6 +1,26 @@
 # 03 — Download System Redesign
 
-> **Phase 2 / Proposed Architecture.** Proposes a download system that works without any provider dependency, preserves download visibility across source switches, uses the user-selected folder directly, and migrates existing downloads cleanly. Grounded in `analysis/02_download_system_analysis.md`, `proposals/01_internal_id_system.md`.
+> **Phase 2 / Proposed Architecture.** Proposes a download system that works without any provider dependency, preserves download visibility across source switches, uses the user-selected folder directly, and migrates existing downloads cleanly. Grounded in `analysis/02_download_system_analysis.md`.
+>
+> ⚠️ **UPDATED to use the refined two-tier identity model** (`proposals/01a_refined_id_system.md`). Where this document originally said `WatchableId`, read **`content_id`** (Tier 2 — the per-content grouping identifier). `content_id` is what cross-cutting stores key off, because it survives source switches. The `local_id` (Tier 1 — per-source) is stored as metadata on `DownloadAnimeInfo` for provenance + re-download resolution, but is NOT the composite-key component. This change supersedes the original `WatchableId`-based design in `proposals/01_internal_id_system.md`.
+
+---
+
+## 0. Identity-model mapping (original → refined)
+
+| Original (proposal 01) | Refined (proposal 01a) | Role in downloads |
+|---|---|---|
+| `WatchableId` (sealed class) | `content_id: String` (e.g., `"al:154587"`) | The composite-key component — survives source switches |
+| `WatchableId.stableKey()` | `content_id` | The key stores use |
+| `WatchableId.Unlinked.sourceId` | `local_id` metadata (`extensionId`) | Stored on `DownloadAnimeInfo` for re-download resolution |
+| `WatchableId.Unlinked.sourceUrl` | `local_id` metadata (`sourceContentId`) | Stored on `DownloadAnimeInfo` for re-download resolution |
+| `WatchableIdMigrator` | `ContentIdMigrator` | Re-keys downloads on link/unlink events |
+
+**The download composite key becomes:** `"$content_id:$episodeNumber"` (e.g., `"al:154587:1.000"`).
+
+**The download folder name uses `content_id`** (source-independent): `<Title [al-154587]>/Episode NNN/`.
+
+**`DownloadAnimeInfo` carries `local_id` + full provenance** (system, repo, extension name, etc.) for re-download resolution — if the user wants to re-download an episode, the orchestrator uses the `local_id` to find the right source.
 
 ---
 

@@ -6,38 +6,63 @@
 
 ## ADR-040 — Internal content identity: typed `WatchableId` (hybrid provider-ID + source+url+title-hash)
 
-**Status:** Proposed (pending review).
+**Status:** ~~Proposed (pending review).~~ **SUPERSEDED by ADR-050** (the refined two-tier `local_id` + `content_id` model). Kept for historical context.
 **Driven by:** `analysis/01_content_identification_flow.md`, `analysis/06_data_layer_analysis.md`, `proposals/01_internal_id_system.md`.
+
+### Original decision
+
+Introduce a typed `WatchableId` sealed class in `:core:common` with two variants: `Linked(provider, remoteId)` and `Unlinked(sourceId, sourceUrl, titleHash)`.
+
+### Why superseded
+
+The original `WatchableId` was a good starting point but didn't store enough provenance for the owner's flexibility goals (system, repo, extension name/version, etc.). It also conflated per-source identity with per-content identity. ADR-050 refines it into a two-tier model (`local_id` per-source + `content_id` per-content) with full provenance storage. See ADR-050 below.
+
+---
+
+## ADR-050 — Refined identity: two-tier `local_id` + `content_id` with full source provenance
+
+**Status:** Proposed (pending review). **This is the active identity-model decision.**
+**Driven by:** Owner's direction (multi-component local ID), `analysis/05_extension_system_analysis.md`, `proposals/01a_refined_id_system.md`.
 
 ### Decision
 
-Introduce a typed `WatchableId` sealed class in `:core:common` with two variants:
-- `Linked(provider: MetadataProvider, remoteId: String)` — for content linked to a metadata provider.
-- `Unlinked(sourceId: Long, sourceUrl: String, titleHash: String)` — for content with no provider linkage.
+Adopt a **two-tier identity model**:
 
-`WatchableId.stableKey()` is the in-device key for cross-cutting stores. `WatchableId.crossDeviceKey()` is the backup/restore key (linked: by provider ID; unlinked: by title hash).
+1. **`local_id` (Tier 1 — per-source):** A structured string `"<system>:<extensionId>:<sourceContentId>"` (e.g., `"aniyomi:1234567890:https://gogoanime.gg/frieren"`). Deterministic, reproducible, debuggable. Stored on `animes` with **full source provenance** (system, repo_url, repo_name, extension_pkg_name, extension_name, extension_version_name, extension_version_code, extension_lang, is_nsfw, source_name, discovered_at, link_confidence).
 
-All 7 anilistId-keyed cross-cutting stores migrate to `WatchableId` keys. The composite key `"$anilistId:$episodeUrl"` is replaced by `"$watchableId:$episodeNumber"` (source-independent).
+2. **`content_id` (Tier 2 — per-content):** A string `"al:<anilistId>"` (or `mal:`, `tmdb:`, `kitsu:` by priority; fallback to `local_id` if no external link). Used by cross-cutting stores (watch progress, downloads, history, episode metadata, tracker) to survive source switches. Multiple `local_id`s can map to one `content_id`.
+
+3. **External provider IDs** stored as columns on `animes` (`anilist_id`, + `mal_id`/`tmdb_id` as needed) for efficient lookups. For unlimited providers, a `content_links` table is the upgrade path.
+
+4. **`ExtensionSystem` enum** (`ANIYOMI`, `CLOUDSTREAM`, future) makes adding a new core system a one-line change.
+
+5. **`ContentIdMigrator`** re-keys cross-cutting stores when `content_id` changes (link/unlink events).
+
+6. **`SourceLinkStore` redesigned** to store full `SourceBinding` (all provenance fields) keyed by `content_id`.
 
 ### Alternatives considered
 
-1. **Hash of canonical title (Approach A)** — rejected: collision risk for similar-named series; title canonicalization is fragile.
-2. **Database UUID (Approach B)** — rejected: not reproducible across devices; breaks backup/restore.
-3. **Composite key (title + episode count + year) (Approach C)** — rejected: episode count + year are often unknown or inaccurate; fragile.
-4. **Provider-ID-only (Approach D, current)** — rejected: doesn't solve the unlinked-anime problem; hardcodes AniList.
+1. **Original `WatchableId` (ADR-040)** — superseded: doesn't store enough provenance; conflates per-source + per-content identity.
+2. **Single-tier `local_id` only (no `content_id`)** — rejected: cross-cutting stores wouldn't survive source switches (the exact bug we're fixing).
+3. **Single-tier `content_id` only (no `local_id`)** — rejected: loses per-source provenance; can't re-resolve the source on restore.
+4. **Hash-based `local_id`** (SHA-256 of components) — rejected: opaque, not debuggable. Structured strings are self-describing + uniqueness is guaranteed by the components.
+5. **UUID `local_id`** — rejected: not reproducible across devices; breaks backup/restore.
+6. **Store external IDs in a `content_links` table from day 1** — deferred: fixed columns are simpler + faster for ≤3 providers. Migrate to the table when 4+ providers are needed.
 
 ### Trade-offs accepted
 
-- Unlinked cross-device restore is best-effort (title-hash collisions possible but rare; user can disambiguate).
-- `WatchableIdMigrator` adds complexity for link/unlink events.
-- Two identity columns on `animes` (`anilist_id` + `watchable_id_json`) — redundant for linked anime, kept for backward compat + efficient AniList lookups.
-- `episodeNumber` replaces `episodeUrl` in composite keys — rare episode-number mismatches produce duplicate entries (least-bad outcome).
+- Two tiers add a concept developers must learn (mitigated: clear naming + the §7 table in proposal 01a).
+- `content_id` can change on link/unlink (mitigated: `ContentIdMigrator` is transactional + idempotent).
+- Structured strings are longer than hashes (mitigated: storage is cheap; debuggability is worth it).
+- External IDs as fixed columns limit to ~3-4 providers (mitigated: `content_links` table is the upgrade path).
+- Option A (update row on source switch) loses the old `local_id` (mitigated: `SourceLinkStore` can store multiple bindings per `content_id`).
 
 ### Conditions for revisiting
 
-- If unlinked title-hash collision rate >0.1% of restores, add a disambiguation field (year, episode count) to the cross-device key.
-- If users frequently link the same anime to multiple providers, add a `provider_links` table (many providers per anime).
-- If `WatchableIdMigrator` proves fragile, make `WatchableId` immutable + track changes in an `anime_identity_history` table.
+- If `content_id` migration on link/unlink proves fragile, make `content_id` immutable + track changes in a `content_id_history` table.
+- If 4+ external providers are needed, migrate to the `content_links` table (proposal 01a §5.2).
+- If Option A causes user confusion, switch to Option B (multiple rows per `content_id`).
+- If structured strings prove too long for SharedPreferences keys, add a `local_id_hash` column as the index.
 
 ---
 
