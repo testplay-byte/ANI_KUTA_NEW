@@ -1,6 +1,10 @@
 package app.confused.anikuta.core.common.repository
 
 import app.confused.anikuta.core.common.model.Anime
+import app.confused.anikuta.core.common.model.ContentId
+import app.confused.anikuta.core.common.model.ContentIdPriority
+import app.confused.anikuta.core.common.model.LocalId
+import app.confused.anikuta.core.common.model.SourceProvenance
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -74,4 +78,39 @@ interface AnimeRepository {
     suspend fun updatePreferredCoverBySourceAndUrl(sourceId: Long, url: String, coverUrl: String?, coverColor: String?)
 
     suspend fun delete(id: Long)
+
+    // ═══ Two-tier identity (ADR-050 — Phase 1) ═══
+
+    /** Look up an anime by its [LocalId] (Tier 1 per-source identity). */
+    suspend fun getByLocalId(localId: LocalId): Anime?
+
+    /** Look up animes by their [ContentId] (Tier 2 per-content grouping). Returns all source bindings. */
+    suspend fun getByContentId(contentId: ContentId): List<Anime>
+
+    /**
+     * Set the local_id + content_id for a row. Used by the backfill (on first launch
+     * post-migration) and by upsert (when a new anime is added with identity available).
+     */
+    suspend fun updateIdentity(id: Long, localId: LocalId, contentId: ContentId)
+
+    /**
+     * Set the full source provenance for a row. Used when an anime is linked to a
+     * source (the extension metadata is captured for restore + debugging).
+     */
+    suspend fun updateProvenance(id: Long, provenance: SourceProvenance)
+
+    /**
+     * Backfill the local_id + content_id columns for all rows that are missing them.
+     *
+     * Runs on first launch post-migration (gated by a preference in the caller).
+     * For each row:
+     * - Computes [LocalId] from (system, sourceId, url) — defaults to ANIYOMI system
+     *   for existing rows (all current rows are Aniyomi-system).
+     * - Computes [ContentId] from the anilist_id (if present) using the user's
+     *   configured priority, else falls back to the local_id.
+     *
+     * @param priority The user's [ContentIdPriority] (from [ContentIdPreferences]).
+     * @return The number of rows backfilled.
+     */
+    suspend fun backfillIdentityColumns(priority: ContentIdPriority): Int
 }

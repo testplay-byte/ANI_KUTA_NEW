@@ -5,7 +5,11 @@ import app.confused.anikuta.core.common.model.Episode
 /**
  * Maps SQLDelight query results to the [Episode] domain model.
  *
- * Parameter order and types match the `episodes` table columns.
+ * Parameter order and types match the `episodes` table columns (CREATE TABLE
+ * order). The four ADR-024 status-tracking columns (`release_date`,
+ * `last_refresh`, `last_metadata_fetch`, `next_episode_check`) were added in
+ * `2.sqm`; SQLDelight regenerates the mapper type with all 20 columns, so we
+ * accept and propagate them here.
  */
 object EpisodeMapper {
 
@@ -26,6 +30,11 @@ object EpisodeMapper {
         fillermark: String?,
         summary: String?,
         previewUrl: String?,
+        // ── Status-tracking columns (ADR-024 — added in 2.sqm) ──
+        releaseDate: Long?,
+        lastRefresh: Long,
+        lastMetadataFetch: Long?,
+        nextEpisodeCheck: Long?,
     ): Episode = Episode(
         id = id,
         animeId = animeId,
@@ -43,5 +52,9 @@ object EpisodeMapper {
         fillermark = fillermark,
         summary = summary,
         previewUrl = previewUrl,
+        releaseDate = releaseDate,
+        lastRefresh = lastRefresh,
+        lastMetadataFetch = lastMetadataFetch,
+        nextEpisodeCheck = nextEpisodeCheck,
     )
 }

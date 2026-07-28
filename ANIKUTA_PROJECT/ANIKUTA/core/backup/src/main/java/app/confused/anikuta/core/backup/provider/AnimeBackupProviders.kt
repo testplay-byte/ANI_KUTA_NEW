@@ -128,7 +128,10 @@ internal fun upsertAnime(database: AnikutaDatabase, anime: AnimeBackup) {
     val existingId: Long? = if (anime.anilistId != null) {
         queries.selectIdByAnilistId(anime.anilistId).executeAsOneOrNull()
     } else {
-        queries.selectBySourceAndUrl(anime.sourceId, anime.url) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }.executeAsOneOrNull()
+        // selectBySourceAndUrl is `SELECT * FROM animes ...` so the lambda must
+        // accept all 42 columns (only `_id` is used). 15 of those columns are the
+        // new ADR-050 identity + provenance fields — see `animes.sq` CREATE TABLE.
+        queries.selectBySourceAndUrl(anime.sourceId, anime.url) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }.executeAsOneOrNull()
     }
 
     if (existingId != null) {

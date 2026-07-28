@@ -1,4 +1,6 @@
 -- episodes.sq — Episode table (anime-specific fields included)
+--
+-- Schema version 3 (after 2.sqm migration adds the ADR-024 columns below).
 
 CREATE TABLE episodes (
     _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -20,8 +22,18 @@ CREATE TABLE episodes (
     summary TEXT,
     preview_url TEXT,
 
+    -- Status-tracking columns (ADR-024 — added in 2.sqm)
+    release_date INTEGER,            -- when the episode was first released
+    last_refresh INTEGER NOT NULL DEFAULT 0,    -- last time refreshed from source
+    last_metadata_fetch INTEGER,     -- last time metadata was fetched
+    next_episode_check INTEGER,      -- reserved for future per-episode scheduling
+
     FOREIGN KEY (anime_id) REFERENCES animes(_id) ON DELETE CASCADE
 );
+
+-- Unique index: one episode per (anime, episode_number). Added in 2.sqm.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_anime_epnum
+ON episodes(anime_id, episode_number);
 
 selectByAnimeId:
 SELECT * FROM episodes WHERE anime_id = :animeId ORDER BY source_order;

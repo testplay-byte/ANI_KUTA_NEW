@@ -206,8 +206,10 @@ internal fun upsertCategory(database: AnikutaDatabase, cat: CategoryBackup): Lon
  */
 internal fun resolveLocalAnimeIdForLink(database: AnikutaDatabase, animeId: Long): Long? {
     val queries = database.animesQueries
-    // Try direct _id match (ANIKUTA backups)
-    queries.selectById(animeId) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
+    // Try direct _id match (ANIKUTA backups). selectById is `SELECT * FROM
+    // animes ...` so the lambda must accept all 42 columns (15 new ADR-050
+    // identity + provenance fields added in 2.sqm — only `_id` is used here).
+    queries.selectById(animeId) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
         .executeAsOneOrNull()?.let { return it }
     // Try AniList ID match (Aniyomi-translated backups)
     queries.selectIdByAnilistId(animeId).executeAsOneOrNull()?.let { return it }

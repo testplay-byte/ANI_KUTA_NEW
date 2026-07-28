@@ -42,6 +42,7 @@ include(":core:designsystem")
 include(":core:network")
 include(":core:database")
 include(":core:preferences")
+include(":core:provider-api")      // Phase 2: pluggable metadata provider contracts (ADR-041)
 include(":core:anilist")
 include(":core:tracker")           // Agent 2: Profile + Trackers
 include(":core:episode-metadata")

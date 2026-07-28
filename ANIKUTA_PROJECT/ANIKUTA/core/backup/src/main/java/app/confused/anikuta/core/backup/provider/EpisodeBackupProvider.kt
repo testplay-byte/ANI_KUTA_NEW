@@ -95,7 +95,8 @@ internal fun resolveLocalAnimeId(database: AnikutaDatabase, key: String): Long? 
         val sourceId = key.substring(0, colonIdx).toLongOrNull()
         val url = key.substring(colonIdx + 1)
         if (sourceId != null) {
-            queries.selectBySourceAndUrl(sourceId, url) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
+            // selectBySourceAndUrl is `SELECT * FROM animes ...` → 42-column lambda.
+            queries.selectBySourceAndUrl(sourceId, url) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
                 .executeAsOneOrNull()?.let { return it }
         }
     }
@@ -106,13 +107,14 @@ internal fun resolveLocalAnimeId(database: AnikutaDatabase, key: String): Long? 
 @Suppress("LongParameterList")
 internal fun upsertEpisode(database: AnikutaDatabase, animeId: Long, ep: EpisodeBackup) {
     val queries = database.episodesQueries
-    // Check if an episode with the same URL exists for this anime
+    // Check if an episode with the same URL exists for this anime.
+    // selectByAnimeIdAndNumber is `SELECT * FROM episodes ...` → 20-column
+    // lambda (4 ADR-024 status-tracking columns were added in 2.sqm).
     val existing = if (ep.url != null) {
-        // selectByAnimeIdAndNumber is the closest query; we use it as a proxy
-        queries.selectByAnimeIdAndNumber(animeId, ep.episodeNumber) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
+        queries.selectByAnimeIdAndNumber(animeId, ep.episodeNumber) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
             .executeAsOneOrNull()
     } else {
-        queries.selectByAnimeIdAndNumber(animeId, ep.episodeNumber) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
+        queries.selectByAnimeIdAndNumber(animeId, ep.episodeNumber) { _id, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> _id }
             .executeAsOneOrNull()
     }
 

@@ -10,6 +10,7 @@ android {
 dependencies {
     implementation(projects.core.common)
     implementation(projects.core.preferences)
+    implementation(projects.core.providerApi)
 
     // OkHttp for HTTP
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")

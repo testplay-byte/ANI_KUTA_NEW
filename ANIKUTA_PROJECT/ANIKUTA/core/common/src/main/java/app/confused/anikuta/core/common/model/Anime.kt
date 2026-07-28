@@ -16,6 +16,13 @@ package app.confused.anikuta.core.common.model
  * - [score] — AniList average score (0-100).
  * - [totalEpisodes] — AniList total episodes count.
  * - [lastWatched] — epoch ms of last watch activity (for "Last watched" sort).
+ *
+ * Two-tier identity (ADR-050 — Phase 1, dormant during transition):
+ * - [localId] — Tier 1 per-source identity. Nullable during backfill.
+ * - [contentId] — Tier 2 per-content grouping. Nullable during backfill.
+ * - [provenance] — Full source provenance (system, repo, extension, …). Nullable.
+ *
+ * Cross-cutting stores migrate to key off [contentId] in Phases 3–6.
  */
 data class Anime(
     val id: Long,
@@ -47,6 +54,10 @@ data class Anime(
     val totalEpisodes: Int?,
     val lastWatched: Long,
     val nextAiringEpisode: Int?,
+    // Two-tier identity (ADR-050 — nullable during Phase 1 transition)
+    val localId: LocalId? = null,
+    val contentId: ContentId? = null,
+    val provenance: SourceProvenance? = null,
 ) {
     /**
      * The number of episodes that have aired (released).
