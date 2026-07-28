@@ -11,7 +11,6 @@ import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
 import app.confused.anikuta.data.extension.repo.ExtensionRepoRepository
 import app.confused.anikuta.feature.animedetails.AnimeDetailScreen
-import app.confused.anikuta.feature.animedetails.ExtensionDetailScreen
 import app.confused.anikuta.feature.animedetails.WatchEpisodeContext
 import app.confused.anikuta.feature.backup.aniyomi.AniyomiRestoreFlow
 import app.confused.anikuta.feature.backup.BackupSettingsScreen
@@ -35,6 +34,7 @@ import app.confused.anikuta.feature.updates.UpdatesScreen
 import app.confused.anikuta.feature.watch.WatchRequest
 import app.confused.anikuta.feature.watch.WatchScreen
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.core.screen.ScreenKey
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -63,6 +63,7 @@ object LibraryTabDestination : Screen {
         LibraryScreen(
             onOpenAnime = { id -> appController.pushDetail(id) },
             onOpenContinueWatching = { item -> appController.pushDetail(item.anilistId) },
+            onOpenExtensionAnime = { anime -> appController.openLibraryAnime(anime) },
         )
     }
 }
@@ -107,6 +108,12 @@ object MoreTabDestination : Screen {
 // ════════════════════════════════════════════════════════════════════════
 
 data class AnimeDetailDestination(val animeId: Int) : Screen {
+    /** Unique key per animeId — prevents Voyager SaveableStateHolder collision
+     *  when two AnimeDetailDestination instances exist simultaneously (e.g. during
+     *  a `navigator.replace` transition when "Switch anime" navigates to a different
+     *  AniList entry). Without this, Voyager crashes with
+     *  "Key AnimeDetailDestination:transition was used multiple times". */
+    override val key: ScreenKey = "AnimeDetailDestination($animeId)"
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
@@ -119,10 +126,6 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
 
         AnimeDetailScreen(
             animeId = animeId,
-            api = appController.anilistApi,
-            extensionManager = appController.extensionManager,
-            sourceMatcher = appController.sourceMatcher,
-            extensionLinkStore = appController.extensionLinkStore,
             onBack = { navigator.pop() },
             onOpenEpisode = { episode, source, episodeList, watchCtx ->
                 appController.resolveEpisode(episode, source, episodeList, watchCtx, animeId)
@@ -135,41 +138,71 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             onDownloadResume = { episodeUrl -> appController.resumeDownload(animeId, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(animeId, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(animeId, episodeUrl) },
+            // "Switch anime" from the AniList page — resolve the source from the saved
+            // link + start the linking flow (corrects a wrong auto-match).
+            onLinkToAniList = { appController.startLinkingFromAnilist(animeId) },
+            // "Switch anime" picked — update links + navigate to the new anime.
+            onSwitchAnimePicked = { newId -> appController.switchAnilistAnime(animeId, newId) },
         )
     }
 }
 
 /**
- * Extension detail destination — object (not data class) to avoid serialization
- * issues with AnimeCatalogueSource.
+ * Extension-entry variant of the unified details page. Replaces the old
+ * `ExtensionDetailDestination` (which pushed the now-removed `ExtensionDetailScreen`).
+ *
+ * Renders the SAME `AnimeDetailScreen` in extension mode — the unified page
+ * handles both data sources. The optional [anilistId] enables the AniList-merge
+ * path in `ExtensionDetailsProvider` (linked extension anime get the best of both).
  */
-object ExtensionDetailDestination : Screen {
+data class ExtensionAnimeDetailDestination(
+    val source: AnimeCatalogueSource,
+    val sAnime: SAnime,
+    val anilistId: Int? = null,
+) : Screen {
+    /** Unique key per source+url — prevents Voyager SaveableStateHolder collision. */
+    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url})"
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
-        val source = appController.pendingExtensionSource
-        val sAnime = appController.pendingExtensionSAnime
-        if (source != null && sAnime != null) {
-            ExtensionDetailScreen(
-                source = source,
-                sAnime = sAnime,
-                onBack = { navigator.pop() },
-                onOpenEpisode = { episode, src, episodeList ->
-                    appController.resolveEpisode(
-                        episode, src, episodeList,
-                        WatchEpisodeContext(
-                            animeTitle = sAnime.title,
-                            coverUrl = sAnime.thumbnail_url,
-                        ),
-                        anilistId = 0,
-                    )
-                },
-                onRelinkAnilist = {
-                    appController.startLinking(source, sAnime)
-                },
-            )
-        }
+
+        // For unlinked extension anime, download states are keyed by sourceId+url
+        // (not anilistId). Use 0 as the download-key fallback — the download
+        // orchestrator resolves by episode URL regardless.
+        val downloadKey = anilistId ?: 0
+        val downloadTasksMap by appController.downloadTasksFlow
+            .collectAsStateWithLifecycle(initialValue = emptyMap())
+        val downloadStates = appController.getDownloadStates(downloadKey, downloadTasksMap)
+
+        AnimeDetailScreen(
+            extensionSource = source,
+            extensionSAnime = sAnime,
+            extensionAnilistId = anilistId,
+            onBack = { navigator.pop() },
+            onOpenEpisode = { episode, src, episodeList, watchCtx ->
+                appController.resolveEpisode(
+                    episode, src, episodeList, watchCtx,
+                    anilistId = anilistId ?: 0,
+                )
+            },
+            onDownloadEpisode = { episode, src, watchCtx ->
+                appController.downloadEpisode(episode, src, watchCtx, downloadKey)
+            },
+            downloadStates = downloadStates,
+            onDownloadCancel = { episodeUrl -> appController.cancelDownload(downloadKey, episodeUrl) },
+            onDownloadResume = { episodeUrl -> appController.resumeDownload(downloadKey, episodeUrl) },
+            onDownloadRetry = { episodeUrl -> appController.retryDownload(downloadKey, episodeUrl) },
+            onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
+            // Extension mode: "Link to AniList" opens the AniList linking sheet overlay.
+            onLinkToAniList = { appController.startLinking(source, sAnime) },
+            // "Switch anime" picked (linked only) — update links + navigate to the new anime.
+            onSwitchAnimePicked = { newId ->
+                if (anilistId != null) {
+                    appController.switchAnilistAnime(anilistId, newId)
+                }
+            },
+        )
     }
 }
 

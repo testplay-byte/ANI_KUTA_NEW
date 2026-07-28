@@ -8,6 +8,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import android.util.Log
 
 /**
@@ -191,6 +192,27 @@ class AnimeRepositoryImpl(
             totalEpisodes = totalEpisodes?.toLong(),
             nextAiringEpisode = nextAiringEpisode?.toLong(),
         )
+    }
+
+    override suspend fun updatePreferredCoverByAnilistId(anilistId: Int, coverUrl: String?, coverColor: String?) {
+        withContext(dispatchers.io) {
+            database.animesQueries.updatePreferredCoverByAnilistId(
+                coverUrl = coverUrl,
+                coverColor = coverColor,
+                anilistId = anilistId.toLong(),
+            )
+        }
+    }
+
+    override suspend fun updatePreferredCoverBySourceAndUrl(sourceId: Long, url: String, coverUrl: String?, coverColor: String?) {
+        withContext(dispatchers.io) {
+            database.animesQueries.updatePreferredCoverBySourceAndUrl(
+                coverUrl = coverUrl,
+                coverColor = coverColor,
+                sourceId = sourceId,
+                url = url,
+            )
+        }
     }
 
     override suspend fun delete(id: Long) {

@@ -76,6 +76,12 @@ val extensionModule: Module = module {
     // call getEpisodeList() without re-searching on every app open.
     single { SourceLinkStore(get()) }
 
+    // ── DetailsViewPreferenceStore (remembers per-anime AniList vs Extension view choice) ──
+    // When the user taps "View from Extension" / "View from AniList", the choice is
+    // persisted here. On re-open, the details page reads this to default to the user's
+    // preferred data source. Also drives the library cover (extension cover if preferred).
+    single { app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore(get()) }
+
     // ── Agent 1: EpisodeFetchGateway ──
     // Binds the :core:update-checker interface to the :data:extension impl.
     // Consumed by UpdateChecker (registered in updateCheckerModule). Kept here

@@ -16,6 +16,15 @@ dependencies {
     // update-checker — implements EpisodeFetchGateway here (the :core→:data boundary
     // is inverted via the interface defined in :core:update-checker; see EpisodeFetchGatewayImpl).
     implementation(projects.core.updateChecker)
+    // AniList API + episode-metadata — for ExtensionDetailsProvider (doc 05 §5 Step 3):
+    // the extension provider merges AniList metadata for linked anime + fetches
+    // episode metadata when an anilistId/malId is available.
+    implementation(projects.core.anilist)
+    implementation(projects.core.episodeMetadata)
+    // Design system — for PaletteExtraction.extractFromBitmap (Phase 9 cover-color
+    // extraction for extension-sourced covers). :core:designsystem has no Coil dep,
+    // so the provider loads the bitmap via OkHttp (already a dep) + passes it here.
+    implementation(projects.core.designsystem)
 
     // AndroidX core — NotificationCompat + ContextCompat (foreground service, broadcast receivers)
     implementation("androidx.core:core-ktx:1.15.0")
