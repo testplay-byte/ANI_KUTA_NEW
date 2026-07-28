@@ -97,6 +97,7 @@ class AppController(
     val extensionManager: AnimeExtensionManager,
     val sourceMatcher: SourceMatcher,
     val extensionLinkStore: ExtensionLinkStore,
+    val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore,
     val recentsStore: RecentSearchesStore,
     val searchUiPreferences: SearchUiPreferences,
     val repoRepository: ExtensionRepoRepository,
@@ -169,10 +170,52 @@ class AppController(
         navigator?.push(AnimeDetailDestination(anilistId))
     }
 
-    fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime) {
-        pendingExtensionSource = source
-        pendingExtensionSAnime = sAnime
-        navigator?.push(ExtensionDetailDestination)
+    /**
+     * Push the unified details page in extension mode (replaces the old
+     * `pushExtensionDetail` which pushed the now-removed `ExtensionDetailScreen`).
+     *
+     * @param anilistId optional — when non-null, the ExtensionDetailsProvider
+     *   merges AniList metadata into the view (linked extension anime).
+     */
+    fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime, anilistId: Int? = null) {
+        navigator?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId))
+    }
+
+    /**
+     * Opens a library anime's details page. Handles BOTH linked + unlinked anime:
+     * - **Linked** (`anilistId != null`): pushes [AnimeDetailDestination] (AniList mode).
+     * - **Unlinked** (`anilistId == null`): resolves the extension source from
+     *   `anime.sourceId`, reconstructs the `SAnime` from `anime.url` + `anime.title`,
+     *   and pushes [ExtensionAnimeDetailDestination] (extension mode).
+     *
+     * If the source is no longer installed, shows a toast + falls back to pushing
+     * the AniList details page with `anilistId = 0` (which will show an error state).
+     *
+     * This fixes the bug where unlinked extension anime saved to the library were
+     * not openable on tap (the old `onOpenAnime(anilistId ?: return)` silently bailed).
+     */
+    fun openLibraryAnime(anime: app.confused.anikuta.core.common.model.Anime) {
+        val anilistId = anime.anilistId
+        if (anilistId != null) {
+            pushDetail(anilistId)
+            return
+        }
+        // Unlinked extension anime — resolve the source.
+        val source = sourceMatcher.getSourceById(anime.sourceId)
+        if (source != null) {
+            val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+                url = anime.url
+                title = anime.title
+            }
+            pushExtensionDetail(source, sAnime, anilistId = null)
+        } else {
+            android.widget.Toast.makeText(
+                context,
+                "Source no longer installed for '${anime.title}'",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            Log.w("AnikutaLibrary", "Cannot open library anime: source ${anime.sourceId} not installed")
+        }
     }
 
     var pendingExtensionSource: AnimeCatalogueSource? = null
@@ -221,8 +264,69 @@ class AppController(
         resolverState = VideoResolverState.Hidden
     }
 
+    /**
+     * Switches the AniList entry for the currently-viewed anime. Used by the
+     * "Switch anime" three-dot menu option — the user searched AniList + picked
+     * a different (correct) anime.
+     *
+     * Updates the SourceLinkStore (moves the source link from the old anilistId
+     * to the new one) + ExtensionLinkStore (updates the sourceId:url→anilistId
+     * mapping), then navigates to the new anime's details page (replaces the
+     * current page — no stacking).
+     */
+    fun switchAnilistAnime(currentAnilistId: Int, newAnilistId: Int) {
+        if (currentAnilistId == newAnilistId) {
+            Log.i("AnikutaSearch", "switchAnilistAnime: same anime — no-op")
+            return
+        }
+        // Move the source link from the old anilistId to the new one.
+        val link = sourceLinkStore.getLink(currentAnilistId)
+        if (link != null) {
+            sourceLinkStore.removeLink(currentAnilistId)
+            sourceLinkStore.saveLink(newAnilistId, link.sourceId, link.animeUrl, link.animeTitle)
+            // Update the extension→anilist mapping too.
+            extensionLinkStore.link(link.sourceId, link.animeUrl, newAnilistId)
+            Log.i("AnikutaSearch", "switchAnilistAnime: moved link $currentAnilistId → $newAnilistId (source=${link.sourceId})")
+        }
+        // Navigate to the new anime (replace — no stacking).
+        navigator?.replace(AnimeDetailDestination(newAnilistId))
+    }
+
     fun startLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = source to sAnime
+    }
+
+    /**
+     * Starts the AniList linking flow from the AniList details page (when the user
+     * taps "Switch anime" to correct the auto-match link). Resolves the extension
+     * source + SAnime from the saved [SourceLinkStore] link, then calls [startLinking].
+     *
+     * Used by [AnimeDetailDestination] when the user is on the AniList details page
+     * but wants to re-link to a different AniList entry (the auto-match picked the
+     * wrong one).
+     */
+    fun startLinkingFromAnilist(anilistId: Int) {
+        val link = sourceLinkStore.getLink(anilistId) ?: run {
+            android.widget.Toast.makeText(
+                context,
+                "No extension source linked — open from search to link one",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val source = sourceMatcher.getSourceById(link.sourceId) ?: run {
+            android.widget.Toast.makeText(
+                context,
+                "Source '${link.sourceId}' no longer installed",
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+            url = link.animeUrl
+            title = link.animeTitle
+        }
+        startLinking(source, sAnime)
     }
 
     fun dismissLinking() {
@@ -568,8 +672,13 @@ class AppController(
     fun onLinked(anilistId: Int, wasCached: Boolean, sAnimeTitle: String) {
         linkingTarget = null
         val nav = navigator
-        if (nav != null && nav.lastItem is ExtensionDetailDestination) {
-            nav.replace(AnimeDetailDestination(anilistId))
+        // If we're ALREADY on a detail page (either flavor), REPLACE it — don't push
+        // a second one. Pushing two AnimeDetailDestination instances causes a Voyager
+        // SaveableStateHolder key collision crash during the transition.
+        val onDetailPage = nav?.lastItem is ExtensionAnimeDetailDestination ||
+            nav?.lastItem is AnimeDetailDestination
+        if (onDetailPage) {
+            nav?.replace(AnimeDetailDestination(anilistId))
         } else {
             nav?.push(AnimeDetailDestination(anilistId))
         }
@@ -583,7 +692,8 @@ class AppController(
 
     /**
      * Called when the user picks "go without linking" on the linking sheet.
-     * Pushes the extension-only detail page (unless we're already on it).
+     * Pushes the unified details page in extension mode (anilistId = null →
+     * unlinked extension anime). Replaces the old `ExtensionDetailScreen` push.
      */
     fun onGoWithoutLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = null
@@ -593,8 +703,8 @@ class AppController(
         pendingExtensionSource = source
         pendingExtensionSAnime = sAnime
         val nav = navigator
-        if (nav != null && nav.lastItem !is ExtensionDetailDestination) {
-            nav.push(ExtensionDetailDestination)
+        if (nav != null && nav.lastItem !is ExtensionAnimeDetailDestination) {
+            nav.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
         }
         Log.i("AnikutaSearch", "Go-without-linking: ${sAnime.title} from ${source.name}")
     }

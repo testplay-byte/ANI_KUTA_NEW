@@ -29,21 +29,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.displayTitle
-import app.confused.anikuta.core.anilist.model.nextAiringDisplay
-import app.confused.anikuta.core.anilist.model.seasonDisplay
-import app.confused.anikuta.core.anilist.model.startDateDisplay
-import app.confused.anikuta.core.anilist.model.studioName
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
+import app.confused.anikuta.core.common.model.details.UnifiedStatus
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
  * Horizontal scrollable row of genre chips.
+ *
+ * Hidden if [UnifiedAnime.genres] is empty (doc 04 Table 3 row 8).
  */
 @Composable
-fun GenresRow(anime: AniListAnime) {
-    val genres = anime.genres ?: return
-    if (genres.isEmpty()) return
+fun GenresRow(anime: UnifiedAnime) {
+    if (anime.genres.isEmpty()) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -51,7 +48,7 @@ fun GenresRow(anime: AniListAnime) {
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        genres.forEach { genre ->
+        anime.genres.forEach { genre ->
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(50),
@@ -71,6 +68,10 @@ fun GenresRow(anime: AniListAnime) {
 
 /**
  * Collapsible synopsis section with "Show more / Show less" toggle.
+ *
+ * Hidden if [UnifiedAnime.description] is null/blank (doc 04 Table 3 row 9).
+ * The provider already normalized HTML → plain text, so we just strip any
+ * leftover tags defensively.
  */
 @Composable
 fun SynopsisSection(description: String) {
@@ -110,10 +111,15 @@ fun SynopsisSection(description: String) {
 }
 
 /**
- * Key/value information section — format, status, season, episodes, score, studio.
+ * Key/value information section — conditional per doc 04 Table 3 rows 13–15.
+ *
+ * AniList-mode rows (hidden in pure-extension mode): Format, Season, Score,
+ * Studio, Aired, Source. Extension-mode bonus row: Author/Artist.
+ *
+ * Status + Episodes are shown in both modes when available.
  */
 @Composable
-fun InfoSection(anime: AniListAnime) {
+fun InfoSection(anime: UnifiedAnime) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         Text(
             text = "Information",
@@ -123,15 +129,54 @@ fun InfoSection(anime: AniListAnime) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        InfoRow("Format", anime.format ?: "Unknown")
-        InfoRow("Status", anime.status?.replace("_", " ")?.lowercase() ?: "Unknown")
-        anime.seasonDisplay?.let { InfoRow("Season", it) }
-        InfoRow("Episodes", (anime.episodes ?: 0).toString())
+
+        // Format (AniList-only — null in extension mode)
+        anime.format?.let { InfoRow("Format", it) }
+
+        // Status (both sources — UnifiedStatus)
+        statusLabel(anime.status)?.let { InfoRow("Status", it) }
+
+        // Season (AniList-only)
+        if (anime.season != null && anime.seasonYear != null) {
+            InfoRow("Season", "${anime.season!!.lowercase().replaceFirstChar { it.uppercase() }} ${anime.seasonYear}")
+        } else if (anime.seasonYear != null) {
+            InfoRow("Year", anime.seasonYear.toString())
+        }
+
+        // Episodes (both — AniList total or extension fetched count)
+        anime.episodeCount?.let { InfoRow("Episodes", it.toString()) }
+
+        // Score (AniList-only)
         anime.averageScore?.let { InfoRow("Score", "$it / 100") }
-        anime.studioName?.let { InfoRow("Studio", it) }
-        anime.startDateDisplay?.let { InfoRow("Aired", it) }
-        anime.source?.let { InfoRow("Source", it) }
+
+        // Studio (AniList-only)
+        if (anime.studios.isNotEmpty()) {
+            InfoRow("Studio", anime.studios.joinToString(", "))
+        }
+
+        // Aired (AniList-only)
+        anime.startDate?.let { InfoRow("Aired", it) }
+
+        // Source (AniList-only — original work source)
+        anime.source?.let { InfoRow("Source", it.lowercase().replaceFirstChar { it.uppercase() }) }
+
+        // Author / Artist (extension-only bonus)
+        anime.author?.let { InfoRow("Author", it) }
+        anime.artist?.let { InfoRow("Artist", it) }
+
+        // Data source indicator (which provider produced this view)
+        InfoRow("Data", anime.sourceName)
     }
+}
+
+/** Display label for [UnifiedStatus] — null for UNKNOWN (the row is hidden). */
+private fun statusLabel(status: UnifiedStatus): String? = when (status) {
+    UnifiedStatus.FINISHED -> "Finished"
+    UnifiedStatus.RELEASING -> "Releasing"
+    UnifiedStatus.NOT_YET_RELEASED -> "Not yet released"
+    UnifiedStatus.CANCELLED -> "Cancelled"
+    UnifiedStatus.HIATUS -> "On hiatus"
+    UnifiedStatus.UNKNOWN -> null
 }
 
 @Composable

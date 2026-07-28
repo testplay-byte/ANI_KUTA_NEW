@@ -106,6 +106,9 @@ class App : Application() {
                 downloadAppModule,
                 // ── Voyager navigation (AppController + shared AniListApi) ──
                 navModule,
+                // ── Unified anime details translation layer (doc 05) ──
+                // AniListDetailsProvider + ExtensionDetailsProvider → AnimeDetailsProviderRegistry.
+                app.confused.anikuta.di.detailsModule,
             )
         }
 

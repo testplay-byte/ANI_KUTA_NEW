@@ -60,5 +60,18 @@ interface AnimeRepository {
         nextAiringEpisode: Int?,
     )
 
+    /**
+     * Updates ONLY the cover URL + cover color for a linked anime (by anilistId).
+     * Used when the user switches the per-anime data-source preference to Extension —
+     * the library should reflect the extension's cover. Does NOT touch title/score/etc.
+     */
+    suspend fun updatePreferredCoverByAnilistId(anilistId: Int, coverUrl: String?, coverColor: String?)
+
+    /**
+     * Updates ONLY the cover URL + cover color for an unlinked extension anime
+     * (by sourceId + url). Same use case as [updatePreferredCoverByAnilistId].
+     */
+    suspend fun updatePreferredCoverBySourceAndUrl(sourceId: Long, url: String, coverUrl: String?, coverColor: String?)
+
     suspend fun delete(id: Long)
 }

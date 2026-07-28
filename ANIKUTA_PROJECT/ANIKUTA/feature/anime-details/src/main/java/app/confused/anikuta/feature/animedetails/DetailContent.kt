@@ -16,10 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.coverColorHex
-import app.confused.anikuta.core.anilist.model.coverUrl
-import app.confused.anikuta.core.anilist.model.displayTitle
+import app.confused.anikuta.core.common.model.details.DataSource
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -42,7 +40,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailContent(
-    anime: AniListAnime,
+    anime: UnifiedAnime,
     episodeState: EpisodeState,
     currentMatch: SourceMatcher.SourceMatch?,
     allMatches: List<SourceMatcher.SourceMatch>,
@@ -59,10 +57,15 @@ fun DetailContent(
     onToggleSave: () -> Unit,
     onLongPressSave: () -> Unit,
     onBack: () -> Unit,
+    currentDataSource: DataSource,
+    entryMode: DataSource,
+    onSwitchDataSource: (DataSource) -> Unit,
+    onLinkToAniList: () -> Unit,
+    onSwitchAnime: () -> Unit,
+    onRefresh: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit,
     onToggleWatched: (String) -> Unit,
     onSwitchSource: (SourceMatcher.SourceMatch) -> Unit,
-    onRefresh: () -> Unit,
     onManualSearch: suspend (Long, String) -> Unit,
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
@@ -75,7 +78,9 @@ fun DetailContent(
     onDownloadRetry: (String) -> Unit = {},
     onDownloadDelete: (String) -> Unit = {},
 ) {
-    // Parse cover color for dynamic theming (hex → Compose Color)
+    // Parse cover color for dynamic theming (hex → Compose Color).
+    // UnifiedAnime.coverColorHex comes from AniList's coverImage.color (AniList mode)
+    // or Palette extraction (extension mode — Phase 9). Null → dark fallback.
     val coverColor = remember(anime) {
         anime.coverColorHex?.let { hex ->
             runCatching {
@@ -104,9 +109,15 @@ fun DetailContent(
                     anime = anime,
                     coverColor = coverColor,
                     saved = saved,
+                    currentDataSource = currentDataSource,
+                    entryMode = entryMode,
                     onBack = onBack,
                     onToggleSave = onToggleSave,
                     onLongPressSave = onLongPressSave,
+                    onSwitchDataSource = onSwitchDataSource,
+                    onLinkToAniList = onLinkToAniList,
+                    onSwitchAnime = onSwitchAnime,
+                    onRefresh = onRefresh,
                 )
             }
 
@@ -125,7 +136,7 @@ fun DetailContent(
                 // Per user: "the meta data of the episode which the user wants to play
                 // does not get shared to the watch page."
                 val watchCtx = WatchEpisodeContext(
-                    animeTitle = anime.displayTitle,
+                    animeTitle = anime.title,
                     coverUrl = anime.coverUrl,
                     coverColorArgb = runCatching {
                         val hex = anime.coverColorHex
@@ -145,7 +156,7 @@ fun DetailContent(
                     autoMatchErrors = autoMatchErrors,
                     hasSearched = hasSearched,
                     availableSources = availableSources,
-                    initialSearchQuery = anime.displayTitle,
+                    initialSearchQuery = anime.title,
                     onOpenEpisode = { episode, source, episodes ->
                         onOpenEpisode(episode, source, episodes, watchCtx)
                     },

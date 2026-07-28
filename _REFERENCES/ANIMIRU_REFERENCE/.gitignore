@@ -1,0 +1,19 @@
+# Animiru reference folder
+# ─────────────────────────────────────────────────────────────
+# The Animiru source code (cloned into ./animiru-src/) is a
+# read-only reference snapshot, gitignored so it stays local and
+# is never committed. Only the DOCUMENTATION/ folder (our analysis
+# notes) is committed — following the same convention as the
+# sibling ANIYOMI_REFRENCE/ and OLD_ANIKUTA/ folders.
+#
+# See ../README.md for the _REFERENCES/ rules (READ-ONLY, no builds).
+
+# Ignore everything in this folder
+*
+
+# But allow the DOCUMENTATION folder and its contents
+!DOCUMENTATION/
+!DOCUMENTATION/**
+
+# Allow this .gitignore itself
+!.gitignore
