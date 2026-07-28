@@ -46,6 +46,7 @@ dependencies {
     implementation(projects.core.database)
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
+    implementation(projects.core.providerApi)
     implementation(projects.core.player)
     // ── Agent 1: History + Updates ──
     implementation(projects.core.updateChecker)

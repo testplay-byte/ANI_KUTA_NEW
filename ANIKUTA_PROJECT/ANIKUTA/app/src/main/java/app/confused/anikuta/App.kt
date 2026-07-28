@@ -109,6 +109,10 @@ class App : Application() {
                 // ── Unified anime details translation layer (doc 05) ──
                 // AniListDetailsProvider + ExtensionDetailsProvider → AnimeDetailsProviderRegistry.
                 app.confused.anikuta.di.detailsModule,
+                // ── Phase 2: Metadata provider abstraction (ADR-041) ──
+                // AniListMetadataProvider → MetadataProviderRegistry. Adding MAL/TMDB
+                // = one module + one entry in the List<MetadataProvider> binding.
+                app.confused.anikuta.core.anilist.di.providerApiModule,
             )
         }
 
