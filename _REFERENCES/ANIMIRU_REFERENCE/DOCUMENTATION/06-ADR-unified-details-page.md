@@ -117,4 +117,84 @@ The separate extension details screen is deleted entirely. Its useful logic (the
 
 ---
 
+## Appendix A — Data Structures + Backup/Restore + Future-Proofing
+
+> Added 2026-07-28 after the 5th round of owner feedback. Documents the data
+> structures introduced by this feature, their backup/restore compatibility,
+> and how the architecture scales to future data sources (View from A/B/C/…).
+
+### A.1 Data structures introduced
+
+| Store / Table | Location | Key | Value | Purpose |
+|---|---|---|---|---|
+| `DetailsViewPreferenceStore` | `:data:extension` (PreferenceStore) | `anilistId` (linked) or `"ext:sourceId:url"` (unlinked) | `DataSource` enum name (`"ANILIST"` / `"EXTENSION"`) | Remembers the user's per-anime View-from preference. |
+| `SourceLinkStore` | `:data:extension` (PreferenceStore) | `anilistId.toString()` | `SourceLink(sourceId, animeUrl, animeTitle)` | AniList → extension source link (skips re-matching on re-open). |
+| `ExtensionLinkStore` | `:data:extension` (PreferenceStore) | `"sourceId:animeUrl"` | `anilistId: Int` | Extension → AniList reverse-lookup (preferred source). |
+| `animes` table (SQLDelight) | `:core:database` | `_id` (auto), `anilist_id` (unique nullable), `source_id + url` | full Anime row (title, cover, coverColor, description, genre, status, author, artist, score, totalEpisodes, nextAiringEpisode, …) | Library + offline access. Cover URL/color updated to reflect the preferred view. |
+| `episodes` table (SQLDelight) | `:core:database` | `_id`, `anime_id` (FK) | full Episode row (url, name, episodeNumber, scanlator, fillermark, summary, previewUrl, dateUpload, sourceOrder) | Episode persistence for offline + instant re-open. |
+
+### A.2 Backup/restore compatibility
+
+All data structures are **backup-friendly**:
+
+| Data | Backup provider | Format |
+|---|---|---|
+| `animes` table (including unlinked extension anime) | `AnimeDetailsBackupProvider` | SQLDelight rows → JSON |
+| `episodes` table | `EpisodeBackupProvider` | SQLDelight rows → JSON |
+| `SourceLinkStore` + `ExtensionLinkStore` | `SourceLinkBackupProvider` | PreferenceStore map → JSON |
+| `DetailsViewPreferenceStore` | **NEW — `DetailsViewPreferenceBackupProvider`** (to be added) | PreferenceStore map → JSON |
+| Episode metadata cache | `EpisodeMetadataBackupProvider` | PreferenceStore map → JSON |
+| Tracker bindings | `TrackerBackupProviderAdapter` | animetrack table → JSON |
+| Cover images | `CoverImageProvider` | anime cover URLs from DB |
+
+**To complete backup coverage**, a `DetailsViewPreferenceBackupProvider` should be
+added to `BackupModule`'s `List<BackupProvider>`. It would serialize the
+`DetailsViewPreferenceStore.getAll()` map (small — one string per anime). This is
+a one-class addition; the backup container format already supports arbitrary
+providers.
+
+### A.3 Future-proofing — adding a third data source
+
+The architecture is designed to scale beyond AniList + Extension. To add a
+hypothetical "View from Kitsu" or "View from Local Metadata":
+
+1. **Add a `DataSource` enum value** (e.g. `KITSU`, `LOCAL_METADATA`).
+2. **Create a new `AnimeDetailsProvider` implementation** (e.g. `KitsuDetailsProvider`)
+   with `dataSource = KITSU`. Implement `load()` + `loadEpisodes()`.
+3. **Register in `DetailsModule`** — add one line to the `listOf(...)` Koin binding.
+4. **Add menu entries** in `SourceSwitcherMenu` for the new source (conditional on
+   availability — e.g. "View from Kitsu" if the user has a Kitsu account).
+5. **Update `DetailsViewPreferenceStore`** — no change needed; it already stores
+   `DataSource` enum names, so `KITSU` is automatically supported.
+
+**Zero changes** to `AnimeDetailScreen`, `DetailBanner`, `DetailContent`,
+`DetailInfo`, `AnimeDetailViewModel`, or the backup system (the preference store
+already handles arbitrary `DataSource` values).
+
+### A.4 Categorization (future)
+
+The owner mentioned future "categorization of data." The `animes` table already
+has a `source_id` column + the `anime_category` junction table. A future
+"categorization by data source" feature could:
+- Group library anime by `DataSource` preference (from `DetailsViewPreferenceStore`).
+- Add a `data_source` column to `categories` (if category-level source filtering is desired).
+
+No schema change needed today — the preference store already tracks per-anime source.
+
+### A.5 Data-source switching — the `forceRefresh` invariant
+
+When the user switches data sources via the three-dot menu (`switchDataSource`),
+the first load after the switch **must** use `forceRefresh = true`. This is because
+the DB-first short-circuit would return the OLD cover/metadata (from the previous
+view's load). Forcing a fresh fetch ensures the cover + metadata update to the
+new source's data. Subsequent opens (without switching) use `forceRefresh = false`
+(DB-first, instant).
+
+The `load()` method uses `forceRefresh = false` (DB-first). `refresh()` uses
+`forceRefresh = true` (pull-to-refresh). `switchDataSource()` uses
+`forceRefresh = true` (source switch). This invariant is documented in
+`AnimeDetailViewModel.loadInternal()`.
+
+---
+
 *Implementation: `feature/extension-details-page` branch. See worklog `EXT-DETAILS-IMPL` entry for the step-by-step commit log.*

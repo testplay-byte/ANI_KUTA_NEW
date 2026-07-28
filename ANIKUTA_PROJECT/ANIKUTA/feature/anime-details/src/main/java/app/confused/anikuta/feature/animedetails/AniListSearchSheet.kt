@@ -114,7 +114,7 @@ fun AniListSearchSheet(
             Text(
                 text = "Switch anime",
                 fontFamily = RobotoFamily,
-                fontSize = 22.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
@@ -147,18 +147,19 @@ fun AniListSearchSheet(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                     shape = RoundedCornerShape(50),
-                    modifier = Modifier.height(48.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.height(40.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Search,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.size(4.dp))
                     Text(
                         text = "Search",
                         fontFamily = RobotoFamily,
-                        fontSize = 14.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                     )
                 }

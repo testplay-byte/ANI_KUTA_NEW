@@ -234,7 +234,10 @@ class AnimeDetailViewModel(
         activeRequest = requestForDataSource(target, (activeRequest))
         // Persist the per-anime preference (so re-open respects the user's choice).
         saveViewPreference(target)
-        load()
+        // Force-refresh the first load after a switch — the DB-first short-circuit
+        // would return the OLD cover (from the previous view's load). Forcing a fresh
+        // fetch ensures the cover + metadata update to the new source's data.
+        loadInternal(forceRefresh = true)
     }
 
     /**
