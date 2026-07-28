@@ -587,9 +587,14 @@ class AppController(
      */
     fun onGoWithoutLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = null
+        // ExtensionDetailDestination is now an object (no constructor params) so the
+        // actual source/sAnime must be stashed in pendingExtension* BEFORE pushing,
+        // matching the flow used by pushExtensionDetail().
+        pendingExtensionSource = source
+        pendingExtensionSAnime = sAnime
         val nav = navigator
         if (nav != null && nav.lastItem !is ExtensionDetailDestination) {
-            nav.push(ExtensionDetailDestination(source, sAnime))
+            nav.push(ExtensionDetailDestination)
         }
         Log.i("AnikutaSearch", "Go-without-linking: ${sAnime.title} from ${source.name}")
     }
