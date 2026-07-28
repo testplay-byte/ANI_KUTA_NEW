@@ -22,6 +22,7 @@ import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
 import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.navigator.rememberNavigator
 import cafe.adriel.voyager.transitions.FadeTransition
 import org.koin.compose.koinInject
 
@@ -63,10 +64,16 @@ private val navItems = listOf(
 fun AnikutaRoot() {
     val appController = koinInject<AppController>()
 
-    Navigator(BrowseTabDestination) { navigator ->
+    // Use rememberNavigatorSaver to preserve the back stack across
+    // Activity recreation (e.g. when switching apps and coming back).
+    // This prevents the player from closing when the user briefly leaves
+    // the app and returns.
+    val navigator = rememberNavigator()
+
+    Navigator(navigator = navigator, content = { nav ->
         // Wire the navigator into the AppController so it can push/pop.
         SideEffect {
-            appController.navigator = navigator
+            appController.navigator = nav
         }
 
         // ── Download error toast observer ──
@@ -138,13 +145,13 @@ private fun AppOverlays(appController: AppController) {
     }
 
     // ── 1. Video resolver overlay ──
-    // Wrapped in a dynamic MaterialTheme when cover color is available, so the
-    // resolver sheet picks up the anime's themed colors (per owner feedback).
+    // Only themed when adaptiveColorsPlayer is ON (per owner feedback).
     val resolverState = appController.resolverState
     if (resolverState !is VideoResolverState.Hidden) {
-        // Generate dynamic scheme from cover color for the resolver overlay
+        val themePrefs = appController.themePrefs
+        val adaptivePlayer = themePrefs.adaptiveColorsPlayer.get()
         val coverColorArgb = appController.resolveTarget?.watchCtx?.coverColorArgb ?: 0
-        val resolverScheme = if (coverColorArgb != 0) {
+        val resolverScheme = if (adaptivePlayer && coverColorArgb != 0) {
             app.confused.anikuta.core.designsystem.theme.generateDynamicScheme(
                 coverColorArgb, darkTheme = true, amoled = false,
             )

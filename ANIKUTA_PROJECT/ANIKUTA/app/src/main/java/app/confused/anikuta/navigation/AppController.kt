@@ -102,6 +102,7 @@ class AppController(
     val repoRepository: ExtensionRepoRepository,
     val repoApi: ExtensionRepoApi,
     private val serverDiscoveryStore: ServerDiscoveryStore,
+    val themePrefs: app.confused.anikuta.core.preferences.ThemePreferences,
     private val context: Context,
 ) {
 

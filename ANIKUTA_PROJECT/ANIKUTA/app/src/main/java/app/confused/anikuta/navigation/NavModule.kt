@@ -4,6 +4,7 @@ import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.api.AniListRateLimiter
 import app.confused.anikuta.core.anilist.api.LocalAniListCache
 import app.confused.anikuta.core.preferences.PreferenceStore
+import app.confused.anikuta.core.preferences.ThemePreferences
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -53,6 +54,7 @@ val navModule: Module = module {
             repoRepository = get(),
             repoApi = get(),
             serverDiscoveryStore = get(),
+            themePrefs = get<ThemePreferences>(),
             context = get(),
         )
     }

@@ -302,10 +302,7 @@ fun MinimizedControls(
                     )
                 }
 
-                // ---- Center: transparent play/pause (single-click toggles play/pause) ----
-                // When controls are visible, a single tap on this icon toggles play/pause.
-                // The pointerInput consumes the tap so the outer Box doesn't toggle controls.
-                // Double-tap center (when controls are hidden) is handled by the outer Box.
+                // ---- Center: square play/pause with themed tint ----
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -315,12 +312,20 @@ fun MinimizedControls(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = Color.White.copy(alpha = 0.7f),
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                         modifier = Modifier.size(56.dp),
-                    )
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                    }
                 }
 
                 // ---- Bottom: seekbar (left, fills width) + maximize (right) ----

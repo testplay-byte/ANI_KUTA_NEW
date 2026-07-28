@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Lock
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPicture
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Subtitles
@@ -67,8 +65,8 @@ import app.confused.anikuta.core.player.PlayerLoadingState
 import app.confused.anikuta.core.player.PlayerPreferences
 import app.confused.anikuta.core.player.PlayerStateHolder
 
-// Slower animations per owner feedback — 450ms instead of 300ms
-private val ANIM_DURATION = 450
+// Quick animations — controls should appear/disappear smoothly but fast
+private val ANIM_DURATION = 200
 
 @Suppress("UNUSED_PARAMETER")
 @Composable
@@ -246,22 +244,24 @@ fun FullscreenControls(
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                        horizontalArrangement = Arrangement.spacedBy(28.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        FSCenterButton(icon = Icons.Default.Replay10, contentDescription = "Rewind 10s", onClick = { onSeekRelative(-10) })
+                        // -10s button: rectangular with themed tint
+                        FSSkipButton(label = "-10s", onClick = { onSeekRelative(-10) })
+                        // Play/pause: square with blur + themed tint
                         Box(contentAlignment = Alignment.Center) {
                             if (buffering || loadingState == PlayerLoadingState.LOADING) {
                                 CircularProgressIndicator(
                                     color = MaterialTheme.colorScheme.primary,
                                     strokeWidth = 3.dp,
-                                    modifier = Modifier.size(56.dp),
+                                    modifier = Modifier.size(48.dp),
                                 )
                             } else {
                                 Surface(
-                                    shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.15f),
-                                    modifier = Modifier.size(64.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                    modifier = Modifier.size(60.dp),
                                     onClick = onTogglePlay,
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -269,13 +269,14 @@ fun FullscreenControls(
                                             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                             contentDescription = if (isPlaying) "Pause" else "Play",
                                             tint = Color.White,
-                                            modifier = Modifier.size(36.dp),
+                                            modifier = Modifier.size(32.dp),
                                         )
                                     }
                                 }
                             }
                         }
-                        FSCenterButton(icon = Icons.Default.Forward10, contentDescription = "Forward 10s", onClick = { onSeekRelative(10) })
+                        // +10s button: rectangular with themed tint
+                        FSSkipButton(label = "+10s", onClick = { onSeekRelative(10) })
                     }
                 }
             }
@@ -332,7 +333,7 @@ fun FullscreenControls(
                                     ) {
                                         FSSpeedButton(speed = currentSpeed, onClick = onSpeedClick)
                                         FSSmallButton(icon = Icons.Default.RotateRight, contentDescription = "Rotate", onClick = onRotateClick)
-                                        FSSkipButton(onClick = onSkipForward)
+                                        FSSkipIconButton(onClick = onSkipForward)
                                         FSSmallButton(icon = Icons.Default.PictureInPicture, contentDescription = "PiP", onClick = onPiPClick)
                                     }
                                 }
@@ -487,25 +488,26 @@ private fun FSSmallButton(
 }
 
 @Composable
-private fun FSCenterButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-) {
+private fun FSSkipButton(label: String, onClick: () -> Unit) {
     Surface(
-        shape = CircleShape,
-        color = Color.White.copy(alpha = 0.15f),
-        modifier = Modifier.size(44.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+        modifier = Modifier.size(width = 56.dp, height = 44.dp),
         onClick = onClick,
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(24.dp))
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }
 
 @Composable
-private fun FSSkipButton(onClick: () -> Unit) {
+private fun FSSkipIconButton(onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = Color.White.copy(alpha = 0.12f),

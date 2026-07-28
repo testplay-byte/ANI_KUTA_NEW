@@ -108,14 +108,14 @@ fun MinimalSeekbar(
                 .clip(RoundedCornerShape(3.dp))
                 .background(Color.White.copy(alpha = 0.3f)),
         )
-        // Buffer-ahead segment — lighter color, between progress and end
+        // Buffer-ahead segment — themed color (lighter shade of primary)
         if (bufferProgress > progress) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(bufferProgress)
                     .height(5.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color.White.copy(alpha = 0.5f)),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
             )
         }
         // Active track (progress) — 5dp line in primary color
