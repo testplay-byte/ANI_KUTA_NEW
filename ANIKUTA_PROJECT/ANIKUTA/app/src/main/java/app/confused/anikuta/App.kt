@@ -112,7 +112,7 @@ class App : Application() {
                 // ── Phase 2: Metadata provider abstraction (ADR-041) ──
                 // AniListMetadataProvider → MetadataProviderRegistry. Adding MAL/TMDB
                 // = one module + one entry in the List<MetadataProvider> binding.
-                app.confused.anikuta.core.anilist.di.providerApiModule,
+                app.confused.anikuta.di.providerApiModule,
             )
         }
 

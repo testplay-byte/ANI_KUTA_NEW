@@ -1,4 +1,4 @@
-package app.confused.anikuta.core.anilist.di
+package app.confused.anikuta.di
 
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.details.AniListMetadataProvider
@@ -15,6 +15,9 @@ import org.koin.dsl.module
  * - [AniListMetadataProvider] as the (currently sole) [MetadataProvider].
  * - [MetadataProviderRegistry] resolved via `List<MetadataProvider>` multi-binding
  *   (same pattern as `List<AnimeDetailsProvider>` in `DetailsModule.kt`).
+ *
+ * Lives in `:app` (not `:core:anilist`) because `:core:anilist` doesn't depend on
+ * Koin — only the app module wires DI.
  *
  * # Adding a new provider (e.g., MAL)
  *

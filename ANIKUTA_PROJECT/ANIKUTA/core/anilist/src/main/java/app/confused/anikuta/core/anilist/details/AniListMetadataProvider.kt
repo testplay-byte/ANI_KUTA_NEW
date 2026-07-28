@@ -2,6 +2,8 @@ package app.confused.anikuta.core.anilist.details
 
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.model.AiringScheduleInfo
+import app.confused.anikuta.core.anilist.model.coverColorHex
+import app.confused.anikuta.core.anilist.model.coverUrl
 import app.confused.anikuta.core.common.model.MetadataProviderId
 import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.core.providerapi.AiringScheduleProvider
