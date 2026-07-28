@@ -97,6 +97,7 @@ class AppController(
     val extensionManager: AnimeExtensionManager,
     val sourceMatcher: SourceMatcher,
     val extensionLinkStore: ExtensionLinkStore,
+    val sourceLinkStore: app.confused.anikuta.data.extension.cache.SourceLinkStore,
     val recentsStore: RecentSearchesStore,
     val searchUiPreferences: SearchUiPreferences,
     val repoRepository: ExtensionRepoRepository,

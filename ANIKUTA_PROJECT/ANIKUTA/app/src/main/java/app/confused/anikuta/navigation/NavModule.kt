@@ -48,6 +48,7 @@ val navModule: Module = module {
             extensionManager = get(),
             sourceMatcher = get(),
             extensionLinkStore = get(),
+            sourceLinkStore = get(),
             recentsStore = get(),
             searchUiPreferences = get(),
             repoRepository = get(),
