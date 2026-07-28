@@ -59,6 +59,51 @@ fun SAnime.toUnifiedAnime(
 )
 
 /**
+ * Maps a DB [Anime] row to a [UnifiedAnime] for the DB-first short-circuit path
+ * (skips getAnimeDetails + Palette + AniList merge — returns instantly from DB).
+ *
+ * The DB row has the metadata from the previous fetch (the provider persists it).
+ * The [coverColorHex] comes from the DB `coverColor` column (set by the previous
+ * Palette extraction or AniList merge).
+ */
+fun app.confused.anikuta.core.common.model.Anime.toUnifiedAnimeFromDb(
+    sourceId: Long,
+    sourceName: String,
+    anilistId: Int?,
+): UnifiedAnime = UnifiedAnime(
+    dataSource = DataSource.EXTENSION,
+    anilistId = anilistId ?: this.anilistId,
+    malId = null, // not stored in DB
+    sourceId = sourceId,
+    sourceName = sourceName,
+    url = url,
+    title = title,
+    coverUrl = coverUrl,
+    coverColorHex = coverColor,
+    bannerUrl = null, // not stored in DB
+    description = app.confused.anikuta.core.common.model.details.HtmlToPlainText.normalize(description),
+    genres = genre,
+    status = app.confused.anikuta.core.common.model.details.mapSAnimeStatus(status),
+    format = null, // AniList-only — not in DB
+    episodeCount = totalEpisodes,
+    averageScore = score?.toInt(),
+    season = null, // AniList-only — not in DB
+    seasonYear = null, // AniList-only — not in DB
+    startDate = null, // AniList-only — not in DB
+    studios = emptyList(), // AniList-only — not in DB
+    nextAiringEpisode = nextAiringEpisode?.let { ep ->
+        app.confused.anikuta.core.common.model.details.NextAiringEpisode(
+            episode = ep,
+            airingAt = 0,
+            timeUntilAiring = 0,
+        )
+    },
+    author = author,
+    artist = artist,
+    source = null, // AniList-only — not in DB
+)
+
+/**
  * Merge AniList-only metadata into an extension-sourced [UnifiedAnime].
  *
  * Used by [ExtensionDetailsProvider] when an extension anime is linked to

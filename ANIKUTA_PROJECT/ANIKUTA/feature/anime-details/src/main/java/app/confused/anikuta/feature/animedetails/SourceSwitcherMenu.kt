@@ -67,6 +67,7 @@ fun SourceSwitcherMenu(
     entryMode: DataSource,
     onSwitchDataSource: (DataSource) -> Unit,
     onLinkToAniList: () -> Unit,
+    onSwitchAnime: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -126,17 +127,17 @@ fun SourceSwitcherMenu(
         // entryMode is kept for future use but doesn't gate this option.
         if (anime.sourceId != null || entryMode == DataSource.EXTENSION) {
             if (anime.anilistId != null) {
-                // Linked — "Switch anime" to correct a wrong auto-match.
+                // Linked — "Switch anime" opens the AniList search sheet (NOT auto-link).
                 DropdownMenuItem(
                     text = { MenuText("Switch anime", subtitle = "Wrong link? Find the correct AniList entry") },
                     leadingIcon = { MenuIcon(Icons.Outlined.FindInPage) },
                     onClick = {
                         expanded = false
-                        onLinkToAniList()
+                        onSwitchAnime()
                     },
                 )
             } else {
-                // Unlinked — "Link to AniList" to establish a link.
+                // Unlinked — "Link to AniList" opens the ExtensionLinkingSheet.
                 DropdownMenuItem(
                     text = { MenuText("Link to AniList", subtitle = "Search AniList + link this anime") },
                     leadingIcon = { MenuIcon(Icons.Outlined.Link) },

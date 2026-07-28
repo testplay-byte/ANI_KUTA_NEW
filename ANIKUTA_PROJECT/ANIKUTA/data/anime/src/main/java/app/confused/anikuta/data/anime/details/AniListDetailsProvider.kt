@@ -58,7 +58,7 @@ class AniListDetailsProvider(
 
     override val dataSource: DataSource = DataSource.ANILIST
 
-    override suspend fun load(request: DetailsRequest): DetailsResult? = when (request) {
+    override suspend fun load(request: DetailsRequest, forceRefresh: Boolean): DetailsResult? = when (request) {
         is DetailsRequest.ByAniListId -> loadByAniListId(request.anilistId)
         is DetailsRequest.ByExtension -> {
             // AniList provider can only serve AniList-keyed lookups. If the extension

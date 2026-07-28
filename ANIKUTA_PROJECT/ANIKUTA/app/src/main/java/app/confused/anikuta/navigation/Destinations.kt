@@ -141,6 +141,8 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             // "Switch anime" from the AniList page — resolve the source from the saved
             // link + start the linking flow (corrects a wrong auto-match).
             onLinkToAniList = { appController.startLinkingFromAnilist(animeId) },
+            // "Switch anime" picked — update links + navigate to the new anime.
+            onSwitchAnimePicked = { newId -> appController.switchAnilistAnime(animeId, newId) },
         )
     }
 }
@@ -192,8 +194,14 @@ data class ExtensionAnimeDetailDestination(
             onDownloadResume = { episodeUrl -> appController.resumeDownload(downloadKey, episodeUrl) },
             onDownloadRetry = { episodeUrl -> appController.retryDownload(downloadKey, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
-            // Extension mode: "Link to AniList" / "Switch anime" opens the AniList linking sheet overlay.
+            // Extension mode: "Link to AniList" opens the AniList linking sheet overlay.
             onLinkToAniList = { appController.startLinking(source, sAnime) },
+            // "Switch anime" picked (linked only) — update links + navigate to the new anime.
+            onSwitchAnimePicked = { newId ->
+                if (anilistId != null) {
+                    appController.switchAnilistAnime(anilistId, newId)
+                }
+            },
         )
     }
 }

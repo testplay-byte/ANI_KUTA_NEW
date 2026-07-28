@@ -61,6 +61,7 @@ fun DetailContent(
     entryMode: DataSource,
     onSwitchDataSource: (DataSource) -> Unit,
     onLinkToAniList: () -> Unit,
+    onSwitchAnime: () -> Unit,
     onRefresh: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit,
     onToggleWatched: (String) -> Unit,
@@ -115,6 +116,7 @@ fun DetailContent(
                     onLongPressSave = onLongPressSave,
                     onSwitchDataSource = onSwitchDataSource,
                     onLinkToAniList = onLinkToAniList,
+                    onSwitchAnime = onSwitchAnime,
                     onRefresh = onRefresh,
                 )
             }

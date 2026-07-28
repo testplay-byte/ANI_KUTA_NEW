@@ -43,10 +43,13 @@ interface AnimeDetailsProvider {
      *
      * @param request identity of the anime to load — either [DetailsRequest.ByAniListId]
      *   or [DetailsRequest.ByExtension].
+     * @param forceRefresh if `true`, skip the DB-first short-circuit and fetch fresh
+     *   data from the network (used by pull-to-refresh). If `false` (default), the
+     *   provider MAY return cached DB data instantly when available.
      * @return the unified result, or `null` if the anime cannot be resolved.
      * @throws Throwable on transient errors (network, extension binary-incompat).
      */
-    suspend fun load(request: DetailsRequest): DetailsResult?
+    suspend fun load(request: DetailsRequest, forceRefresh: Boolean = false): DetailsResult?
 
     /**
      * Load ONLY the episode list for [request] — without re-fetching the anime

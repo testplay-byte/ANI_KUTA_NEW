@@ -171,14 +171,23 @@ class AnimeDetailViewModel(
 
     // ── Public API ──
 
-    /** Initial load (or reload after switching data source / extension). */
-    fun load() {
+    /** Initial load (or reload after switching data source / extension). Uses DB-first. */
+    fun load() = loadInternal(forceRefresh = false)
+
+    /** Refreshes everything (pull-to-refresh). Forces a fresh network fetch. */
+    fun refresh() {
+        if (_isRefreshing.value) return
+        _isRefreshing.value = true
+        loadInternal(forceRefresh = true)
+    }
+
+    private fun loadInternal(forceRefresh: Boolean) {
         viewModelScope.launch {
             _animeState.value = DetailState.Loading
             _episodeState.value = EpisodeState.Searching
             try {
                 val provider = registry.forSource(_currentDataSource.value)
-                val result = withContext(Dispatchers.IO) { provider.load(activeRequest) }
+                val result = withContext(Dispatchers.IO) { provider.load(activeRequest, forceRefresh = forceRefresh) }
                 if (result == null) {
                     _animeState.value = DetailState.Error("Anime not found")
                     _episodeState.value = EpisodeState.NoMatch
@@ -385,13 +394,6 @@ class AnimeDetailViewModel(
         _currentMatch.value = match
         Toast.makeText(appContext, "Switched to ${match.source.name}", Toast.LENGTH_SHORT).show()
         switchExtension(match.source, match.sAnime)
-    }
-
-    /** Refreshes everything (pull-to-refresh). */
-    fun refresh() {
-        if (_isRefreshing.value) return
-        _isRefreshing.value = true
-        load()
     }
 
     /** Available sources for the manual-search source selector. */

@@ -75,6 +75,9 @@ fun AnimeDetailScreen(
     /** Called when the user picks "Link to AniList" / "Switch anime" (extension mode) —
      *  opens the AniList linking sheet overlay via AppController.startLinking. */
     onLinkToAniList: () -> Unit = {},
+    /** Called when the user picks a new anime from the AniList search sheet ("Switch anime").
+     *  The destination updates the link + navigates to the new anime. */
+    onSwitchAnimePicked: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -167,6 +170,9 @@ fun AnimeDetailScreen(
     val currentDataSource by vm.currentDataSource.collectAsState()
     val availableSources = remember { vm.getAvailableSources() }
 
+    // ── AniList search sheet state (for "Switch anime" — linked anime only) ──
+    var showAniListSearch by remember { mutableStateOf(false) }
+
     // ── Generate dynamic scheme from cover color when available ──
     val coverColorArgb: Int = remember(animeState) {
         val state = animeState
@@ -223,6 +229,7 @@ fun AnimeDetailScreen(
                     entryMode = entryMode,
                     onSwitchDataSource = vm::switchDataSource,
                     onLinkToAniList = onLinkToAniList,
+                    onSwitchAnime = { showAniListSearch = true },
                     onRefresh = vm::refresh,
                     onOpenEpisode = onOpenEpisode,
                     onToggleWatched = vm::toggleWatched,
@@ -246,6 +253,17 @@ fun AnimeDetailScreen(
         MaterialTheme(colorScheme = dynamicScheme, content = screenContent)
     } else {
         screenContent()
+    }
+
+    // ── AniList search sheet (for "Switch anime" — linked anime only) ──
+    val successState = animeState as? DetailState.Success
+    if (showAniListSearch) {
+        AniListSearchSheet(
+            anilistApi = api,
+            initialQuery = successState?.anime?.title ?: "",
+            onPicked = { newId -> onSwitchAnimePicked(newId) },
+            onDismiss = { showAniListSearch = false },
+        )
     }
 
     // Category picker dialog (long-press on bookmark button).

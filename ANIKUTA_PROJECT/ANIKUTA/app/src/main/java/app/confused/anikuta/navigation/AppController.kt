@@ -251,6 +251,34 @@ class AppController(
         resolverState = VideoResolverState.Hidden
     }
 
+    /**
+     * Switches the AniList entry for the currently-viewed anime. Used by the
+     * "Switch anime" three-dot menu option — the user searched AniList + picked
+     * a different (correct) anime.
+     *
+     * Updates the SourceLinkStore (moves the source link from the old anilistId
+     * to the new one) + ExtensionLinkStore (updates the sourceId:url→anilistId
+     * mapping), then navigates to the new anime's details page (replaces the
+     * current page — no stacking).
+     */
+    fun switchAnilistAnime(currentAnilistId: Int, newAnilistId: Int) {
+        if (currentAnilistId == newAnilistId) {
+            Log.i("AnikutaSearch", "switchAnilistAnime: same anime — no-op")
+            return
+        }
+        // Move the source link from the old anilistId to the new one.
+        val link = sourceLinkStore.getLink(currentAnilistId)
+        if (link != null) {
+            sourceLinkStore.removeLink(currentAnilistId)
+            sourceLinkStore.saveLink(newAnilistId, link.sourceId, link.animeUrl, link.animeTitle)
+            // Update the extension→anilist mapping too.
+            extensionLinkStore.link(link.sourceId, link.animeUrl, newAnilistId)
+            Log.i("AnikutaSearch", "switchAnilistAnime: moved link $currentAnilistId → $newAnilistId (source=${link.sourceId})")
+        }
+        // Navigate to the new anime (replace — no stacking).
+        navigator?.replace(AnimeDetailDestination(newAnilistId))
+    }
+
     fun startLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = source to sAnime
     }

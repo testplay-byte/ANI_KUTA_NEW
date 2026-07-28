@@ -77,12 +77,13 @@ class ExtensionDetailsProvider(
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    override suspend fun load(request: DetailsRequest): DetailsResult? = when (request) {
+    override suspend fun load(request: DetailsRequest, forceRefresh: Boolean): DetailsResult? = when (request) {
         is DetailsRequest.ByExtension -> loadByExtension(
             sourceId = request.sourceId,
             animeUrl = request.animeUrl,
             animeTitle = request.animeTitle,
             anilistId = request.anilistId,
+            forceRefresh = forceRefresh,
         )
         is DetailsRequest.ByAniListId -> {
             // Extension provider serving an AniList-keyed request: reverse-lookup the
@@ -93,6 +94,7 @@ class ExtensionDetailsProvider(
                 animeUrl = savedLink.animeUrl,
                 animeTitle = savedLink.animeTitle,
                 anilistId = request.anilistId,
+                forceRefresh = forceRefresh,
             )
         }
     }
@@ -102,7 +104,33 @@ class ExtensionDetailsProvider(
         animeUrl: String,
         animeTitle: String,
         anilistId: Int?,
+        forceRefresh: Boolean = false,
     ): DetailsResult? {
+        // ── DB-first short-circuit (skip network on re-open) ──
+        // Per owner feedback: the page was reloading (getAnimeDetails + Palette + matchAll)
+        // every time the user opened an anime set to "View from Extension". Now we check
+        // the DB first — if we have an Anime row + episodes, return them instantly.
+        // Pull-to-refresh passes forceRefresh=true to bypass this.
+        if (!forceRefresh) {
+            val dbAnime = when {
+                anilistId != null -> animeRepository.getByAnilistId(anilistId)
+                else -> animeRepository.getBySourceAndUrl(sourceId, animeUrl)
+            }
+            if (dbAnime != null) {
+                val dbEpisodes = episodeRepository.getByAnimeId(dbAnime.id)
+                if (dbEpisodes.isNotEmpty()) {
+                    Log.i(TAG, "DB-first short-circuit: loaded ${dbEpisodes.size} episodes from DB for '${dbAnime.title}' (anilistId=$anilistId)")
+                    val sourceName = sourceMatcher.getSourceById(sourceId)?.name ?: dbAnime.title
+                    val unified = dbAnime.toUnifiedAnimeFromDb(
+                        sourceId = sourceId,
+                        sourceName = sourceName,
+                        anilistId = anilistId,
+                    )
+                    return DetailsResult(anime = unified, episodes = dbEpisodes)
+                }
+            }
+        }
+
         val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(sourceId) }
             ?: run {
                 Log.w(TAG, "Extension source $sourceId not installed — cannot load")
