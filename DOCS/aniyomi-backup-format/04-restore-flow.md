@@ -1,7 +1,7 @@
 # 04 — Aniyomi Restore Flow
 
 > How Aniyomi's own restore process works, step-by-step.
-> Source: `ANIYOMI_REFRENCE/.../data/backup/restore/`
+> Source: `_REFERENCES/ANIYOMI_REFRENCE/.../data/backup/restore/`
 
 ## High-level flow
 

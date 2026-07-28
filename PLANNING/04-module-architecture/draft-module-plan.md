@@ -13,7 +13,7 @@
 - **`:data`** — repository implementations, database, network.
 - **`:app`** — the application shell: DI wiring, navigation, activities.
 - **Single entry point per module** — each module has one public entry point.
-- **No God classes** — max 300 lines/file, max 3 responsibilities/class.
+- **Avoid God classes** — keep files focused (~1,000-line guideline, up to ~1,500 when cohesive — flexible); ~3 responsibilities/class (guideline).
 
 ## Proposed module tree (anime-first, manga-ready per ADR-009)
 

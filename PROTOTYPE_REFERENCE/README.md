@@ -23,7 +23,7 @@ design references:
 
 ## Rules
 
-- 🔒 **READ-ONLY.** Same status as `ANIYOMI_REFRENCE/` and `OLD_ANIKUTA/`. Do not
+- 🔒 **READ-ONLY.** Same status as `_REFERENCES/ANIYOMI_REFRENCE/` and `_REFERENCES/OLD_ANIKUTA/`. Do not
   modify, reorganize, or build inside this folder.
 - 📋 **Mine for patterns.** When implementing a screen, read the corresponding
   file here, then re-implement in `ANIKUTA_PROJECT/ANIKUTA/` following our

@@ -30,7 +30,7 @@
    updates, profile, trackers, backup/restore, downloads, episode settings.
 
 **It is NOT a fork of Aniyomi.** The Aniyomi source is a read-only reference at
-`ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
+`_REFERENCES/ANIYOMI_REFRENCE/`. All new code goes in `ANIKUTA_PROJECT/ANIKUTA/`.
 
 ## Step 3: Understand the module structure
 
@@ -96,17 +96,28 @@ CI: `.github/workflows/ci.yml` — APKs built EXCLUSIVELY via GitHub Actions.
 
 ## Step 5: Understand the navigation
 
-`MainActivity.kt` uses a **hand-rolled state-machine** (NOT Voyager, NOT Compose Nav).
-Screens are pushed by setting state flags in a `when` block:
-- `currentRoute` — bottom nav tabs ("home", "library", "search", "more")
-- `detailAnimeId` — anime details page
-- `extensionDetailTarget` — extension-only details page
-- `showSettings`, `showHistory`, `showUpdates`, `showProfile`, `showTrackers`
-- `showBackup`, `showAniyomiRestore`, `showDownloads`, `showDownloadSettings`
-- `showDownloadedFiles`, `watchTarget`, `linkingTarget`, `episodeSettingsPage`
+`AnikutaRoot.kt` uses **Voyager** navigation (ADR-037): a single root `Navigator`
+with `Screen` classes in `navigation/Destinations.kt`. The `AppController` (Koin
+singleton in `navigation/AppController.kt`) holds shared state + business logic.
 
-New screens: add a state var + a `when` branch (before the `else` tab content) +
-a `BackHandler` case.
+**Key files:**
+- `navigation/AnikutaRoot.kt` — the root composable: `Navigator` + bottom nav + overlay sheets.
+- `navigation/Destinations.kt` — all Voyager `Screen` classes (tabs + pushed screens).
+- `navigation/AppController.kt` — central state holder + business logic (resolve, download, OAuth, linking).
+- `navigation/MoreScreens.kt` — `MoreScreen` + `SettingsScreen` composables (extracted from the old MainActivity).
+- `navigation/NavModule.kt` — Koin module for `AppController` + shared `AniListApi`.
+
+**Tab navigation:** The 4 bottom-nav tabs (Home, Library, Search, More) are the root
+screens. Switching tabs calls `navigator.replace(newTab)`. Pushed screens (detail,
+watch, settings, etc.) push on top. The bottom nav is hidden when the stack depth > 1.
+
+**Overlays:** The resolver sheet, linking sheet, and download picker sheet are modal
+overlays rendered at the root level (in `AppOverlays`), driven by `AppController`
+state. They are NOT navigated screens.
+
+**New screens:** Create a `Screen` class (data class or object) in `Destinations.kt`
+with a `@Composable Content()` that calls the feature composable. Push it with
+`navigator.push(YourDestination)`. Back is handled automatically by Voyager.
 
 ## Step 6: Understand Koin DI
 

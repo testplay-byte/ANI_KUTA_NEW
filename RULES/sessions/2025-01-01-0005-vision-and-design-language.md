@@ -34,9 +34,9 @@
 - The owner asked me to suggest a folder name; I recommended `AGENT_CONTEXT/` (clear, professional, describes exactly what it is).
 
 ### Phase 4: Analyzed old ANIKUTA key screens (3 parallel subagents)
-- `OLD_ANIKUTA/ANALYSIS/player-and-subtitle-screens.md` (1061 lines) — player page, subtitle menus, quality menu, custom keyboard.
-- `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` (1444 lines) — anime details (blurred cover + gradient), episode list (B&W + blur for watched), video resolver.
-- `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` (1010 lines) — history (accent-color headers), extensions (3-category separation), details settings (live preview), episode layout (3-way/2-way toggles).
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/player-and-subtitle-screens.md` (1061 lines) — player page, subtitle menus, quality menu, custom keyboard.
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` (1444 lines) — anime details (blurred cover + gradient), episode list (B&W + blur for watched), video resolver.
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` (1010 lines) — history (accent-color headers), extensions (3-category separation), details settings (live preview), episode layout (3-way/2-way toggles).
 
 ### Phase 5: Created DESIGN_LANGUAGE/ docs (2 parallel subagents)
 - `DESIGN_LANGUAGE/01-principles/core-principles.md` (391 lines) — 12 core design principles.
@@ -52,7 +52,7 @@
 
 ## What is DONE
 - 14 ADRs saved (vision clarified).
-- 4 new folders created (PLANNING, AGENT_CONTEXT, DESIGN_LANGUAGE, OLD_ANIKUTA/ANALYSIS).
+- 4 new folders created (PLANNING, AGENT_CONTEXT, DESIGN_LANGUAGE, _REFERENCES/OLD_ANIKUTA/ANALYSIS).
 - 12 new files written (~5,336 lines).
 - Root files + CI updated.
 - All design language principles the owner flagged are documented.
@@ -74,7 +74,7 @@
 - `DOCS/04-design-decisions.md` — ADRs 009–022 (the vision).
 - `AGENT_CONTEXT/START_HERE.md` — agent onboarding.
 - `DESIGN_LANGUAGE/01-principles/core-principles.md` — 12 design principles.
-- `OLD_ANIKUTA/ANALYSIS/` — 3 analysis files (design references).
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/` — 3 analysis files (design references).
 
 ## Dev environment notes
 - 5 subagents ran in parallel (D-1..D-5) for the analysis + design language docs.

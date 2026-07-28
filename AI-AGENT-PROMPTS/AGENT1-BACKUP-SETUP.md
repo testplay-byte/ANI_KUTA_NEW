@@ -22,7 +22,7 @@ You are a new AI agent joining the ANIKUTA Android project. Complete this setup 
 
 ### What is ANIKUTA?
 
-ANIKUTA is an anime-first Android app built with Jetpack Compose, Koin DI, SQLDelight, and a custom design language (primary color #B1F256 lime green, RobotoFamily font). It's NOT a fork of Aniyomi — the Aniyomi source is a read-only reference at `ANIYOMI_REFRENCE/`. The app uses an Aniyomi-compatible extension system.
+ANIKUTA is an anime-first Android app built with Jetpack Compose, Koin DI, SQLDelight, and a custom design language (primary color #B1F256 lime green, RobotoFamily font). It's NOT a fork of Aniyomi — the Aniyomi source is a read-only reference at `_REFERENCES/ANIYOMI_REFRENCE/`. The app uses an Aniyomi-compatible extension system.
 
 ### Step 1: Clone the Repository
 

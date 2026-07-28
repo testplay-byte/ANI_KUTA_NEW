@@ -8,7 +8,7 @@ we reuse Aniyomi's core concepts and functionality, but rebuild the app from scr
 with our own architecture, design, and feature priorities.
 
 > **ANIKUTA is not a fork of Aniyomi.** The Aniyomi source is kept under
-> `ANIYOMI_REFRENCE/` as a read-only study reference. All new code is written
+> `_REFERENCES/ANIYOMI_REFRENCE/` as a read-only study reference. All new code is written
 > under `ANIKUTA_PROJECT/ANIKUTA/`.
 
 ## Goals
@@ -34,7 +34,7 @@ with our own architecture, design, and feature priorities.
 
 | Aspect | Approach |
 |---|---|
-| Source code | Read-only snapshot in `ANIYOMI_REFRENCE/ANIYOMI/`. Study, don't edit. |
+| Source code | Read-only snapshot in `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/`. Study, don't edit. |
 | Architecture | Redesigned. Aniyomi's module split is *inspiration*, not a template to copy verbatim. |
 | Features | Ported/adapted one at a time, each documented as a decision. |
 | License | Apache 2.0 (inherited; see `04-design-decisions.md`). |

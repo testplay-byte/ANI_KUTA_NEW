@@ -31,7 +31,8 @@ import org.koin.dsl.module
  */
 val updateCheckerModule: Module = module {
     single { UpdateCheckerPreferences(get<PreferenceStore>()) }
-    single { AniListApi() }
+    // AniListApi is registered in navModule (:app) as a shared full-featured
+    // instance (with persistent cache + rate limiter). Do NOT register it here.
     single {
         UpdateChecker(
             animeRepository = get<AnimeRepository>(),

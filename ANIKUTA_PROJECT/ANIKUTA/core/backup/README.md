@@ -1,6 +1,6 @@
 # app.confused.anikuta.core.backup
 
-Backup/restore engine for ANIKUTA (ADR-028, ADR-035).
+Backup/restore engine for ANIKUTA (ADR-028, ADR-036).
 
 ## Architecture
 

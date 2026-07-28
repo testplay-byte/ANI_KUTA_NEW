@@ -4,8 +4,11 @@
 > Each phase has clear scope, exit criteria, and deliverables. We do NOT start a
 > phase until the previous one's exit criteria are met.
 >
-> **Current status:** Phase 0b (Design & Planning) is COMPLETE. Ready for Phase 1
-> pending the owner's go-ahead.
+> **Current status:** Phases 0–8 are COMPLETE (the app is feature-complete). This
+> document is the **historical execution-plan record** for those phases. For the
+> current status and what's planned next (Phase 9: Voyager navigation migration,
+> notifications, general settings, theme toggle, etc.), see
+> [`../DOCS/05-roadmap.md`](../DOCS/05-roadmap.md).
 
 ---
 

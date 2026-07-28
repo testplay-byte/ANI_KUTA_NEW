@@ -30,7 +30,7 @@ ANIKUTA is an anime-first Android app built with Jetpack Compose, Koin DI, SQLDe
 
 The app is **feature-complete** with 41 Gradle modules covering: browse, search, anime details, watch (MPV player), library, history, updates (schedule + calendar), profile (stats + charts), trackers (AniList + MAL OAuth), backup/restore, downloads/offline playback, episode settings, and an extension-only details page.
 
-It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at `ANIYOMI_REFRENCE/`. All code lives in `ANIKUTA_PROJECT/ANIKUTA/`.
+It is **NOT** a fork of Aniyomi. The Aniyomi source is a read-only reference at `_REFERENCES/ANIYOMI_REFRENCE/`. All code lives in `ANIKUTA_PROJECT/ANIKUTA/`.
 
 ### Step 1: Clone the repository
 

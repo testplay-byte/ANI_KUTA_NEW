@@ -25,7 +25,7 @@ git clone https://github.com/testplay-byte/ANI_KUTA_NEW.git
 cd ANI_KUTA_NEW
 ```
 
-The repo is a monorepo. Your code goes under `ANIKUTA_PROJECT/ANIKUTA/`. The Aniyomi reference is under `ANIYOMI_REFRENCE/` (read-only). A prototype app with a beautiful library page is under `PROTOTYPE_REFERENCE/Anime_App/` (read-only reference for UI/UX).
+The repo is a monorepo. Your code goes under `ANIKUTA_PROJECT/ANIKUTA/`. The Aniyomi reference is under `_REFERENCES/ANIYOMI_REFRENCE/` (read-only). A prototype app with a beautiful library page is under `PROTOTYPE_REFERENCE/Anime_App/` (read-only reference for UI/UX).
 
 ## Step 2: Read these files IN THIS ORDER (mandatory)
 
@@ -51,7 +51,7 @@ The repo is a monorepo. Your code goes under `ANIKUTA_PROJECT/ANIKUTA/`. The Ani
 
 ## Step 4: Study the Aniyomi reference's library implementation (PRIMARY REFERENCE)
 
-Read these files in `ANIYOMI_REFRENCE/ANIYOMI/`:
+Read these files in `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/`:
 
 **Anime library presentation:**
 - `app/src/main/java/eu/kanade/presentation/library/anime/AnimeLibraryPager.kt`

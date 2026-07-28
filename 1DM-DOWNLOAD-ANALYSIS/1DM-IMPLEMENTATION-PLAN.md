@@ -3,7 +3,7 @@
 > **Status:** Analysis complete. Implementation pending.
 > **Date:** 2026-07-25
 > **Agent:** Agent 2 (Downloads & Offline Playback)
-> **Reference:** `ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/data/download/anime/AnimeDownloader.kt`
+> **Reference:** `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/data/download/anime/AnimeDownloader.kt`
 
 ---
 

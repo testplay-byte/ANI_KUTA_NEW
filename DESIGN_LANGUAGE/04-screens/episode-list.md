@@ -325,5 +325,5 @@ makes Compose track the parameter change and reliably recompose whenever
 - [`video-resolver.md`](video-resolver.md) — the sheet opened on row tap.
 - [`player.md`](player.md) — fullscreen player (reachable from the
   watch page).
-- `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §2 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §2 —
   source analysis (read-only structural reference).

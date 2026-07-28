@@ -43,7 +43,7 @@
 - Metadata fetching uses a master toggle + per-field sub-toggles
   revealed via `AnimatedVisibility`.
 
-Reference: `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
+Reference: `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
 section 4.
 
 ---
@@ -303,6 +303,6 @@ toggles per principle #8 — NOT §2/§3 segmented controls).
   there owns the `EpisodeRowPreview` watched-appearance fix spec.
 - [`bottom-nav.md`](bottom-nav.md) — the floating nav that surfaces the
   "More" tab leading here.
-- `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §4 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §4 —
   source analysis of the old project's settings subpages.
 - `DOCS/04-design-decisions.md` — ADR-015, ADR-018.

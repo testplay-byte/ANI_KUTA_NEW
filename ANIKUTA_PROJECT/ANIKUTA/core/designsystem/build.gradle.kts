@@ -9,6 +9,7 @@ android {
 dependencies {
     // Core modules
     implementation(projects.core.common)
+    implementation(projects.core.preferences)
 
     // Coroutines
     implementation(kotlinx.coroutines.core)

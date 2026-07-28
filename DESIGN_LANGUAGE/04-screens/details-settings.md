@@ -45,7 +45,7 @@
   (None / Grayscale / Blur / Grayscale+Blur) currently does NOT apply to
   the live preview. **Fix this** in the new project.
 
-Reference: `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
+Reference: `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
 section 3 (`DetailsSettingsScreen.kt` and its sibling subpages
 `DisplaySettingsScreen.kt`, `LayoutSettingsScreen.kt`,
 `MetadataSettingsScreen.kt`, plus the shared `EpisodeRowPreview.kt`).
@@ -343,7 +343,7 @@ entire card is hidden (no empty cards).
   visual rules.
 - [`bottom-nav.md`](bottom-nav.md) — the floating nav that surfaces the
   "More" tab leading here.
-- `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §3 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §3 —
   source analysis of the old project's `DetailsSettingsScreen.kt` and
   its sibling subpages.
 - `DOCS/04-design-decisions.md` — ADR-015, ADR-018.

@@ -18,8 +18,8 @@
 /ANIKUTA_PROJECT/     @testplay-byte
 
 # ── Reference snapshots (frozen — changes here should be rare & deliberate) ──
-/ANIYOMI_REFRENCE/    @testplay-byte
-/OLD_ANIKUTA/         @testplay-byte
+# Off-limits backup snapshots (see _REFERENCES/README.md).
+/_REFERENCES/         @testplay-byte
 /PROTOTYPE_REFERENCE/ @testplay-byte
 
 # ── CI / build pipelines ──

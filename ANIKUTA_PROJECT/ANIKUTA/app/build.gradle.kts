@@ -68,6 +68,8 @@ dependencies {
     implementation(projects.feature.player)
     // Episode settings screens (Hub / Display / Layout / Metadata) — full pages
     implementation(projects.feature.episodeSettings)
+    // Appearance / UI customization (theme mode, accent colors, custom palette)
+    implementation(projects.feature.settings)
     // ── Agent 1: History + Updates ──
     implementation(projects.feature.history)
     implementation(projects.feature.updates)

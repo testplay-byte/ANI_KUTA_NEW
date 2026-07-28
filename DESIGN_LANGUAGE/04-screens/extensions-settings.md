@@ -45,7 +45,7 @@
 - Pull-to-refresh — keep.
 - The max-2-trusted limit + revoke-to-add popup — keep.
 
-Reference: `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
+Reference: `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
 section 2 (`ExtensionsSettingsScreen.kt` + `ExtensionsViewModel.kt`).
 
 ---
@@ -339,7 +339,7 @@ one or two extensions and never returns. Simple mode interaction:
   anime/manga), §9 (subdued settings-variant section header).
 - [`bottom-nav.md`](bottom-nav.md) — the floating nav that brings the
   user to the "More" tab, which surfaces this screen.
-- `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §2 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §2 —
   source analysis of the old project's `ExtensionsSettingsScreen.kt` +
   `ExtensionsViewModel.kt`.
 - `DOCS/04-design-decisions.md` — ADR-015, ADR-016, ADR-018.

@@ -438,5 +438,5 @@ Compact dropdown variant is TBD in [`player.md`](player.md).
 - [`player.md`](player.md) — fullscreen player; the player-side server/
   audio dropdown should reuse this resolver's data model (§10).
 - `DOCS/04-design-decisions.md` — ADR-011, ADR-012, ADR-015, ADR-022.
-- `OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §3 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/details-episodes-resolution-screens.md` §3 —
   source analysis (read-only structural reference).

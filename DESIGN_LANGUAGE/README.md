@@ -18,9 +18,9 @@
 
 ## Primary design reference
 
-The **old ANIKUTA project** (`OLD_ANIKUTA/ANIKUTA_OLD/`) is the primary design
+The **old ANIKUTA project** (`_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/`) is the primary design
 reference. Only the screens the owner explicitly flagged are referenced — see
-`OLD_ANIKUTA/ANALYSIS/` for the analysis of those screens. **Do not** take
+`_REFERENCES/OLD_ANIKUTA/ANALYSIS/` for the analysis of those screens. **Do not** take
 design cues from screens the owner did not flag.
 
 ## What this design language is NOT
@@ -31,5 +31,5 @@ design cues from screens the owner did not flag.
 
 ## Status
 
-Being populated. The analysis of the old ANIKUTA screens (`OLD_ANIKUTA/ANALYSIS/`)
+Being populated. The analysis of the old ANIKUTA screens (`_REFERENCES/OLD_ANIKUTA/ANALYSIS/`)
 feeds into the per-screen specs here.

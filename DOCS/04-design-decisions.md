@@ -14,7 +14,7 @@
   study, (b) our own code, (c) docs/rules for AI agents — all co-existing without
   cross-contamination.
 - **Decision:** Use a single repository `ANI_KUTA_NEW` with two top-level trees:
-  `ANIYOMI_REFRENCE/` (frozen reference) and `ANIKUTA_PROJECT/` (live project).
+  `_REFERENCES/ANIYOMI_REFRENCE/` (frozen reference) and `ANIKUTA_PROJECT/` (live project).
   Keep the root clean for navigation + `DOCS/` + `RULES/`.
 - **Consequences:**
   - ✅ A new agent reads the root, immediately understands layout.
@@ -35,7 +35,7 @@
   - ✅ Small. No history bloat.
   - ⚠️ Cannot `git blame`/`log` the reference. Acceptable — it's a study copy,
     not a working clone. The upstream URL is recorded in
-    `ANIYOMI_REFRENCE/README.md` for anyone who needs history.
+    `_REFERENCES/ANIYOMI_REFRENCE/README.md` for anyone who needs history.
 
 ## ADR-003 — Builds happen via GitHub Actions ONLY
 
@@ -71,13 +71,13 @@
 - **Date:** Phase 0.
 - **Context:** Editing the reference would blur "what Aniyomi does" vs "what we
   do", defeating the purpose of a study snapshot.
-- **Decision:** Nothing under `ANIYOMI_REFRENCE/` is ever modified, except to
+- **Decision:** Nothing under `_REFERENCES/ANIYOMI_REFRENCE/` is ever modified, except to
   replace the whole snapshot with a newer upstream tarball (procedure in
-  `ANIYOMI_REFRENCE/README.md`). To port an idea, copy code into
+  `_REFERENCES/ANIYOMI_REFRENCE/README.md`). To port an idea, copy code into
   `ANIKUTA_PROJECT/ANIKUTA/` and adapt there.
 - **Consequences:**
   - ✅ The reference always reflects real upstream behavior.
-  - ✅ `git diff ANIYOMI_REFRENCE/` is effectively always empty between refreshes.
+  - ✅ `git diff _REFERENCES/ANIYOMI_REFRENCE/` is effectively always empty between refreshes.
 
 ## ADR-006 — AI-agent-first documentation strategy
 
@@ -102,9 +102,9 @@
   structural/modularity issues and unpolished UI — the reasons we are starting
   fresh. However, it contains valuable prior research (Aniyomi subsystem analysis,
   30+ session logs, a modularization assessment) that we should not throw away.
-- **Decision:** Add a second read-only reference tree `OLD_ANIKUTA/ANIKUTA_OLD/`
+- **Decision:** Add a second read-only reference tree `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/`
   containing a source-only tarball snapshot of the old project. Treat it with the
-  same read-only discipline as `ANIYOMI_REFRENCE/` (ADR-005). Mine it for insights
+  same read-only discipline as `_REFERENCES/ANIYOMI_REFRENCE/` (ADR-005). Mine it for insights
   during the design phase; do not edit it.
 - **Consequences:**
   - ✅ Prior research (especially `DOCS/REFERENCE-DOCS/SUBSYSTEMS/`) is preserved
@@ -112,8 +112,8 @@
   - ✅ Lessons-learned (`MODULARIZATION-ASSESSMENT.md`) inform our architecture
     choices so we avoid the old project's pitfalls.
   - ⚠️ The old project shipped its own Aniyomi snapshot at
-    `OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
-    top-level `ANIYOMI_REFRENCE/` (newer `main`) at an older commit. We keep it
+    `_REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/REFERENCE/` (commit `2f5cf77`). This duplicates our
+    top-level `_REFERENCES/ANIYOMI_REFRENCE/` (newer `main`) at an older commit. We keep it
     intact for fidelity — the old project's docs cite line numbers against that
     specific commit. Prefer our top-level snapshot when studying Aniyomi directly.
   - ⚠️ Repo grows by ~37 MB (old project + its nested reference). Acceptable.
@@ -449,7 +449,7 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - `next_episode_check` — when to next check for a new episode (for ADR-014).
   These support the notification/auto-download features and let us debug stale data.
 - **Consequences:**
-  - ✅ Matches reference (already documented in `ANIYOMI_REFRENCE/DOCUMENTATION/`).
+  - ✅ Matches reference (already documented in `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/`).
   - ✅ KMP-friendly (future-proofs for potential desktop).
   - ✅ Status columns enable robust notification scheduling + debugging.
   - ⚠️ Less IDE support than Room. Accepted.
@@ -499,17 +499,25 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - ⚠️ English-only means non-English users see English until we add locales.
     Accepted for Phase 1.
 
-## ADR-028 — Backup format: gzipped protobuf (own schema)
+## ADR-028 — Backup format: ~~gzipped protobuf~~ (own schema)
+
+> **Update (Phase 7+):** The "gzipped protobuf" part of this decision was
+> **superseded by ADR-036** (gzipped JSON in a ZIP container) during the Backup
+> & Restore implementation. The "own schema, not Aniyomi's `.tachibk`" part
+> still holds. See ADR-036 for the rationale.
 
 - **Date:** Phase 0b.
 - **Context:** Need a backup format.
-- **Decision:** **Gzipped protobuf** with our **own schema** (not Aniyomi's
-  `.tachibk` format — we define our own `.anikuta` backup). Compact, fast, proven.
-  We can restore our own backups; Aniyomi backup compat is NOT a goal.
+- **Decision:** ~~**Gzipped protobuf** with our **own schema**~~ (superseded by
+  ADR-036 — switched to gzipped JSON in a ZIP). The retained part: our **own
+  schema** (not Aniyomi's `.tachibk` format — we define our own `.anikuta`
+  backup). Aniyomi restore compat was later added as a restore-only feature
+  (ADR-036).
 - **Consequences:**
   - ✅ Compact, fast, schema is ours to evolve.
   - ✅ Easy to change later if needed.
-  - ⚠️ Users can't import Aniyomi backups (we'd need a converter if ever wanted).
+  - ⚠️ ~~Users can't import Aniyomi backups~~ (resolved by ADR-036: Aniyomi
+    `.tachibk` backups can now be restored via `AniyomiBackupFormat`).
   - 📌 No encryption initially (matches Aniyomi). Can add later.
 
 ## ADR-029 — Extension compatibility: keep Aniyomi extension format exactly
@@ -524,7 +532,7 @@ now fully specified and `ARCHITECTURE.md` can be finalized.
   - ✅ Instant extension ecosystem (existing Aniyomi anime extensions work).
   - ✅ Custom extensions can add features via capability declarations.
   - ⚠️ Locked into the source-api shape (acceptable — it's well-designed).
-  - 📌 See `ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md` for the contract.
+  - 📌 See `_REFERENCES/ANIYOMI_REFRENCE/DOCUMENTATION/02-modules/source-api.md` for the contract.
 
 ## ADR-030 — AniList client: raw HTTP + kotlinx-serialization (swappable)
 
@@ -668,7 +676,11 @@ All previously-open decisions are now resolved by ADRs 009–030:
 
 ---
 
-## ADR-035 — Backup format: gzipped JSON in a zip container (refines ADR-028)
+## ADR-036 — Backup format: gzipped JSON in a zip container (refines ADR-028)
+
+> **Note:** Previously mis-numbered as ADR-035 (collision with the Downloads
+> ADR-035 above). Renumbered to ADR-036 on 2026-07-26 during the documentation
+> cleanup pass to resolve the collision.
 
 - **Date:** Phase 7+ (Agent 1 — Backup & Restore implementation).
 - **Context:** ADR-028 specified "gzipped protobuf" for the backup format.
@@ -699,6 +711,174 @@ All previously-open decisions are now resolved by ADRs 009–030:
     before compression). After gzip, the difference is <5%. Accepted.
   - 📌 Can add protobuf export later if size becomes an issue (the
     `BackupFormat` interface is pluggable).
+
+---
+
+## ADR-037 — Navigation: Voyager (replaces the hand-rolled state machine)
+
+- **Date:** Phase 9 (Voyager navigation migration).
+- **Context:** The app originally used a hand-rolled state-machine in
+  `MainActivity.kt` for navigation — ~20 `mutableStateOf` flags driving a
+  `when` block, with a single `BackHandler` containing a priority-ordered
+  `when` for back navigation. This worked but:
+  (a) The file grew to 1174 lines — hard to maintain and extend.
+  (b) Every new screen required adding a flag + a `when` branch + a
+      `BackHandler` case.
+  (c) No back-stack semantics — the "stack" was a priority list, not a true
+      LIFO. Back behavior was manually coded and fragile.
+  (d) No transitions/animations between screens.
+  (e) Business logic (resolve, download, cancel) lived in the composable,
+      violating Rule §3 ("UI files contain ONLY display logic").
+  Voyager (`cafe.adriel.voyager:voyager-navigator:1.0.1`) was already in the
+  dependency catalog (added during Phase 0b as the intended nav library) but
+  unused.
+- **Decision:**
+  - Migrate to **Voyager** for navigation. Each screen is a `Screen` class
+    (data class or object) with a `@Composable Content()` method.
+  - Use a **single root `Navigator`** (not per-tab Navigators). The 4
+    bottom-nav tabs are the root screens; switching tabs calls
+    `navigator.replace(newTab)`. Pushed screens (detail, watch, settings,
+    etc.) push on top. This matches the previous single-stack behavior.
+    Per-tab Navigators (tab state preservation) can be added later if desired.
+  - Extract all shared state + business logic from the composable into an
+    `AppController` (Koin singleton). This addresses Rule §3 — the UI
+    (Voyager `Screen` classes) forwards events to the controller; the
+    controller holds state + calls services.
+  - Overlay sheets (resolver, linking, download picker) remain modal overlays
+    rendered at the root level, driven by `AppController` state. They are NOT
+    navigated screens (per DESIGN_LANGUAGE §1–3: no drag handle, partial
+    height).
+  - The `AniListApi` is consolidated to a single full-featured instance
+    (with persistent cache + rate limiter) registered in `navModule`,
+    shared app-wide. Previously, `updateCheckerModule` registered a no-arg
+    version while `MainActivity` created a separate full version.
+- **Consequences:**
+  - ✅ `MainActivity.kt` shrinks from 1174 lines to ~55 (just the Activity +
+    OAuth intent handling). Navigation logic lives in `AnikutaRoot.kt` +
+    `Destinations.kt` + `AppController.kt`.
+  - ✅ Adding a new screen = create a `Screen` class + call
+    `navigator.push()`. No flags, no `when` branches, no `BackHandler` cases.
+  - ✅ True LIFO back stack — back behavior is automatic via Voyager's
+    built-in `BackHandler`.
+  - ✅ Simple **fade** transition between screens (`FadeTransition`) — a clean
+    cross-fade rather than a slide animation, per owner preference. A dedicated
+    animation-polish session may revisit this later.
+  - ✅ Business logic moved out of the composable into `AppController`
+    (addresses Rule §3). A future refactor can split `AppController` into
+    per-concern coordinators.
+  - ⚠️ Tab state is NOT preserved when switching tabs (matching previous
+    behavior). Each tab switch `replace`s the root screen. Per-tab Navigators
+    could be added later for state preservation.
+  - ⚠️ `AppController` is a coordination God class (~600 lines). It's a step
+    forward from the composable (survives recomposition, testable, Koin-
+    injectable) but should be split into per-concern coordinators in a
+    future refactor. Tracked as a follow-up.
+  - 📌 The `MoreScreen` and `SettingsScreen` composables live in `:app`'s
+    navigation package (not `:feature:more` / `:feature:settings`) because
+    they compose entries from multiple feature modules, which would violate
+    Rule §14 (feature isolation) if they lived in a feature module. The
+    `:feature:more` and `:feature:settings` stub modules remain for now.
+
+---
+
+## ADR-038 — Theme system: user-selectable mode + accent + custom colors
+
+- **Date:** Phase 9 (Session 1 — theme + appearance).
+- **Context:** The app was hardcoded to `AnikutaTheme(darkTheme = true)` with
+  no user control. The design language (`DESIGN_LANGUAGE/03-themes/`) already
+  specified a two-axis model (mode + palette) but it wasn't implemented. The
+  owner wants users to pick light/dark mode, accent colors, and custom palettes.
+- **Decision:**
+  - **Two axes** (per the design spec):
+    1. **Mode** — Light / Dark / System (3-way segmented toggle). System
+       follows the OS dark-mode setting.
+    2. **Accent** — a curated set of presets (Lime, Amber, Rose, Coral, Sage)
+       + a Custom option with a hex color picker + quick-pick palette.
+  - **AMOLED** is a separate toggle (only enabled in dark mode) — pure-black
+    surfaces for OLED battery savings.
+  - **`ThemePreferences`** (in `:core:preferences`) persists all three axes
+    via `PreferenceStore`. Reactive — the app recomposes live when changed.
+  - **`AnikutaTheme`** (in `:core:designsystem`) accepts `themeMode` +
+    `accentPreset` + `customAccentColor` and builds the correct `ColorScheme`.
+    The accent overrides the primary-family roles; the surface/background/
+    secondary/tertiary roles stay as the curated base ANIKUTA palette.
+  - **Accent derivation** (`AccentColors.kt`): for custom colors, the primary-
+    family roles are derived from the seed color via HSL manipulation (darken
+    for light-mode primary, lighten for containers, etc.). This isn't a full
+    HCT tonal palette but produces harmonious, readable results.
+  - **Appearance screen** (`:feature:settings/AppearanceScreen.kt`): reached
+    from Settings → Appearance. Hosts the theme mode toggle, AMOLED switch,
+    accent swatches + custom color picker, AND the episode settings link
+    (moved here from the root Settings page per owner spec).
+  - **MainActivity** wires `AnikutaTheme` to read `ThemePreferences` reactively
+    via `collectAsStateWithLifecycle` — no restart needed on theme change.
+- **Consequences:**
+  - ✅ Users can switch light/dark/system mode — live, no restart.
+  - ✅ Users can pick from 5 accent presets or define a custom hex color.
+  - ✅ AMOLED mode for OLED battery savings.
+  - ✅ Episode settings consolidated under Appearance (cleaner Settings root).
+  - ✅ `:feature:settings` stub is now a real module with the Appearance screen.
+  - ⚠️ `:core:designsystem` now depends on `:core:preferences` (for the
+    `ThemeMode`/`AccentPreset` enums). No circular dependency —
+    `:core:preferences` doesn't depend on `:core:designsystem`.
+  - ⚠️ The accent derivation is HSL-based, not a full Material You HCT tonal
+    palette. A future enhancement could use the `materialkolor` library or
+    Android's dynamic color API for richer palette generation.
+  - 📌 Cover-color dynamic theming (per-screen Palette extraction) is NOT part
+    of this ADR — it's a separate future feature (per `DESIGN_LANGUAGE/03-themes/` §6).
+  - 📌 The `MoreScreen` and `SettingsScreen` composables still live in `:app`
+    (not `:feature:settings`) because they compose entries from multiple
+    feature modules (Rule §14). Only the `AppearanceScreen` lives in
+    `:feature:settings`.
+
+---
+
+## ADR-038 (amendment) — Palette system + light mode redesign + animated transition
+
+- **Date:** Phase 9 Session 1 (appearance overhaul — items 1-10).
+- **Context:** The initial theme system (ADR-038) worked but the owner wanted:
+  (a) two-screen Appearance flow (list → General), (b) smooth dark↔light
+  transition, (c) better light mode colors, (d) AMOLED hidden in light mode,
+  (e) custom color in a popup (not inline), (f) palette selection as
+  skeleton-screen previews (mini details-page mock), (g) full palette
+  customization (accent + background + card + text), (h) title shrink on
+  scroll, (i) simplified descriptions.
+- **Decision:**
+  - **Two-screen flow:** `AppearanceScreen` (list: General + Episode settings
+    rows) → `AppearanceGeneralScreen` (the actual settings). Added
+    `AppearanceGeneralDestination`.
+  - **Animated transition:** `AnikutaTheme` now animates each color role via
+    `animateColorAsState` (~400ms tween). Dark↔light switches cross-fade
+    smoothly instead of snapping.
+  - **Light mode redesign:** warm-neutral backgrounds (`#FAF9F6` bg, `#F2F0EB`
+    cards) — no purple tint. Card surfaces are darker than the background
+    (clearer hierarchy). The accent in light mode is richer (saturation
+    boosted + targeted lightness ~40%, not muddy).
+  - **AMOLED:** hidden in light mode (AnimatedVisibility fade). Card surfaces
+    in AMOLED are subtle grey (`#121212`, `#1A1A1A`) — not pure black — so
+    cards are distinguishable.
+  - **Palettes (renamed from "Accent Colors"):** skeleton-screen preview cards
+    (`PalettePreviewCard`) showing a mini anime-details-page mock (banner,
+    cover, title, button) using each palette's colors. Custom is FIRST in the
+    row. Tapping Custom opens a `CustomColorDialog`.
+  - **Custom color popup:** hex input + RGB sliders + OK button. A collapsible
+    "Advanced" section reveals full palette customization (accent, background,
+    card, text — each with its own picker). Stored via `PaletteMode` (SIMPLIFIED
+    vs FULL) + `customBackgroundColor` / `customCardColor` / `customTextColor`.
+  - **Title shrink:** fixed `CollapsingHeader` wiring — now uses the
+    `LazyListState`-based `collapsed` overload (was passing a disconnected
+    `ScrollState`, so the title never shrank).
+  - **Simplified descriptions:** all 1-line.
+- **Consequences:**
+  - ✅ Smooth animated theme transitions — no jarring snaps.
+  - ✅ Light mode looks cohesive (warm-neutral, not purple-tinted).
+  - ✅ AMOLED cards are visible (subtle grey, not pure black).
+  - ✅ Palette selection is visual (mini-screen previews, not dots).
+  - ✅ Full palette customization for power users (Advanced mode).
+  - ✅ Title shrinks on scroll (bug fixed).
+  - ⚠️ The `animateColorScheme` adds ~18 `animateColorAsState` calls at the
+    root — negligible perf impact (only recomposes on theme change).
+  - 📌 Cover-color dynamic theming still NOT implemented (separate future ADR).
 
 ---
 

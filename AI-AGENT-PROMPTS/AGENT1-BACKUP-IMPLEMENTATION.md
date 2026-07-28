@@ -94,7 +94,7 @@ The app asks the user to select a folder via Android Storage Access Framework (S
 7. Missing data is skipped gracefully (not a hard failure)
 
 ### Aniyomi Compatibility
-- Read the Aniyomi backup format reference in `ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/data/backup/`
+- Read the Aniyomi backup format reference in `_REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/app/src/main/java/eu/kanade/tachiyomi/data/backup/`
 - Our restore should handle Aniyomi backups: process each anime entry, match by AniList ID, import episodes/progress/categories
 - We do NOT need to EXPORT in Aniyomi format (only our own format + restore from Aniyomi)
 

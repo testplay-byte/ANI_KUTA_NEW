@@ -32,7 +32,7 @@
 - The card placement of the continue-watching row **"could be made
   better"**. Improve it.
 
-Reference: `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
+Reference: `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md`
 section 1 (`HistoryScreen.kt` + `HistoryViewModel.kt`).
 
 ---
@@ -310,7 +310,7 @@ Each row in a time bucket is a `HistoryEntryRow`:
   this screen.
 - [`watch-page.md`](watch-page.md) — the destination of a row tap
   (resume).
-- `OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §1 —
+- `_REFERENCES/OLD_ANIKUTA/ANALYSIS/history-extensions-settings-screens.md` §1 —
   source analysis of the old project's `HistoryScreen.kt` +
   `HistoryViewModel.kt`.
 - `DOCS/04-design-decisions.md` — ADR-015, ADR-017.

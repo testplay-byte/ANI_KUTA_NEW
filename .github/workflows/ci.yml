@@ -63,10 +63,10 @@ jobs:
 
       - name: Verify reference snapshots are present
         run: |
-          test -f ANIYOMI_REFRENCE/ANIYOMI/README.md
-          test -f ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts
+          test -f _REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/README.md
+          test -f _REFERENCES/ANIYOMI_REFRENCE/ANIYOMI/settings.gradle.kts
           echo "Aniyomi reference snapshot OK."
-          test -f OLD_ANIKUTA/ANIKUTA_OLD/README.md
+          test -f _REFERENCES/OLD_ANIKUTA/ANIKUTA_OLD/README.md
           echo "Old ANIKUTA reference snapshot OK."
 
       - name: Verify required docs exist

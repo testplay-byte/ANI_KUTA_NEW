@@ -5,6 +5,14 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -19,9 +27,12 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -45,11 +56,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -132,6 +149,15 @@ fun WatchScreen(
     // Set the companion playerPreferences BEFORE inflating the view
     AnikutaMPVView.playerPreferences = playerPreferences
 
+    // ── Keep screen on while the watch page is active (Task 2.3) ──
+    DisposableEffect(Unit) {
+        val window = (context as? Activity)?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     // MPV view — cached, NEVER recreated. Owned by this composable.
     var mpvView by remember { mutableStateOf<AnikutaMPVView?>(null) }
     var observer by remember { mutableStateOf<PlayerObserver?>(null) }
@@ -157,6 +183,84 @@ fun WatchScreen(
     LaunchedEffect(isVideoFinished) {
         if (isVideoFinished) {
             stateHolder.setControlsVisible(true)
+        }
+    }
+
+    // ── App-exit pause / resume lifecycle observer ──
+    //
+    // Owner spec (2026-07-28):
+    //   "If the user exits the app then the video should stop playing and as
+    //    soon as he reenters the app again the video should start playing
+    //    again from where he left it. I would also like you to give a setting
+    //    for this same experience in settings too."
+    //
+    // Behavior:
+    //  - ON_STOP (app backgrounded — Home button, recents, app switch): if
+    //    `pauseOnAppExit` is enabled, pause MPV and record that WE paused it
+    //    (so we don't clobber a user-initiated pause state on return).
+    //  - ON_START (app returns to foreground): if `resumeOnAppReturn` is
+    //    enabled AND we were the ones who paused on exit, resume MPV.
+    //
+    // We use ON_STOP / ON_START (not ON_PAUSE / ON_RESUME) because:
+    //  - ON_PAUSE fires on multi-window focus loss etc. — too aggressive.
+    //  - ON_STOP fires when the app is genuinely leaving the foreground
+    //    (Activity no longer visible). This matches the user's "exit the app"
+    //    mental model.
+    //
+    // `wasPausedByUs` is a plain ref (not Compose state) — we don't want
+    // recomposition when it flips, just a side-effect flag scoped to this
+    // composable's lifetime. Using BooleanArray(1) as a cheap mutable holder.
+    val wasPausedByUs = remember { booleanArrayOf(false) }
+    // Read LocalLifecycleOwner in the composable body (NOT inside the
+    // DisposableEffect lambda — that lambda is not a @Composable scope).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(Unit) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    if (playerPreferences.pauseOnAppExit().get()) {
+                        val view = mpvView
+                        if (view != null && mpvInitialized) {
+                            try {
+                                val currentlyPlaying = !(MPVLib.getPropertyBoolean("pause") ?: true)
+                                if (currentlyPlaying) {
+                                    MPVLib.setPropertyBoolean("pause", true)
+                                    stateHolder.setPlaying(false)
+                                    wasPausedByUs[0] = true
+                                    Log.i(TAG, "App backgrounded — pausing playback (pauseOnAppExit=true)")
+                                } else {
+                                    // User had already paused — don't claim ownership.
+                                    wasPausedByUs[0] = false
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to pause on app exit", e)
+                            }
+                        }
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    if (wasPausedByUs[0] && playerPreferences.resumeOnAppReturn().get()) {
+                        val view = mpvView
+                        if (view != null && mpvInitialized) {
+                            try {
+                                MPVLib.setPropertyBoolean("pause", false)
+                                stateHolder.setPlaying(true)
+                                Log.i(TAG, "App foregrounded — resuming playback (resumeOnAppReturn=true)")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to resume on app return", e)
+                            }
+                        }
+                    }
+                    // Always clear the flag after handling ON_START — we only
+                    // auto-resume once per exit cycle.
+                    wasPausedByUs[0] = false
+                }
+                else -> { /* no-op */ }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -332,6 +436,16 @@ fun WatchScreen(
                             stateHolder.setSwitchingEpisode(false)
                             stateHolder.setLoadingState(PlayerLoadingState.READY)
                             stateHolder.setErrorMessage(null)
+
+                            // ── Auto-play: start playback when the file loads ──
+                            if (playerPreferences.autoPlay().get()) {
+                                try {
+                                    MPVLib.setPropertyBoolean("pause", false)
+                                    Log.i(TAG, "Auto-play: starting playback")
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Auto-play: failed to start playback", e)
+                                }
+                            }
 
                             // ── Load external subtitle tracks via sub-add ──
                             // CRITICAL: sub-add MUST be sent AFTER FILE_LOADED.
@@ -680,8 +794,27 @@ fun WatchScreen(
     } }
 
     // ── Cover-color dynamic theming (watch-page.md §7) ──
-    val dynamicScheme = watchRequest.coverColor?.takeIf { it != 0 }?.let {
-        generateDynamicScheme(it, darkTheme = true, amoled = false)
+    // Respects the adaptiveColorsPlayer preference AND the user's actual theme
+    // mode (dark/light/system) + AMOLED setting. When OFF, the watch page
+    // uses the user's selected palette (no dynamic override).
+    val themePreferences = koinInject<app.confused.anikuta.core.preferences.ThemePreferences>()
+    val adaptiveColorsPlayer by themePreferences.adaptiveColorsPlayer.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.adaptiveColorsPlayer.get())
+    val themeMode by themePreferences.themeMode.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.themeMode.get())
+    val amoledPref by themePreferences.amoled.changes()
+        .collectAsStateWithLifecycle(initialValue = themePreferences.amoled.get())
+    val isDarkTheme = when (themeMode) {
+        app.confused.anikuta.core.preferences.ThemeMode.LIGHT -> false
+        app.confused.anikuta.core.preferences.ThemeMode.DARK -> true
+        app.confused.anikuta.core.preferences.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    val dynamicScheme = if (adaptiveColorsPlayer) {
+        watchRequest.coverColor?.takeIf { it != 0 }?.let {
+            generateDynamicScheme(it, darkTheme = isDarkTheme, amoled = amoledPref)
+        }
+    } else {
+        null
     }
 
     // ── Quality switching: use pre-resolved servers from WatchRequest, or resolve on-demand ──
@@ -857,30 +990,130 @@ private fun WatchScreenContent(
                     onBack = onBack,
                     onQualityClick = onQualityClick,
                     onSubtitleClick = onSubtitleClick,
+                    onSwitchEpisode = onSwitchEpisode,
                 )
             }
         }
     } else {
         // ── Minimized mode (YouTube-style watch page) ──
         // Top bar → Player (16:9, rounded, padded) → Scrollable content
+        //
+        // Part C: Collapsible header with magnetic snap.
+        // When the user scrolls the episode list down, the top bar collapses
+        // smoothly (slides up + fades). A magnetic snap threshold prevents
+        // accidental triggering on small scrolls. When scrolled back to the
+        // top, the header reappears.
+        val listState = rememberLazyListState()
+
+        // Track whether the header should be collapsed.
+        // Magnetic snap: only collapse after scrolling past ~50dp threshold.
+        // Only expand when scrolled back to the very top (offset 0).
+        val isCollapsed by remember {
+            derivedStateOf {
+                if (listState.firstVisibleItemIndex > 0) {
+                    true
+                } else {
+                    listState.firstVisibleItemScrollOffset > 200
+                }
+            }
+        }
+
+        // ── Collapsible top navigation bar — "slide up + fade" semantics ──
+        //
+        // The owner's spec (2026-07-28):
+        //   "The whole top navigation bar should move up and disappear smoothly
+        //    instead of collapsing or anything like that."
+        //
+        // Implementation strategy:
+        //  1. Animate `headerHeight` 96dp → 0dp so the Column reflows naturally
+        //     (the player + episode list move up together as one block — no
+        //     sequential "header collapses, THEN player moves" feel).
+        //  2. Inside the header Box, the WatchTopBar gets a `graphicsLayer` that
+        //     translates it UP by the amount the box has shrunk AND fades its
+        //     alpha proportionally. Combined with `clipToBounds()`, this makes
+        //     the bar visibly slide up + fade out (not shrink/squish).
+        //  3. The player's top padding animates 0 → statusBarHeight so the
+        //     player ends up sitting just below the status bar (NOT 50dp below
+        //     — that was too much and caused the player to look "stuck"). This
+        //     is animated with the SAME spec as the header so they move in
+        //     perfect sync.
+        //
+        // Net effect: when collapsed, the player moves up by ~72dp (96dp header
+        // − ~24dp status bar) — noticeably more than the previous 46dp, matching
+        // the owner's "move up a bit more" feedback.
+        val headerHeight by animateDpAsState(
+            targetValue = if (isCollapsed) 0.dp else 96.dp,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "headerHeight",
+        )
+
+        // Player top padding: animates to the status bar height when collapsed
+        // so the player ends up flush under the status bar (not floating 50dp
+        // below it). Using WindowInsets keeps it correct across notch/cutout
+        // devices.
+        val density = LocalDensity.current
+        val statusBarTopInsetPx = WindowInsets.statusBars.getTop(density)
+        val statusBarTopInset = with(density) { statusBarTopInsetPx.toDp() }.coerceAtLeast(0.dp)
+        // Fall back to 28dp if the inset is 0 (happens during preview / before
+        // the first layout pass). 28dp is the canonical Android status bar
+        // height on most density-420 devices.
+        val playerTopPaddingTarget = if (isCollapsed) {
+            if (statusBarTopInset > 0.dp) statusBarTopInset else 28.dp
+        } else {
+            0.dp
+        }
+        val playerTopPadding by animateDpAsState(
+            targetValue = playerTopPaddingTarget,
+            animationSpec = tween(300, easing = FastOutSlowInEasing),
+            label = "playerTopPadding",
+        )
+
+        // The fraction of the header that's still "visible" (1 = fully visible,
+        // 0 = fully collapsed). Used for the slide-up + fade graphicsLayer.
+        val headerVisibleFraction = (headerHeight.value / 96f).coerceIn(0f, 1f)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Top navigation bar — floating pill, ABOVE the player.
-            // Shows the app name "ANIKUTA" (not the episode title) per user request.
-            WatchTopBar(
-                title = "ANIKUTA",
-                onBack = onBack,
-            )
-
-            // Player area — 16:9, rounded corners, horizontal padding,
-            // small top gap below the top bar. Always present, NEVER disposed.
+            // ── Top navigation bar ──
+            // The Box height animates 96dp → 0dp so the Column reflows. Inside,
+            // the WatchTopBar is translated UP by the amount the box has shrunk
+            // and faded by the same fraction — giving a true "slide up +
+            // disappear" effect rather than a vertical squish.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
+                    .height(headerHeight)
+                    .clipToBounds(),
+            ) {
+                if (headerHeight > 0.dp) {
+                    // The amount the header box has shrunk from its full 96dp.
+                    // TopBar is translated up by exactly this amount so it
+                    // "exits" the visible box at the same rate the box shrinks.
+                    val slideUpAmount = 96.dp - headerHeight
+                    val slideUpPx = with(density) { slideUpAmount.toPx() }
+                    WatchTopBar(
+                        title = "ANIKUTA",
+                        onBack = onBack,
+                        modifier = Modifier.graphicsLayer(
+                            translationY = -slideUpPx,
+                            alpha = headerVisibleFraction,
+                        ),
+                    )
+                }
+            }
+
+            // Player area — 16:9, rounded corners, horizontal padding.
+            // Top padding animates 0 → statusBarHeight so the player slides up
+            // to sit flush below the status bar when the header is collapsed.
+            // (Previously this was a discrete `if (isCollapsed) 50.dp else 0.dp`
+            // which caused a visible jump mid-animation — now it's smooth.)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = playerTopPadding)
                     .padding(horizontal = 6.dp),
             ) {
                 Box(
@@ -953,7 +1186,7 @@ private fun WatchScreenContent(
             }
 
             // Scrollable content — description + episode list
-            val listState = rememberLazyListState()
+            // Uses the listState declared above for collapsible header tracking.
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -1059,14 +1292,15 @@ private fun WatchScreenContent(
 
     // ── Bottom-up sheets (rendered on top of everything) ──
     if (showQualitySheet) {
-        // Extract the current server name from the video title (format: "Server - SUB - 1080p")
-        val currentServerName = stateHolder.currentVideoTitle.value.substringBefore(" - ").trim()
+        // Use the server name + audio version from WatchRequest (properly set
+        // in AppController.onVideoSelected — not parsed from the title string).
         app.confused.anikuta.feature.watch.sheets.QualitySheet(
             servers = resolvedServers,
             currentVideoTitle = stateHolder.currentVideoTitle.value,
             onQualitySelected = onQualitySelected,
             onDismiss = onDismissSheet,
-            currentServerName = currentServerName,
+            currentServerName = watchRequest.videoServer,
+            currentAudioVersion = watchRequest.videoAudio,
         )
     }
 
@@ -1183,11 +1417,46 @@ private fun FullscreenControlsOverlay(
     onBack: () -> Unit,
     onQualityClick: () -> Unit = {},
     onSubtitleClick: () -> Unit = {},
+    onSwitchEpisode: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
+    var showSpeedSheet by remember { mutableStateOf(false) }
+
+    // Current playback speed (read from MPV for the speed button label)
+    var currentSpeed by remember { mutableStateOf(1.0f) }
+    LaunchedEffect(Unit) {
+        try {
+            currentSpeed = MPVLib.getPropertyDouble("speed")?.toFloat() ?: 1.0f
+        } catch (e: Exception) {
+            currentSpeed = 1.0f
+        }
+    }
+
+    // Episode info for the top-left display — uses metadata-enriched title
+    val currentEpIndex by stateHolder.currentEpisodeIndex.collectAsStateWithLifecycle()
+    val currentEp = watchRequest.episodeList.getOrNull(currentEpIndex)
+    val epNumInt = currentEp?.episode_number?.toInt() ?: 0
+    val metadataTitle = watchRequest.episodeMetadata[epNumInt]?.title
+    val parsedTitle = metadataTitle
+        ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
+            currentEp?.name ?: "", currentEp?.episode_number ?: 0f,
+        )
+    val episodeInfo = currentEp?.let { ep ->
+        val epNum = ep.episode_number.toInt()
+        val title = parsedTitle ?: ep.name
+        "EP $epNum" + (title?.takeIf { it.isNotBlank() }?.let { " - $it" } ?: "")
+    } ?: ""
+
+    // Quality info — from WatchRequest (now properly set in AppController)
+    val qualityInfo = watchRequest.videoQuality.takeIf { it > 0 }?.let { "${it}p" } ?: ""
+
     app.confused.anikuta.core.player.controls.FullscreenControls(
         stateHolder = stateHolder,
         playerPreferences = playerPreferences,
+        animeTitle = watchRequest.animeTitle,
+        episodeInfo = episodeInfo,
+        qualityInfo = qualityInfo,
+        currentSpeed = currentSpeed,
         onBack = {
             stateHolder.setPlayerMode(PlayerMode.MINIMIZED)
             (context as? Activity)?.requestedOrientation =
@@ -1216,15 +1485,30 @@ private fun FullscreenControlsOverlay(
         onSubtitleClick = onSubtitleClick,
         onAudioClick = { /* TODO: open audio sheet */ },
         onQualityClick = onQualityClick,
-        onSpeedClick = { /* TODO: open speed sheet */ },
+        onSpeedClick = { showSpeedSheet = true },
         onServerClick = { /* TODO: open server sheet */ },
         onMoreClick = { /* TODO: open more sheet */ },
         onSkipForward = {
-            try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
+            // Next episode: switch to the next episode using the real switch flow
+            val nextIndex = currentEpIndex + 1
+            if (nextIndex < watchRequest.episodeList.size) {
+                Log.i(TAG, "Next episode button: switching to index $nextIndex")
+                onSwitchEpisode(nextIndex)
+            } else {
+                // No next episode — skip forward by the skip duration
+                try { MPVLib.command(arrayOf("seek", playerPreferences.skipButtonDuration().get().toString(), "relative")) } catch (e: Exception) { Log.e(TAG, "Skip failed", e) }
+            }
         },
         onRotateClick = {
-            (context as? Activity)?.requestedOrientation =
-                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            // Toggle between landscape and portrait
+            val currentOrientation = (context as? Activity)?.requestedOrientation
+            if (currentOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+                (context as? Activity)?.requestedOrientation =
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            } else {
+                (context as? Activity)?.requestedOrientation =
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
         },
         onPiPClick = {
             try {
@@ -1234,6 +1518,30 @@ private fun FullscreenControlsOverlay(
             } catch (e: Exception) { Log.w(TAG, "PiP not available", e) }
         },
     )
+
+    // ── Speed selection sheet ──
+    if (showSpeedSheet) {
+        app.confused.anikuta.feature.watch.sheets.SpeedSheet(
+            currentSpeed = currentSpeed,
+            onSpeedSelected = { speed ->
+                try {
+                    MPVLib.setPropertyDouble("speed", speed.toDouble())
+                    currentSpeed = speed
+                    // Save to the appropriate preference based on audio version
+                    val audioVersion = watchRequest.videoAudio
+                    if (audioVersion.contains("dub", ignoreCase = true)) {
+                        playerPreferences.speedDub().set(speed)
+                    } else {
+                        playerPreferences.speedSub().set(speed)
+                    }
+                    Log.i(TAG, "Speed set to $speed (audio: $audioVersion)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to set speed", e)
+                }
+            },
+            onDismiss = { showSpeedSheet = false },
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1252,9 +1560,13 @@ private fun FullscreenControlsOverlay(
  * to the new project's design language (#B1F256, RobotoFamily ExtraBold).
  */
 @Composable
-private fun WatchTopBar(title: String, onBack: () -> Unit) {
+private fun WatchTopBar(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 6.dp),

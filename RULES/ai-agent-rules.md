@@ -79,9 +79,10 @@ Every file has a correct home. Putting a file in the wrong place creates confusi
   - `:core` is NOT a dumping ground. Only put things there if they are genuinely shared.
   - If only one feature uses something, keep it in that feature — even if you *think* another feature might use it later.
 
-- **Never place all code in one large file.** Split into logical, focused files.
-  - Suggested maximum: **~300 lines per file**, **~3 responsibilities per class**.
-  - If a file is growing large, propose a split into smaller, focused files.
+- **Avoid needlessly large files, but don't over-split.** Prefer logical, focused files.
+  - Guideline: **~1,000 lines per file** as a soft target. Files may reasonably grow to **~1,500 lines** when the content is cohesive and splitting would hurt readability. This is **highly flexible** — the goal is clarity, not a hard cap. A 1,200-line file with a single clear responsibility is fine; a 600-line file doing six unrelated things is not.
+  - If a file is growing beyond ~1,500 lines, or its responsibilities are getting tangled, propose a split into smaller, focused files.
+  - Aim for **~3 responsibilities per class** as a guideline (also flexible).
 
 - **Document the purpose of every module and major file.** A new AI agent (or the user) should be able to understand the project from the documentation alone.
 
@@ -306,7 +307,7 @@ These are the hard boundaries. Violating any of these is a critical error.
 | **ViewModel → Repository only** | ViewModels never call APIs, databases, or shared preferences directly. All data access goes through a Repository. |
 | **Feature isolation** | Feature modules never import from other feature modules. Communication goes through `:core` interfaces. |
 | **:core is shared only** | Only put code in `:core` if used by 2+ feature modules. Otherwise keep it in the feature module. |
-| **No God classes** | No file over 300 lines. No class with more than 3 responsibilities. |
+| **Avoid God classes** | Keep files focused (~1,000-line guideline, up to ~1,500 when cohesive — flexible). Keep classes to ~3 responsibilities (guideline). Propose splits when files exceed ~1,500 lines or when responsibilities tangle. |
 | **Interface in :core, impl elsewhere** | Repository interfaces live in `:core`. Implementations live in `:data` or the feature module. |
 
 ---
@@ -332,7 +333,7 @@ You are working on an Android project. Follow these rules strictly:
 
 7. Match existing codebase patterns exactly. Do not introduce new approaches unless explicitly asked.
 
-8. No file over 300 lines. No class with more than 3 responsibilities. Propose splits when approaching limits.
+8. Keep files focused (~1,000-line guideline, up to ~1,500 when cohesive — flexible). Keep classes to ~3 responsibilities (guideline). Propose splits when files exceed ~1,500 lines or when responsibilities tangle.
 
 9. Handle all errors explicitly. No empty catch blocks. Show users meaningful error states with retry options.
 

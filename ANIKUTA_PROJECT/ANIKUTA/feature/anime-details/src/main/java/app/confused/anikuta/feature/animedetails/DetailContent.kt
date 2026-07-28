@@ -127,6 +127,10 @@ fun DetailContent(
                 val watchCtx = WatchEpisodeContext(
                     animeTitle = anime.displayTitle,
                     coverUrl = anime.coverUrl,
+                    coverColorArgb = runCatching {
+                        val hex = anime.coverColorHex
+                        if (hex != null) AndroidColor.parseColor(hex) else 0
+                    }.getOrDefault(0),
                     episodeMetadata = episodeMetadata,
                 )
                 EpisodesSection(
