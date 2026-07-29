@@ -162,6 +162,13 @@ UPDATE animes SET last_watched = :lastWatched WHERE anilist_id = :anilistId;
 clearAnilistId:
 UPDATE animes SET anilist_id = NULL WHERE _id = :id;
 
+-- Sets the AniList association on an existing row WITHOUT touching favorite /
+-- category membership (used by ExtensionDetailsProvider.persistEpisodes when a
+-- previously-unlinked extension-only row is being linked to AniList for the
+-- first time). The companion of [clearAnilistId].
+updateAnilistId:
+UPDATE animes SET anilist_id = :anilistId WHERE _id = :id;
+
 updateAnilistMetadataByAnilistId:
 UPDATE animes SET
     title = :title,

@@ -319,12 +319,39 @@ class ExtensionDetailsProvider(
         coverColorHex: String? = null,
     ) {
         try {
-            // Find or create the anime row. Linked → by anilistId; unlinked → by sourceId+url.
-            var dbAnime = if (anilistId != null) {
-                animeRepository.getByAnilistId(anilistId)
-            } else {
-                animeRepository.getBySourceAndUrl(sourceId, animeUrl)
+            // ═══ Fix 2 (UNLINK-LINK-SAVE-FIXES) ═══
+            // Always look up by (sourceId, url) FIRST — that's the natural key for an
+            // extension-sourced row. The anilistId lookup misses extension-only rows
+            // (which have anilist_id = NULL). This prevents:
+            //   1. Creating duplicate rows when linking.
+            //   2. Overwriting favorite=false on the existing row via upsert
+            //      (upsert → updateExisting copies `newAnime.favorite = false`).
+            var dbAnime = animeRepository.getBySourceAndUrl(sourceId, animeUrl)
+            if (dbAnime == null && anilistId != null) {
+                dbAnime = animeRepository.getByAnilistId(anilistId)
             }
+
+            // ═══ Fix 2b (UNLINK-LINK-SAVE-FIXES) ═══
+            // If the existing row is extension-only (anilist_id = NULL) but this
+            // request carries an anilistId (linking flow), stamp the anilist_id on
+            // the row WITHOUT calling `upsert` (which would overwrite `favorite`
+            // with the freshly-built newAnime.favorite = false). This is the
+            // root-cause fix for "saving an anime then linking it loses the save
+            // state" + "re-opening a linked anime sometimes shows it unsaved."
+            if (dbAnime != null && anilistId != null && dbAnime.anilistId == null) {
+                Log.i(TAG, "persistEpisodes: stamping anilistId=$anilistId on existing " +
+                    "extension-only row id=${dbAnime.id} (favorite=${dbAnime.favorite} preserved)")
+                try {
+                    animeRepository.updateAnilistId(dbAnime.id, anilistId)
+                } catch (e: Exception) {
+                    Log.w(TAG, "persistEpisodes: updateAnilistId failed (non-fatal) — " +
+                        "id=${dbAnime.id}, anilistId=$anilistId", e)
+                }
+                // Re-fetch with the updated anilistId so the downstream
+                // updateMetadataFromExtension + episode re-insert use the same row id.
+                dbAnime = animeRepository.getById(dbAnime.id)
+            }
+
             if (dbAnime == null) {
                 val now = System.currentTimeMillis()
                 val newAnime = Anime(

@@ -230,6 +230,23 @@ class AnimeRepositoryImpl(
         }
     }
 
+    // ═══ Fix 1 (UNLINK-LINK-SAVE-FIXES) ═══
+    // Companion of clearAnilistId: stamps an anilist_id on an existing row WITHOUT
+    // touching favorite / date_added / category membership / etc. Used by
+    // ExtensionDetailsProvider.persistEpisodes when a previously-unlinked
+    // extension-only row (anilist_id = NULL) is being linked to AniList for the
+    // first time — avoids the favorite-overwrite bug that going through `upsert`
+    // would cause (the freshly-built newAnime has favorite=false).
+    override suspend fun updateAnilistId(id: Long, anilistId: Int?) {
+        Log.d(TAG, "updateAnilistId: id=$id, anilistId=$anilistId")
+        withContext(dispatchers.io) {
+            database.animesQueries.updateAnilistId(
+                id = id,
+                anilistId = anilistId?.toLong(),
+            )
+        }
+    }
+
     override suspend fun updateSourceAndUrl(id: Long, sourceId: Long, url: String) {
         Log.d(TAG, "updateSourceAndUrl: id=$id, sourceId=$sourceId, url=$url")
         withContext(dispatchers.io) {
