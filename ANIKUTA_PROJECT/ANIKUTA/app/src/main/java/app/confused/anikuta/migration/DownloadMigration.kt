@@ -1,10 +1,6 @@
 package app.confused.anikuta.migration
 
 import android.util.Log
-import androidx.documentfile.provider.DocumentFile
-import app.confused.anikuta.core.download.DownloadAnimeInfo
-import app.confused.anikuta.core.download.DownloadLogger
-import app.confused.anikuta.core.download.DownloadStatus
 import app.confused.anikuta.core.download.DownloadStore
 import app.confused.anikuta.core.download.DownloadTask
 import app.confused.anikuta.core.download.DownloadStorageProvider
@@ -121,9 +117,11 @@ class DownloadMigration(
      *
      * Best-effort: SAF `DocumentFile.renameTo` is provider-dependent. Failures
      * are logged but don't block the migration.
+     *
+     * Delegates to [DownloadStorageProvider.renameLegacyAnimeFolder] (which has
+     * the DocumentFile dependency; `:app` doesn't).
      */
     private fun migrateFolders(): FolderResult {
-        // Get the unique set of (legacyAnilistId, title) from the migrated tasks.
         val tasks = downloadStore.getAll()
         val toMigrate = tasks
             .filter { it.request.anime.contentId.isNotEmpty() }
@@ -144,26 +142,14 @@ class DownloadMigration(
                 val anilistId = contentId.removePrefix("al:").toIntOrNull()
                 if (anilistId == null) continue
 
-                // Find the old folder (ends with [anilistId]).
                 val oldSuffix = "[$anilistId]"
-                val animeDir = storageProvider.findLegacyAnimeDir(oldSuffix)
-                if (animeDir == null) {
-                    Log.d(TAG, "Folder not found for anilistId=$anilistId (may already be migrated or never downloaded)")
-                    continue
-                }
-
-                // Build the new folder name with the sanitized content_id.
-                val safeTitle = title.ifBlank { "Unknown" }
-                val newContentIdSuffix = contentId.replace(":", "-").replace("/", "-")
-                val newFolderName = "$safeTitle [$newContentIdSuffix]"
-
-                val renamed = animeDir.renameTo(newFolderName)
+                val renamed = storageProvider.renameLegacyAnimeFolder(oldSuffix, contentId, title)
                 if (renamed) {
                     moved++
-                    Log.d(TAG, "Folder renamed: '${animeDir.name}' → '$newFolderName'")
                 } else {
+                    // Could be: folder not found (already migrated or never downloaded),
+                    // or rename failed (provider doesn't support it).
                     failed++
-                    Log.w(TAG, "Folder rename failed (provider may not support rename): '${animeDir.name}' → '$newFolderName'")
                 }
             } catch (e: Exception) {
                 failed++

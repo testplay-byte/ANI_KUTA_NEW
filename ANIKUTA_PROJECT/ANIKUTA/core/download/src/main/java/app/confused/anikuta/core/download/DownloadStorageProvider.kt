@@ -431,6 +431,32 @@ class DownloadStorageProvider(
             ?.firstOrNull { it.name?.endsWith(oldSuffix) == true && it.isDirectory }
     }
 
+    /**
+     * Rename a legacy anime folder to the new content_id format.
+     *
+     * Called by [app.confused.anikuta.migration.DownloadMigration] for each
+     * anime that needs its folder renamed from `<Title [anilistId]>` to
+     * `<Title [al-anilistId]>`.
+     *
+     * @param oldSuffix the legacy suffix (e.g., `"[154587]"`).
+     * @param contentId the new content_id (e.g., `"al:154587"`).
+     * @param title the anime title (for the new folder name).
+     * @return `true` if the folder was found + renamed; `false` if not found or rename failed.
+     */
+    fun renameLegacyAnimeFolder(oldSuffix: String, contentId: String, title: String): Boolean {
+        val animeDir = findLegacyAnimeDir(oldSuffix) ?: return false
+        val safeTitle = sanitizeFileName(title.ifBlank { "Unknown" })
+        val newContentIdSuffix = sanitizeContentIdForFolder(contentId)
+        val newFolderName = "$safeTitle [$newContentIdSuffix]"
+        val renamed = animeDir.renameTo(newFolderName)
+        if (renamed) {
+            DownloadLogger.i("Folder renamed: '${animeDir.name}' → '$newFolderName'")
+        } else {
+            DownloadLogger.w("Folder rename failed (provider may not support rename): '${animeDir.name}' → '$newFolderName'")
+        }
+        return renamed
+    }
+
     // ── Internal helpers ──
 
     private fun ensureDir(parent: DocumentFile, name: String): DocumentFile? {
