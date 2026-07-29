@@ -23,6 +23,10 @@ import org.koin.dsl.module
  * and `RULES/ai-agent-rules.md` §10 testability).
  *
  * Phase A: added [CategoryRepository] binding (was missing).
+ *
+ * Phase 8 (Doc 04 violation 2): the `EpisodeDisplayPreferences` binding was
+ * moved to `:core:preferences/di/PreferenceModule.kt` (next to where the class
+ * now lives after the module-boundary fix). It is no longer registered here.
  */
 val repositoryModule: Module = module {
     single<DispatcherProvider> { DefaultDispatcherProvider() }
@@ -30,5 +34,4 @@ val repositoryModule: Module = module {
     single<CategoryRepository> { CategoryRepositoryImpl(get(), get()) }
     single<EpisodeRepository> { EpisodeRepositoryImpl(get(), get()) }
     single<HistoryRepository> { HistoryRepositoryImpl(get(), get()) }
-    single { app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences(get()) }
 }

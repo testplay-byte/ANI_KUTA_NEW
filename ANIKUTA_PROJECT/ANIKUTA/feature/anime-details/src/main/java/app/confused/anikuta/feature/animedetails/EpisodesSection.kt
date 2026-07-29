@@ -45,6 +45,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.preferences.EpisodeDisplayPrefs
+import app.confused.anikuta.core.preferences.EpisodeDisplayPreferences
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -901,31 +903,6 @@ private fun formatDate(epochMillis: Long): String {
         ""
     }
 }
-
-/** Display preferences passed to EpisodeRow (simplified from EpisodeDisplayPreferences). */
-data class EpisodeDisplayPrefs(
-    val showThumbnails: Boolean = true,
-    val showTitles: Boolean = true,
-    val showSummaries: Boolean = true,
-    val showDates: Boolean = true,
-    val showEpisodeNumber: Boolean = true,
-    val showAudioPills: Boolean = true,
-    val thumbnailPosition: String = "left",
-    val titlePosition: String = "right",
-    val synopsisPosition: String = "below",
-    val datePosition: String = "right_below_synopsis",
-    val episodeNumberPosition: String = "overlay",
-    val thumbnailSize: String = "medium",
-    val titleMaxLines: Int = 1,
-    val synopsisMaxLines: Int = 2,
-    // ── Background toggles (per user request: show/hide element backgrounds) ──
-    val showTitleBackground: Boolean = true,
-    val showDateBackground: Boolean = true,
-    val showAudioBackground: Boolean = true,
-    val showSynopsisBackground: Boolean = true,
-    /** Whether the download button is shown on the row (Agent 2 — Downloads). */
-    val showDownloadButton: Boolean = true,
-)
 
 /** Formats an episode number: 5.0f → "5", 5.5f → "5.5", -1f → "?". */
 private fun formatEpisodeNumber(num: Float): String {

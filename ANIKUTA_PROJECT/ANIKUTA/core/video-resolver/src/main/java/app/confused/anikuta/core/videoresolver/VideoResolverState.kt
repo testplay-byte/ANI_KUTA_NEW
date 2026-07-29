@@ -1,7 +1,8 @@
-package app.confused.anikuta.feature.videoresolver
+package app.confused.anikuta.core.videoresolver
 
 /**
- * The video resolver state machine — drives [VideoResolverSheet].
+ * The video resolver state machine — drives the `VideoResolverSheet` UI (which
+ * remains in `:feature:video-resolver`).
  *
  * Per `DESIGN_LANGUAGE/04-screens/video-resolver.md` §4:
  * - [Hidden] — no sheet shown.
@@ -9,6 +10,14 @@ package app.confused.anikuta.feature.videoresolver
  * - [Show] — the full picker with the 3-tier server/audio/quality hierarchy.
  * - [NoSources] — the source returned no playable videos.
  * - [Error] — the resolution failed (network error, timeout, etc.).
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violations 3+4)
+ *
+ * This file was moved from `:feature:video-resolver` to `:core:video-resolver`.
+ * The state + the resolver types ([ResolverServer], [ResolverAudioVersion],
+ * [ResolverVideo], [SubtitleTrack]) are pure Kotlin data — no Compose deps —
+ * so they belong in core. The sheet UI that consumes them stays in
+ * `:feature:video-resolver`.
  */
 sealed interface VideoResolverState {
     data object Hidden : VideoResolverState

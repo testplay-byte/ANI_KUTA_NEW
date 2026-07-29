@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.videoresolver.ResolverAudioVersion
+import app.confused.anikuta.core.videoresolver.ResolverServer
+import app.confused.anikuta.core.videoresolver.ResolverVideo
 
 /**
  * The "Show" state content — expandable server accordion with audio/quality.

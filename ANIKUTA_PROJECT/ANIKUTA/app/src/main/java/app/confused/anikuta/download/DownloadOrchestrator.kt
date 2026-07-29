@@ -10,20 +10,24 @@ import app.confused.anikuta.core.download.DownloadTrack
 import app.confused.anikuta.core.download.FallbackStrategy
 import app.confused.anikuta.core.download.ServerDiscoveryStore
 import app.confused.anikuta.core.download.TrackKind
-import app.confused.anikuta.feature.videoresolver.ResolverResult
-import app.confused.anikuta.feature.videoresolver.ResolverServer
-import app.confused.anikuta.feature.videoresolver.ResolverVideo
-import app.confused.anikuta.feature.videoresolver.ResolverService
-import app.confused.anikuta.feature.videoresolver.SubtitleTrack
+import app.confused.anikuta.core.videoresolver.ResolverResult
+import app.confused.anikuta.core.videoresolver.ResolverServer
+import app.confused.anikuta.core.videoresolver.ResolverVideo
+import app.confused.anikuta.core.videoresolver.ResolverService
+import app.confused.anikuta.core.videoresolver.SubtitleTrack
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 
 /**
- * Bridges `:feature:video-resolver` and `:core:download`.
+ * Bridges `:core:video-resolver` and `:core:download`.
  *
- * **Why this lives in `:app` (not a feature/core module):** `:core:download`
- * cannot import `:feature:video-resolver` (Rule §14 — feature isolation), so
- * the resolve→select→enqueue orchestration happens here, where both are available.
+ * **Why this lives in `:app` (not a feature/core module):** historically
+ * `:core:download` could not import `:feature:video-resolver` (Rule §14 —
+ * feature isolation), so the resolve→select→enqueue orchestration happens
+ * here. Phase 8 moved the resolver logic + types to `:core:video-resolver`
+ * (so `:core:download` could in principle import them now), but the
+ * orchestrator stays in `:app` to keep the diff small + because it also
+ * depends on `:app`'s navigation context. Pure refactor — no behavior change.
  *
  * **Two modes (per the owner's spec):**
  *

@@ -26,11 +26,11 @@ import app.confused.anikuta.feature.animedetails.EpisodeDownloadState
 import app.confused.anikuta.feature.animedetails.WatchEpisodeContext
 import app.confused.anikuta.feature.search.data.RecentSearchesStore
 import app.confused.anikuta.feature.search.data.SearchUiPreferences
-import app.confused.anikuta.feature.videoresolver.ResolverResult
-import app.confused.anikuta.feature.videoresolver.ResolverService
-import app.confused.anikuta.feature.videoresolver.ResolverVideo
-import app.confused.anikuta.feature.videoresolver.SubtitleTrack
-import app.confused.anikuta.feature.videoresolver.VideoResolverState
+import app.confused.anikuta.core.videoresolver.ResolverResult
+import app.confused.anikuta.core.videoresolver.ResolverService
+import app.confused.anikuta.core.videoresolver.ResolverVideo
+import app.confused.anikuta.core.videoresolver.SubtitleTrack
+import app.confused.anikuta.core.videoresolver.VideoResolverState
 import app.confused.anikuta.feature.watch.WatchRequest
 import cafe.adriel.voyager.navigator.Navigator
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource

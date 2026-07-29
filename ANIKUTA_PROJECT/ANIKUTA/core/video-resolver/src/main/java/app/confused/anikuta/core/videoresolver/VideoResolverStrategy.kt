@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.videoresolver
+package app.confused.anikuta.core.videoresolver
 
 import eu.kanade.tachiyomi.animesource.model.Video
 
@@ -10,6 +10,11 @@ import eu.kanade.tachiyomi.animesource.model.Video
  *   that return organized videos. Groups into the 3-tier hierarchy: Server → Audio → Quality.
  * - [RawResolverStrategy] — for unstructured extensions that return a flat list
  *   of videos. Shows a flat list without forcing grouping.
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violations 3+4)
+ *
+ * This file was moved from `:feature:video-resolver` to `:core:video-resolver`.
+ * Pure strategy logic — no Compose deps. Pure move (no behavioral change).
  */
 interface VideoResolverStrategy {
 
