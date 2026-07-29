@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.videoresolver
+package app.confused.anikuta.core.videoresolver
 
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -24,6 +24,11 @@ import eu.kanade.tachiyomi.animesource.model.Video
  * - Servers: preferred server first (if any), then alphabetical.
  * - Audio versions: SUB → DUB → HSUB → Unknown.
  * - Quality: highest first (descending).
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violations 3+4)
+ *
+ * This file was moved from `:feature:video-resolver` to `:core:video-resolver`.
+ * Pure title-parsing logic — no Compose deps. Pure move (no behavioral change).
  */
 object VideoTitleParser {
 

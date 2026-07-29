@@ -15,7 +15,11 @@ dependencies {
     implementation(projects.core.episodeMetadata)
     implementation(projects.data.anime)
     implementation(projects.data.history)
-    implementation(projects.feature.videoResolver)
+    // ── Phase 8 (Doc 04 violation 3): :feature:video-resolver dep replaced ──
+    // :feature:watch imports only the resolver types + service (no UI from
+    // :feature:video-resolver) — it now depends on :core:video-resolver where
+    // those types live. The feature→feature dep is gone.
+    implementation(projects.core.videoResolver)
 
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")

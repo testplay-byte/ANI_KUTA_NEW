@@ -10,7 +10,7 @@ import org.koin.compose.koinInject
 /**
  * Snapshot of all watch-page episode-display preferences.
  *
- * SEPARATE from the details page's [app.confused.anikuta.feature.animedetails.EpisodeDisplayPrefs]
+ * SEPARATE from the details page's [app.confused.anikuta.core.preferences.EpisodeDisplayPrefs]
  * — the two episode lists (details + watch) are independently customizable.
  * Per user: "the details page and the watch page would be customizable
  * separately. Their episode lists will be separate and they will be easily

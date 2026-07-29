@@ -21,11 +21,12 @@ dependencies {
     implementation(projects.core.preferences)
     implementation(projects.core.download)
     implementation(projects.core.sourceApi)
-    // video-resolver — for the DownloadVideoPickerSheet (reuses ResolverServer/ResolverVideo).
-    // This is a feature→feature dependency, but it's read-only (no import cycles:
-    // video-resolver doesn't depend on feature:download). Accepted per Rule §14
-    // because the picker sheet IS the resolver UI repurposed for download selection.
-    implementation(projects.feature.videoResolver)
+    // ── Phase 8 (Doc 04 violation 4): :feature:video-resolver dep replaced ──
+    // :feature:download imports only the resolver types (ResolverServer +
+    // ResolverVideo) for the DownloadVideoPickerSheet — no UI from
+    // :feature:video-resolver. It now depends on :core:video-resolver where
+    // those types live. The feature→feature dep is gone.
+    implementation(projects.core.videoResolver)
 
     // Coil for cover thumbnails
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")

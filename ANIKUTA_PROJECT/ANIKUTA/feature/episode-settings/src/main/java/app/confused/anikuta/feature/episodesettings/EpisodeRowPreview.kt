@@ -27,7 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import app.confused.anikuta.feature.animedetails.EpisodeDisplayPrefs
+import app.confused.anikuta.core.preferences.EpisodeDisplayPrefs
 
 // Demo data — fixed so the user can see how a "typical" episode renders.
 private const val DEMO_TITLE = "The Dragon's Labyrinth"

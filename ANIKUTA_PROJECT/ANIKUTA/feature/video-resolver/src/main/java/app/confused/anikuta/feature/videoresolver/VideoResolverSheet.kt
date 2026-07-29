@@ -26,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.videoresolver.ResolverVideo
+import app.confused.anikuta.core.videoresolver.VideoResolverState
 
 /**
  * The video resolver bottom sheet — appears after tapping an episode.

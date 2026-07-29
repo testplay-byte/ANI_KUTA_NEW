@@ -51,8 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.core.player.VideoTrack
-import app.confused.anikuta.feature.videoresolver.ResolverServer
-import app.confused.anikuta.feature.videoresolver.ResolverVideo
+import app.confused.anikuta.core.videoresolver.ResolverServer
+import app.confused.anikuta.core.videoresolver.ResolverVideo
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QualitySheet — bottom-up menu for selecting video quality.

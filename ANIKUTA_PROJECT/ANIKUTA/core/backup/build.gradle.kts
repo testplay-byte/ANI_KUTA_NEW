@@ -32,12 +32,13 @@ dependencies {
     implementation(projects.core.tracker)           // TrackerBackupProvider iface + TrackRepository
     implementation(projects.core.anilist)           // AniListApi for Aniyomi translation
 
-    // ── Data modules (concrete stores not behind :core interfaces) ──
-    // SourceLinkStore + ExtensionLinkStore are concrete classes in :data:extension.
-    // This is a documented exception: :core:backup → :data:extension because the
-    // link stores are not behind interfaces in :core (pre-existing architectural
-    // choice from the search page implementation).
-    implementation(projects.data.extension)
+    // ── Phase 8 (Doc 04 violation 1): :data:extension dep REMOVED ──
+    // SourceLinkBackupProvider used to import SourceLinkStore +
+    // ExtensionLinkStore directly from :data:extension (a core→data inversion).
+    // It now injects the SourceLinkBackupAccess interface declared in this
+    // module; the impl (SourceLinkBackupAccessImpl) lives in :data:extension
+    // and is Koin-bound in app/.../di/ExtensionModule.kt. The :app module
+    // pulls in :data:extension + this module + wires them together at DI time.
 
     // ── Serialization ──
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")

@@ -5,7 +5,7 @@ import app.confused.anikuta.core.download.DownloadStore
 import app.confused.anikuta.core.download.di.downloadModule
 import app.confused.anikuta.download.DownloadOrchestrator
 import app.confused.anikuta.feature.download.di.downloadFeatureModule
-import app.confused.anikuta.feature.videoresolver.ResolverService
+import app.confused.anikuta.core.videoresolver.ResolverService
 import app.confused.anikuta.migration.DownloadMigration
 import org.koin.core.module.Module
 import org.koin.dsl.module

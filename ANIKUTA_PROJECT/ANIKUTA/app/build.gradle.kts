@@ -52,6 +52,12 @@ dependencies {
     implementation(projects.core.updateChecker)
     // source-api — for ExtensionAppHolder.init() in App.kt (ADR-029)
     implementation(projects.core.sourceApi)
+    // ── Phase 8 (Doc 04 violations 3+4): video-resolver logic + types ──
+    // :app's DownloadOrchestrator + AppController + AnikutaRoot consume the
+    // resolver service + types. They now import from :core:video-resolver
+    // (the UI sheet stays in :feature:video-resolver, which the app still
+    // depends on below for the sheet composable).
+    implementation(projects.core.videoResolver)
 
     // Data modules (for Koin wiring)
     implementation(projects.data.anime)
@@ -66,7 +72,6 @@ dependencies {
     implementation(projects.feature.extensionsSettings)
     implementation(projects.feature.videoResolver)
     implementation(projects.feature.watch)
-    implementation(projects.feature.player)
     // Episode settings screens (Hub / Display / Layout / Metadata) — full pages
     implementation(projects.feature.episodeSettings)
     // Appearance / UI customization (theme mode, accent colors, custom palette)

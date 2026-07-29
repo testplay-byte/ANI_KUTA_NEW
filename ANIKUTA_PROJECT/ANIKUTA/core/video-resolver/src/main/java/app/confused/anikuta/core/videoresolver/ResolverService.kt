@@ -1,4 +1,4 @@
-package app.confused.anikuta.feature.videoresolver
+package app.confused.anikuta.core.videoresolver
 
 import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -23,6 +23,13 @@ import kotlinx.coroutines.withTimeoutOrNull
  * - [StructuredResolverStrategy] — 3-tier hierarchy using [VideoTitleParser]
  *   with hoster names as server names.
  * - [RawResolverStrategy] — flat list for unstructured extensions.
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violations 3+4)
+ *
+ * This file was moved from `:feature:video-resolver` to `:core:video-resolver`.
+ * `:feature:watch` and `:feature:download` import the service + types from here
+ * (no feature→feature dep). The UI sheet that consumes the resolver result
+ * stays in `:feature:video-resolver`.
  */
 class ResolverService {
 

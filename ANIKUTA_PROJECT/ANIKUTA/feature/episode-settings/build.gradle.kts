@@ -15,8 +15,10 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.preferences)
     implementation(projects.core.episodeMetadata)
-    // EpisodeDisplayPreferences + EpisodeDisplayPrefs live in feature:anime-details
-    implementation(projects.feature.animeDetails)
+    // ── Phase 8 (Doc 04 violation 2): :feature:anime-details dep REMOVED ──
+    // EpisodeDisplayPreferences + EpisodeDisplayPrefs were moved to
+    // :core:preferences (where all other preferences live). This module
+    // imports them from there — no feature→feature dep needed.
 
     // Koin (for koinInject of EpisodeDisplayPreferences + EpisodeMetadataPreferences)
     implementation(platform(libs.koin.bom))

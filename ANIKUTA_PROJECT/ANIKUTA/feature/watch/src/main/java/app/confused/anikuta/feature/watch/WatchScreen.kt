@@ -85,8 +85,8 @@ import app.confused.anikuta.core.player.PlayerStateHolder
 import app.confused.anikuta.core.player.WatchProgressStore
 import app.confused.anikuta.core.player.controls.EpisodeSwitchingOverlay
 import app.confused.anikuta.core.player.controls.MinimizedControls
-import app.confused.anikuta.feature.videoresolver.ResolverResult
-import app.confused.anikuta.feature.videoresolver.ResolverService
+import app.confused.anikuta.core.videoresolver.ResolverResult
+import app.confused.anikuta.core.videoresolver.ResolverService
 import `is`.xyz.mpv.MPVLib
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import kotlinx.coroutines.delay
@@ -856,7 +856,7 @@ fun WatchScreen(
     }
 
     // ── Quality selection handler ──
-    val onQualitySelected: (app.confused.anikuta.feature.videoresolver.ResolverVideo) -> Unit = { video ->
+    val onQualitySelected: (app.confused.anikuta.core.videoresolver.ResolverVideo) -> Unit = { video ->
         Log.i(TAG, "Quality selected: ${video.quality} (${video.url})")
         stateHolder.setSwitchingEpisode(true)
         mpvView?.let { view ->
@@ -944,9 +944,9 @@ private fun WatchScreenContent(
     onMpvViewCreated: (AnikutaMPVView) -> Unit,
     showQualitySheet: Boolean,
     showSubtitleSheet: Boolean,
-    resolvedServers: List<app.confused.anikuta.feature.videoresolver.ResolverServer>,
+    resolvedServers: List<app.confused.anikuta.core.videoresolver.ResolverServer>,
     onQualityClick: () -> Unit,
-    onQualitySelected: (app.confused.anikuta.feature.videoresolver.ResolverVideo) -> Unit,
+    onQualitySelected: (app.confused.anikuta.core.videoresolver.ResolverVideo) -> Unit,
     onSubtitleClick: () -> Unit,
     onSubtitleSelected: (Int) -> Unit,
     onDismissSheet: () -> Unit,
@@ -2191,11 +2191,11 @@ private fun formatEpisodeNumber(num: Float): String {
  * @return the best matching [ResolverVideo], or null if no videos available
  */
 private fun selectBestVideo(
-    servers: List<app.confused.anikuta.feature.videoresolver.ResolverServer>,
+    servers: List<app.confused.anikuta.core.videoresolver.ResolverServer>,
     preferredServer: String,
     preferredAudio: String,
     preferredQuality: Int?,
-): app.confused.anikuta.feature.videoresolver.ResolverVideo? {
+): app.confused.anikuta.core.videoresolver.ResolverVideo? {
     if (servers.isEmpty()) return null
     Log.d(TAG, "selectBestVideo: ${servers.size} servers, preferred: server='$preferredServer' audio='$preferredAudio' quality=$preferredQuality")
 

@@ -6,8 +6,6 @@ import app.confused.anikuta.core.backup.BackupEntry
 import app.confused.anikuta.core.backup.BackupProvider
 import app.confused.anikuta.core.backup.model.SourceLinkBackup
 import app.confused.anikuta.core.backup.model.SourceLinkItem
-import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
-import app.confused.anikuta.data.extension.cache.SourceLinkStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -16,12 +14,14 @@ private const val TAG = "AnikutaBackup"
 /**
  * Backs up AniList↔extension source links.
  *
- * Combines two stores:
- * - [SourceLinkStore] — content_id → extension source match (sourceId, animeUrl, animeTitle)
- * - [ExtensionLinkStore] — extension anime (sourceId:animeUrl) → content_id
+ * Combines two stores (accessed via the [SourceLinkBackupAccess] abstraction —
+ * Phase 8 module-architecture fix):
+ * - source links — content_id → extension source match (sourceId, animeUrl, animeTitle)
+ * - extension links — extension anime (sourceId:animeUrl) → content_id
  *
  * On import, both stores are populated by iterating the backup entries and
- * calling `saveLink` / `link`. Existing links are overwritten (latest wins).
+ * calling [SourceLinkBackupAccess.saveSourceLink] / [saveExtensionLink].
+ * Existing links are overwritten (latest wins).
  *
  * # Phase 4 (ADR-050) — content_id keys
  *
@@ -31,26 +31,33 @@ private const val TAG = "AnikutaBackup"
  *   `"al:$anilistId"` content_ids on import.
  * - `extensionLinks` Int values (legacy anilistId) are converted to
  *   `"al:$anilistId"` content_ids on read by [TolerantContentIdMapSerializer].
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violation 1)
+ *
+ * This provider used to import `SourceLinkStore` + `ExtensionLinkStore` directly
+ * from `:data:extension`, which is a `:core` → `:data` inversion. It now
+ * injects the [SourceLinkBackupAccess] interface (defined in `:core:backup`)
+ * whose implementation lives in `:data:extension` + is Koin-bound there. The
+ * `:core:backup` module no longer depends on `:data:extension`.
  */
 class SourceLinkBackupProvider(
-    private val sourceLinkStore: SourceLinkStore,
-    private val extensionLinkStore: ExtensionLinkStore,
+    private val access: SourceLinkBackupAccess,
 ) : BackupProvider {
 
     override val id: String = BackupCategory.SOURCE_LINKS.id
 
     override suspend fun export(): BackupEntry = withContext(Dispatchers.IO) {
         try {
-            // SourceLinkStore.getAll() returns Map<contentId, SourceLink>.
-            val sourceLinks = sourceLinkStore.getAll().mapValues { (_, link) ->
+            // source links: content_id → BackupSourceLink.
+            val sourceLinks = access.getAllSourceLinks().mapValues { (_, link) ->
                 SourceLinkItem(
                     sourceId = link.sourceId,
                     animeUrl = link.animeUrl,
                     animeTitle = link.animeTitle,
                 )
             }
-            // ExtensionLinkStore.getAll() returns Map<"$sourceId:$animeUrl", contentId>.
-            val extensionLinks = extensionLinkStore.getAll()
+            // extension links: "$sourceId:$animeUrl" → content_id.
+            val extensionLinks = access.getAllExtensionLinks()
             Log.i(TAG, "SourceLinks export: ${sourceLinks.size} source links, ${extensionLinks.size} extension links (Phase 4 content_id format)")
             BackupEntry.SourceLinks(links = SourceLinkBackup(
                 sourceLinks = sourceLinks,
@@ -76,7 +83,7 @@ class SourceLinkBackupProvider(
                     Log.w(TAG, "SourceLinks import: cannot resolve content_id from key='$keyStr' — skipping")
                     return@forEach
                 }
-                sourceLinkStore.saveLink(
+                access.saveSourceLink(
                     contentId = contentId,
                     sourceId = link.sourceId,
                     animeUrl = link.animeUrl,
@@ -96,7 +103,7 @@ class SourceLinkBackupProvider(
                     val sourceId = key.substring(0, colonIdx).toLongOrNull()
                     val animeUrl = key.substring(colonIdx + 1)
                     if (sourceId != null) {
-                        extensionLinkStore.link(sourceId, animeUrl, contentId)
+                        access.saveExtensionLink(sourceId, animeUrl, contentId)
                         imported++
                     }
                 }

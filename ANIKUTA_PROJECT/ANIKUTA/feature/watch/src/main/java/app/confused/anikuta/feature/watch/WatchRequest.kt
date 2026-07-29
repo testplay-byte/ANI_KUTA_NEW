@@ -1,7 +1,7 @@
 package app.confused.anikuta.feature.watch
 
-import app.confused.anikuta.feature.videoresolver.ResolverServer
-import app.confused.anikuta.feature.videoresolver.SubtitleTrack
+import app.confused.anikuta.core.videoresolver.ResolverServer
+import app.confused.anikuta.core.videoresolver.SubtitleTrack
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 

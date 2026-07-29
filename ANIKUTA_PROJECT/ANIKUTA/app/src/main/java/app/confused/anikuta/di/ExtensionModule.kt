@@ -1,10 +1,12 @@
 package app.confused.anikuta.di
 
 import android.content.Context
+import app.confused.anikuta.core.backup.provider.SourceLinkBackupAccess
 import app.confused.anikuta.core.updatechecker.EpisodeFetchGateway
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.api.AnimeExtensionApi
 import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
+import app.confused.anikuta.data.extension.cache.SourceLinkBackupAccessImpl
 import app.confused.anikuta.data.extension.cache.SourceLinkStore
 import app.confused.anikuta.data.extension.installer.AnimeExtensionInstaller
 import app.confused.anikuta.data.extension.loader.AnimeExtensionLoader
@@ -76,6 +78,14 @@ val extensionModule: Module = module {
     // call getEpisodeList() without re-searching on every app open.
     // Phase 4: keyed by content_id (was anilistId).
     single { SourceLinkStore(get()) }
+
+    // ── Phase 8: SourceLinkBackupAccess — bridges :core:backup ↔ :data:extension ──
+    // Exposes only the read/write surface the backup engine needs, via the
+    // interface declared in :core:backup (avoids the core→data inversion that
+    // would happen if :core:backup imported SourceLinkStore directly).
+    single<SourceLinkBackupAccess> {
+        SourceLinkBackupAccessImpl(get<SourceLinkStore>(), get<ExtensionLinkStore>())
+    }
 
     // ── Phase 4: SourceLinkMigrator (anilistId → content_id keys) ──
     single {

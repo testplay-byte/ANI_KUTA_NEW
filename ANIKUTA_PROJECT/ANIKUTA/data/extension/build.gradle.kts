@@ -25,6 +25,11 @@ dependencies {
     // extraction for extension-sourced covers). :core:designsystem has no Coil dep,
     // so the provider loads the bitmap via OkHttp (already a dep) + passes it here.
     implementation(projects.core.designsystem)
+    // ── Phase 8 (Doc 04 violation 1): :core:backup interface ──
+    // SourceLinkBackupAccessImpl implements the SourceLinkBackupAccess interface
+    // declared in :core:backup. This is a :data → :core dep (allowed by §3).
+    // :core:backup no longer depends on :data:extension (the inversion is fixed).
+    implementation(projects.core.backup)
 
     // AndroidX core — NotificationCompat + ContextCompat (foreground service, broadcast receivers)
     implementation("androidx.core:core-ktx:1.15.0")

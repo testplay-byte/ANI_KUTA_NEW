@@ -1,7 +1,4 @@
-package app.confused.anikuta.feature.animedetails
-
-import app.confused.anikuta.core.preferences.Preference
-import app.confused.anikuta.core.preferences.PreferenceStore
+package app.confused.anikuta.core.preferences
 
 /**
  * Episode list display preferences for the detail page.
@@ -14,8 +11,15 @@ import app.confused.anikuta.core.preferences.PreferenceStore
  * (detail-page portion), adapted to the new project's PreferenceStore.
  *
  * Used by:
- *  - EpisodeRow (renders episodes according to these settings)
- *  - EpisodeListSettingsScreen (live preview + customization UI)
+ *  - EpisodeRow (renders episodes according to these settings) — `:feature:anime-details`
+ *  - EpisodeListSettingsScreen (live preview + customization UI) — `:feature:episode-settings`
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violation 2)
+ *
+ * This class previously lived in `:feature:anime-details`. `:feature:episode-settings`
+ * imported it from there, creating a feature→feature dependency. It now lives in
+ * `:core:preferences` (where all other preferences live) — both feature modules
+ * import it from here. This is a pure move — no behavioral change.
  */
 class EpisodeDisplayPreferences(
     private val store: PreferenceStore,

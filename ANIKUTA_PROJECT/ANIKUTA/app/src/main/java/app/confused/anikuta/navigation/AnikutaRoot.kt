@@ -19,8 +19,8 @@ import app.confused.anikuta.core.designsystem.component.NavIcons
 import app.confused.anikuta.core.designsystem.component.NavItem
 import app.confused.anikuta.feature.download.DownloadVideoPickerSheet
 import app.confused.anikuta.feature.search.ui.ExtensionLinkingSheet
+import app.confused.anikuta.core.videoresolver.VideoResolverState
 import app.confused.anikuta.feature.videoresolver.VideoResolverSheet
-import app.confused.anikuta.feature.videoresolver.VideoResolverState
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.FadeTransition
 import org.koin.compose.koinInject

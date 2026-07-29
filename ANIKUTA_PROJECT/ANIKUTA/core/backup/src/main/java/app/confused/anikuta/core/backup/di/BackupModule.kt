@@ -13,6 +13,7 @@ import app.confused.anikuta.core.backup.provider.EpisodeBackupProvider
 import app.confused.anikuta.core.backup.provider.EpisodeMetadataBackupProvider
 import app.confused.anikuta.core.backup.provider.LibraryBackupProvider
 import app.confused.anikuta.core.backup.provider.PreferencesBackupProvider
+import app.confused.anikuta.core.backup.provider.SourceLinkBackupAccess
 import app.confused.anikuta.core.backup.provider.SourceLinkBackupProvider
 import app.confused.anikuta.core.backup.provider.TrackerBackupProviderAdapter
 import app.confused.anikuta.core.backup.provider.WatchProgressBackupProvider
@@ -21,8 +22,6 @@ import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataCache
 import app.confused.anikuta.core.player.WatchProgressStore
 import app.confused.anikuta.core.preferences.PreferenceStore
 import app.confused.anikuta.core.tracker.TrackerBackupProvider
-import app.confused.anikuta.data.extension.cache.ExtensionLinkStore
-import app.confused.anikuta.data.extension.cache.SourceLinkStore
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -58,7 +57,7 @@ val backupModule: Module = module {
             CategoryBackupProvider(get<AnikutaDatabase>()),
             EpisodeMetadataBackupProvider(get<EpisodeMetadataCache>()),
             WatchProgressBackupProvider(get<WatchProgressStore>()),
-            SourceLinkBackupProvider(get<SourceLinkStore>(), get<ExtensionLinkStore>()),
+            SourceLinkBackupProvider(get<SourceLinkBackupAccess>()),
             TrackerBackupProviderAdapter(get<TrackerBackupProvider>()),
             PreferencesBackupProvider(get<PreferenceStore>()),
             CoverImageProvider(get<AnikutaDatabase>()),

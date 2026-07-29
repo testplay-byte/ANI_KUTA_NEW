@@ -18,7 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences
+import app.confused.anikuta.core.preferences.EpisodeDisplayPreferences
 import org.koin.compose.koinInject
 
 /**

@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import app.confused.anikuta.feature.animedetails.EpisodeDisplayPrefs
-import app.confused.anikuta.feature.animedetails.EpisodeDisplayPreferences
+import app.confused.anikuta.core.preferences.EpisodeDisplayPrefs
+import app.confused.anikuta.core.preferences.EpisodeDisplayPreferences
 import org.koin.compose.koinInject
 
 /**
@@ -14,6 +14,13 @@ import org.koin.compose.koinInject
  * the actual episode list both update instantly when a setting changes).
  *
  * Used by every episode-settings screen to drive its live preview.
+ *
+ * # Phase 8 — module boundary fix (Doc 04 violation 2)
+ *
+ * Both [EpisodeDisplayPreferences] + [EpisodeDisplayPrefs] were moved from
+ * `:feature:anime-details` to `:core:preferences`. This file now imports them
+ * from `:core:preferences` — `:feature:episode-settings` no longer depends on
+ * `:feature:anime-details`.
  */
 @Composable
 fun rememberEpisodeDisplayPrefs(): EpisodeDisplayPrefs {
