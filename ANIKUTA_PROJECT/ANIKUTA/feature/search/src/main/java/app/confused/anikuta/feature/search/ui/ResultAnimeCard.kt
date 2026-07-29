@@ -23,9 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.coverUrl
-import app.confused.anikuta.core.anilist.model.displayTitle
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.feature.search.viewmodel.SearchResult
 import coil3.compose.AsyncImage
@@ -45,6 +42,13 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
  * For extension results: shows the source name under the title (so the user
  * knows which extension the result came from). No score badge (extensions
  * don't provide scores).
+ *
+ * Phase 7 (ADR-041): [SearchResult.AniList] now wraps [UnifiedAnime] (was
+ * `AniListAnime`), so the field accesses here changed from
+ * `anime.displayTitle`/`anime.coverUrl`/`anime.episodes` (extension properties
+ * on `AniListAnime`) to `anime.title`/`anime.coverUrl`/`anime.episodeCount`
+ * (direct properties on `UnifiedAnime`). `averageScore` + `format` + `seasonYear`
+ * keep the same name on both models.
  *
  * @param result the unified result (AniList or Extension).
  * @param onClick tapped — caller routes to detail (AniList ID) or linking flow.
@@ -139,6 +143,11 @@ fun ResultAnimeCard(
 }
 
 // ── Helpers to read display fields from the sealed SearchResult ─────────────
+//
+// Phase 7: the AniList branch now reads from [UnifiedAnime] (the
+// provider-agnostic model produced by the metadata-provider abstraction).
+// UnifiedAnime.coverUrl / .title / .averageScore / .format / .seasonYear are
+// direct properties; episodeCount replaces AniListAnime.episodes.
 
 private fun SearchResult.coverUrl(): String? = when (this) {
     is SearchResult.AniList -> anime.coverUrl
@@ -146,7 +155,7 @@ private fun SearchResult.coverUrl(): String? = when (this) {
 }
 
 private fun SearchResult.displayTitle(): String = when (this) {
-    is SearchResult.AniList -> anime.displayTitle
+    is SearchResult.AniList -> anime.title
     is SearchResult.Extension -> sAnime.title
 }
 
@@ -159,7 +168,7 @@ private fun SearchResult.metaLine(): String = when (this) {
     is SearchResult.AniList -> {
         val parts = mutableListOf<String>()
         anime.format?.let { parts.add(it) }
-        anime.episodes?.let { parts.add("$it ep") } ?: anime.seasonYear?.let { parts.add(it.toString()) }
+        anime.episodeCount?.let { parts.add("$it ep") } ?: anime.seasonYear?.let { parts.add(it.toString()) }
         parts.joinToString(" · ")
     }
     // Extension results: no meta line (per owner request — don't show the

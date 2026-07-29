@@ -33,6 +33,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.feature.search.data.RecentSearchesStore
@@ -55,6 +56,17 @@ import app.confused.anikuta.feature.search.viewmodel.SearchViewModel
  * Tapping an AniList result → [onOpenAnime] (opens the existing detail page).
  * Tapping an Extension result → [onOpenExtensionResult] (starts the linking
  * flow — see ExtensionLinkingSheet).
+ *
+ * Phase 7 (ADR-041): the AniList tab now routes through [MetadataProviderRegistry]
+ * → `SearchProvider` / `HomeFeedProvider` (was direct `AniListApi` calls). The
+ * `anilistApi` parameter is retained — `ExtensionLinkingViewModel` (separate
+ * VM) still calls `anilistApi.searchAnime` directly for the linking flow, so
+ * the dep is wired through. The search results on this screen itself are
+ * returned as [app.confused.anikuta.core.common.model.details.UnifiedAnime];
+ * `UnifiedAnime.anilistId` is nullable in the abstract contract but always
+ * non-null for AniList-sourced results, so [onOpenAnime] is invoked
+ * defensively via `result.id?.let { onOpenAnime(it) }` (skips items with no
+ * anilistId — shouldn't happen for AniList).
  */
 @Composable
 fun SearchScreen(
@@ -63,6 +75,7 @@ fun SearchScreen(
     sourceMatcher: SourceMatcher,
     recentsStore: RecentSearchesStore,
     uiPreferences: SearchUiPreferences,
+    registry: MetadataProviderRegistry,
     onOpenAnime: (Int) -> Unit,
     onOpenExtensionResult: (SearchResult.Extension) -> Unit,
 ) {
@@ -76,6 +89,7 @@ fun SearchScreen(
                 sourceMatcher = sourceMatcher,
                 recentsStore = recentsStore,
                 uiPreferences = uiPreferences,
+                registry = registry,
             ) as T
         },
     )
@@ -99,7 +113,12 @@ fun SearchScreen(
         onToggleRecentsCollapsed = vm::onToggleRecentsCollapsed,
         onResultTap = { result ->
             when (result) {
-                is SearchResult.AniList -> onOpenAnime(result.id)
+                // Phase 7: SearchResult.AniList.id is now Int? (was Int). For
+                // AniList-sourced results the anilistId is always non-null, but
+                // the abstract provider contract allows null (a future MAL/TMDB
+                // provider might not expose an AniList ID). Skip the tap if null
+                // — the card is still rendered but doesn't navigate.
+                is SearchResult.AniList -> result.id?.let { onOpenAnime(it) }
                 is SearchResult.Extension -> onOpenExtensionResult(result)
             }
         },

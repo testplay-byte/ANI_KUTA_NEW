@@ -4,7 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
 import app.confused.anikuta.core.anilist.api.AniListApi
-import app.confused.anikuta.core.anilist.model.AniListAnime
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
+import app.confused.anikuta.core.providerapi.HomeFeedProvider
+import app.confused.anikuta.core.providerapi.MetadataCapability
+import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
+import app.confused.anikuta.core.providerapi.SearchFilters as ProviderSearchFilters
+import app.confused.anikuta.core.providerapi.SearchProvider
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.feature.search.data.RecentSearchesStore
@@ -24,7 +29,10 @@ import kotlinx.coroutines.withContext
 /**
  * The search source the user has selected on the Search page.
  *
- * - [ANILIST] — searches AniList via [AniListApi]. Results are [AniListAnime].
+ * - [ANILIST] — searches the active metadata provider (via
+ *   [MetadataProviderRegistry] → [SearchProvider]). Today AniList is the sole
+ *   registered provider; adding MAL/TMDB later = one module + one Koin line
+ *   (ADR-041). Results are [UnifiedAnime] (Phase 7 — was `AniListAnime`).
  * - [EXTENSION] — searches a single extension source via [SourceMatcher].
  *   Results are [SAnime] (extension-native; not AniList anime). Tapping one
  *   triggers the extension→AniList linking flow (see ExtensionLinkingSheet).
@@ -32,15 +40,23 @@ import kotlinx.coroutines.withContext
 enum class SearchSource { ANILIST, EXTENSION }
 
 /**
- * A single result item — either an AniList anime or an extension anime.
+ * A single result item — either an AniList/metadata-provider anime or an
+ * extension anime.
  *
  * The UI renders both in the same ResultsCard grid; this sealed type lets the
  * card stay generic while preserving the underlying object for the tap handler
  * (AniList → open detail by ID; Extension → start linking flow).
+ *
+ * NOTE: Phase 7 changed [AniList] to wrap [UnifiedAnime] (was `AniListAnime`).
+ * `UnifiedAnime.anilistId` is nullable in the abstract contract (non-null for
+ * AniList-sourced items; null for hypothetical future providers that don't
+ * expose an AniList ID). For AniList-sourced search results this is always
+ * non-null; callers null-check defensively before navigating.
  */
 sealed class SearchResult {
-    data class AniList(val anime: AniListAnime) : SearchResult() {
-        val id: Int get() = anime.id
+    data class AniList(val anime: UnifiedAnime) : SearchResult() {
+        /** The AniList media ID, or null if the provider didn't supply one. */
+        val id: Int? get() = anime.anilistId
     }
 
     data class Extension(
@@ -77,6 +93,10 @@ enum class ExtensionRowKind(val label: String) {
  * - `pendingFilters` — what the FilterSheet edits locally; only synced to
  *   `appliedFilters` when the user taps "Apply filters" (per owner request:
  *   "it was processing the results even before I clicked the apply button").
+ *
+ * NOTE: this is the UI-side filter model. The provider-side filter model is
+ * [ProviderSearchFilters] (in `:core:provider-api`); [toProviderFilters] maps
+ * between them at the call site.
  */
 data class SearchFilters(
     val genres: Set<String> = emptySet(),
@@ -134,8 +154,10 @@ private const val MIN_SHEET_DELAY_MS = 400L
  * The ViewModel for the Search page.
  *
  * Orchestrates:
- * - AniList search (debounced) — [AniListApi.searchAnime] for plain query,
- *   [AniListApi.searchAnimeWithFilters] when filters/sort are active.
+ * - AniList / metadata-provider search (debounced) — Phase 7 routes through
+ *   [MetadataProviderRegistry] → [SearchProvider]. Plain query →
+ *   [SearchProvider.search]; filtered query → [SearchProvider.searchWithFilters];
+ *   blank query (no filters) → [HomeFeedProvider.fetchPopular] (popular fallback).
  *   Supports pagination (loads page N on scroll-to-bottom, appends to results).
  * - Extension search — [SourceMatcher.searchOneSource] for the selected source.
  * - Extension default view (Popular + Latest) — calls each trusted source's
@@ -147,6 +169,11 @@ private const val MIN_SHEET_DELAY_MS = 400L
  * - Buffered filters — the FilterSheet edits a pending copy; only "Apply"
  *   syncs it to the applied filters + triggers a re-search.
  *
+ * [anilistApi] is retained as a constructor dep for the linking flow
+ * (`ExtensionLinkingViewModel` uses `anilistApi.searchAnime` to find candidate
+ * AniList entries to link an extension anime to). The actual search results
+ * shown on this page are routed through the provider abstraction.
+ *
  * All network/source calls run on `Dispatchers.IO`.
  */
 class SearchViewModel(
@@ -155,6 +182,7 @@ class SearchViewModel(
     private val sourceMatcher: SourceMatcher,
     private val recentsStore: RecentSearchesStore,
     private val uiPreferences: SearchUiPreferences,
+    private val registry: MetadataProviderRegistry,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -300,21 +328,14 @@ class SearchViewModel(
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    if (state.filters.isEmpty) {
-                        anilistApi.searchAnime(state.query.trim(), page = nextPage, perPage = PAGE_SIZE)
+                    val searchProvider = registry.forCapability<SearchProvider>(MetadataCapability.SEARCH)
+                    if (searchProvider == null) {
+                        Log.w(TAG, "onLoadMore: no SearchProvider registered")
+                        emptyList()
+                    } else if (state.filters.isEmpty) {
+                        searchProvider.search(state.query.trim(), page = nextPage, perPage = PAGE_SIZE)
                     } else {
-                        anilistApi.searchAnimeWithFilters(
-                            query = state.query.ifBlank { null },
-                            page = nextPage,
-                            perPage = PAGE_SIZE,
-                            genres = state.filters.genres,
-                            year = state.filters.year,
-                            season = state.filters.season,
-                            format = state.filters.format,
-                            status = state.filters.status,
-                            sort = state.sort,
-                            minScore = state.filters.minScore,
-                        )
+                        searchProvider.searchWithFilters(state.filters.toProviderFilters(state, nextPage))
                     }
                 }
             }
@@ -354,27 +375,53 @@ class SearchViewModel(
         }
     }
 
-    /** AniList: popular (blank query, no filters) or search (non-blank) or filtered search. */
+    /**
+     * AniList / metadata-provider search: popular (blank query, no filters) or
+     * search (non-blank) or filtered search.
+     *
+     * Routed through [MetadataProviderRegistry]:
+     *  - Blank query + no filters → [HomeFeedProvider.fetchPopular] (via HOME_FEED capability).
+     *  - Any filters active → [SearchProvider.searchWithFilters].
+     *  - Plain query → [SearchProvider.search].
+     *
+     * If the active provider is unavailable, the registry's fallback chain
+     * returns null and we surface a friendly error. Today AniList is the only
+     * registered provider; adding MAL/TMDB later = one module + one Koin line.
+     */
     private suspend fun runAniListSearch(state: SearchUiState) {
         _uiState.update { it.copy(loading = true, error = null) }
         val result = runCatching {
             withContext(Dispatchers.IO) {
                 if (state.query.isBlank() && state.filters.isEmpty) {
-                    anilistApi.fetchPopular(perPage = PAGE_SIZE)
+                    // Popular fallback — uses HomeFeedProvider, NOT SearchProvider
+                    // (matches the original `anilistApi.fetchPopular` semantics).
+                    val homeProvider = registry.forCapability<HomeFeedProvider>(MetadataCapability.HOME_FEED)
+                    if (homeProvider == null) {
+                        Log.w(TAG, "runAniListSearch: no HomeFeedProvider registered for popular fetch")
+                        emptyList()
+                    } else {
+                        Log.d(TAG, "runAniListSearch: fetchPopular via ${homeProvider.displayName}")
+                        homeProvider.fetchPopular(perPage = PAGE_SIZE)
+                    }
                 } else if (!state.filters.isEmpty) {
-                    anilistApi.searchAnimeWithFilters(
-                        query = state.query.ifBlank { null },
-                        perPage = PAGE_SIZE,
-                        genres = state.filters.genres,
-                        year = state.filters.year,
-                        season = state.filters.season,
-                        format = state.filters.format,
-                        status = state.filters.status,
-                        sort = state.sort,
-                        minScore = state.filters.minScore,
-                    )
+                    val searchProvider = registry.forCapability<SearchProvider>(MetadataCapability.SEARCH)
+                    if (searchProvider == null) {
+                        Log.w(TAG, "runAniListSearch: no SearchProvider registered for filtered search")
+                        emptyList()
+                    } else {
+                        Log.d(TAG, "runAniListSearch: searchWithFilters via ${searchProvider.displayName} " +
+                            "(query='${state.query}', ${state.filters.activeCount} filters)")
+                        searchProvider.searchWithFilters(state.filters.toProviderFilters(state))
+                    }
                 } else {
-                    anilistApi.searchAnime(state.query.trim(), perPage = PAGE_SIZE)
+                    val searchProvider = registry.forCapability<SearchProvider>(MetadataCapability.SEARCH)
+                    if (searchProvider == null) {
+                        Log.w(TAG, "runAniListSearch: no SearchProvider registered for plain search")
+                        emptyList()
+                    } else {
+                        Log.d(TAG, "runAniListSearch: search('${state.query}') via ${searchProvider.displayName}")
+                        searchProvider.search(state.query.trim(), perPage = PAGE_SIZE)
+                    }
                 }
             }
         }
@@ -512,4 +559,28 @@ class SearchViewModel(
         searchJob?.cancel()
         extensionDefaultJob?.cancel()
     }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Maps the UI-side [SearchFilters] + the current state (query, page, sort)
+     * to the provider-side [ProviderSearchFilters] consumed by
+     * [SearchProvider.searchWithFilters].
+     *
+     * `perPage` defaults to [PAGE_SIZE] for the initial search; paginated calls
+     * override `page` via the [page] parameter.
+     */
+    private fun SearchFilters.toProviderFilters(state: SearchUiState, page: Int = 1): ProviderSearchFilters =
+        ProviderSearchFilters(
+            query = state.query.ifBlank { null },
+            page = page,
+            perPage = PAGE_SIZE,
+            genres = genres.toList(),
+            year = year,
+            season = season,
+            format = format,
+            status = status,
+            sort = state.sort,
+            minScore = minScore,
+        )
 }

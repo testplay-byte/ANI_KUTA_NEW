@@ -72,6 +72,12 @@ class AniListMetadataProvider(
     override suspend fun fetchPopular(page: Int, perPage: Int): List<UnifiedAnime> =
         api.fetchPopular(page, perPage).map { it.toUnifiedAnime() }
 
+    override fun getCachedTrending(): List<UnifiedAnime>? =
+        api.getCachedTrending()?.map { it.toUnifiedAnime() }
+
+    // getCachedPopular() returns null (default) — AniListApi doesn't cache popular.
+    // The BrowseScreen only uses getCachedTrending() for SWR; popular is fetched on demand.
+
     // ── SearchProvider ──
 
     override suspend fun search(query: String, page: Int, perPage: Int): List<UnifiedAnime> =

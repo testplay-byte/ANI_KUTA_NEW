@@ -14,6 +14,12 @@ dependencies {
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
     implementation(projects.core.sourceApi)
+    // Phase 7: SearchViewModel resolves the active SearchProvider + HomeFeedProvider
+    // (popular fallback for blank queries) through the MetadataProviderRegistry.
+    // AniList stays as a constructor dep for the linking flow (searchAnime in
+    // ExtensionLinkingViewModel) — adding MAL/TMDB later = one module + one
+    // Koin line (ADR-041).
+    implementation(projects.core.providerApi)
 
     // Data layer — extension manager + source matcher + the new link store
     implementation(projects.data.extension)
