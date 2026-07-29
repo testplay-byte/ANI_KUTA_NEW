@@ -84,15 +84,20 @@ object DynamicProgressTracker {
         }
 
         // ── Case 2: total is unknown (-1) or too small to be real — estimate ──
-        // Use the owner's "50MB ahead" strategy: the displayed total is always
-        // 50MB ahead of the current downloaded bytes. This way:
+        // Use the owner's "10MB ahead" strategy: the displayed total is always
+        // 10MB ahead of the current downloaded bytes. This way:
         // - The user sees real downloaded bytes (accurate)
         // - The total grows as the download progresses (never stuck)
-        // - The progress bar advances (downloaded / (downloaded + 50MB))
+        // - The progress bar advances (downloaded / (downloaded + 10MB))
         // - When the download completes, the tracker stops + the queue sets 100%
-        val aheadBytes = 50L * 1024 * 1024 // 50MB ahead
+        //
+        // Changed from 50MB to 10MB per owner request (2026-07-29): 50MB was
+        // too much — the progress bar moved too slowly for typical episodes
+        // (30-80MB). 10MB gives a more responsive feel while still ensuring
+        // the bar never shows 100% prematurely.
+        val aheadBytes = 10L * 1024 * 1024 // 10MB ahead
         val estimate = if (previousEstimate > 0) {
-            // Use the previous estimate, but ensure it's always at least 50MB ahead
+            // Use the previous estimate, but ensure it's always at least 10MB ahead
             maxOf(previousEstimate, downloaded + aheadBytes)
         } else {
             downloaded + aheadBytes
