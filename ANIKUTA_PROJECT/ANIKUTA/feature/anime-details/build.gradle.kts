@@ -17,6 +17,12 @@ dependencies {
     implementation(projects.core.sourceApi)
     // Extension manager — for AnimeExtensionManager + SourceMatcher (Step 5)
     implementation(projects.data.extension)
+    // DOWNLOAD-IDENTITY-STORAGE-UPDATE: needed by switchExtension to update
+    // the on-disk identity.json when the user switches extension source.
+    // The manager is resolved via Koin's GlobalContext (service-locator
+    // pattern) to avoid threading it through the VM constructor — the VM
+    // has too many deps already + the identity update is best-effort.
+    implementation(projects.core.downloadIdentity)
 
     // Koin (for koinInject of AnimeRepository + CategoryRepository)
     implementation(platform(libs.koin.bom))

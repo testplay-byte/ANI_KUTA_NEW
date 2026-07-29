@@ -216,38 +216,4 @@ private fun AppOverlays(appController: AppController) {
             onDismiss = { appController.dismissDownloadPicker() },
         )
     }
-
-    // ── 4. Unlink download action dialog ──
-    // Shows when the user taps "Unlink from AniList" and the anime has downloaded
-    // episodes. Prompts: "Transfer downloads" or "Delete downloads".
-    val unlinkAction = appController.pendingUnlinkDownloadAction
-    if (unlinkAction != null) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { appController.cancelUnlinkDownloadAction() },
-            title = { androidx.compose.material3.Text("Downloaded Episodes Found") },
-            text = {
-                androidx.compose.material3.Text(
-                    "'${unlinkAction.animeTitle}' has downloaded episodes.\n\n" +
-                        "Transfer: keeps the downloaded files (they'll be re-keyed to the " +
-                        "extension-only entry).\n\n" +
-                        "Delete: permanently removes all downloaded episodes for this anime.",
-                )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    appController.confirmUnlinkWithDownloadAction(deleteDownloads = false)
-                }) { androidx.compose.material3.Text("Transfer") }
-            },
-            dismissButton = {
-                androidx.compose.foundation.layout.Row {
-                    androidx.compose.material3.TextButton(onClick = {
-                        appController.confirmUnlinkWithDownloadAction(deleteDownloads = true)
-                    }) { androidx.compose.material3.Text("Delete") }
-                    androidx.compose.material3.TextButton(onClick = {
-                        appController.cancelUnlinkDownloadAction()
-                    }) { androidx.compose.material3.Text("Cancel") }
-                }
-            },
-        )
-    }
 }

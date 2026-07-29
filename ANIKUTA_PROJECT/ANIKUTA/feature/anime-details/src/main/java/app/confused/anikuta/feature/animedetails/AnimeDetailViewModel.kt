@@ -351,6 +351,10 @@ class AnimeDetailViewModel(
         Log.i(TAG, "Switching extension to '${source.name}' for '${sAnime.title}'")
         val anilistId = currentAnilistId()
         val oldRequest = activeRequest
+        // Hoisted to outer scope so the identity.json update below can read
+        // the old sourceId/sourceUrl (used to compute the OLD contentId for
+        // the folder lookup).
+        val oldExt = oldRequest as? DetailsRequest.ByExtension
 
         // Save the new source link (so re-open skips re-matching).
         // Phase 4: SourceLinkStore + sourcePrefKey now keyed by content_id.
@@ -364,7 +368,6 @@ class AnimeDetailViewModel(
             // so the library entry follows the new source (preserves _id, favorite,
             // category membership). Without this, the old library entry stays pointing
             // at the uninstalled source + a NEW entry is created for the new source.
-            val oldExt = oldRequest as? DetailsRequest.ByExtension
             if (oldExt != null) {
                 viewModelScope.launch {
                     try {
@@ -386,6 +389,59 @@ class AnimeDetailViewModel(
                 }
             }
         }
+
+        // ── DOWNLOAD-IDENTITY-STORAGE-UPDATE: rewrite the folder's identity.json ──
+        // The source changed (extension switch); the folder's identity.json needs
+        // its `sourceId` + `sourceUrl` fields updated so the on-disk record
+        // matches the new extension. The `contentId` field is preserved as-is —
+        // for linked anime (`al:X`) the contentId is source-independent by
+        // construction; for unlinked anime (`aniyomi:OLD_SID:OLD_URL`) the
+        // contentId STAYS at the old value (this is a known limitation of the
+        // current implementation: the on-disk identity's contentId becomes
+        // stale relative to the system's notion of the contentId for unlinked
+        // anime after a source switch — see worklog entry for
+        // DOWNLOAD-IDENTITY-STORAGE-UPDATE for details).
+        //
+        // Runs on Dispatchers.IO (identity.json write is synchronous SAF I/O).
+        // Best-effort: failures are logged but don't block the source switch
+        // (the UI's sourceId/url are already updated by the code above; a
+        // missed identity write means the folder would be findable by the OLD
+        // identity only, which the user can recover by re-linking).
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val identityManager = org.koin.core.context.GlobalContext.get()
+                        .get<app.confused.anikuta.core.downloadidentity.DownloadIdentityManager>()
+                    val contentId = if (anilistId != null) {
+                        "al:$anilistId"
+                    } else if (oldExt != null) {
+                        "aniyomi:${oldExt.sourceId}:${oldExt.animeUrl}"
+                    } else {
+                        null
+                    }
+                    if (contentId != null) {
+                        val newIdentity = app.confused.anikuta.core.downloadidentity.DownloadIdentity(
+                            contentId = contentId,
+                            anilistId = anilistId,
+                            sourceId = source.id,
+                            sourceUrl = sAnime.url,
+                            title = sAnime.title,
+                        )
+                        val updated = identityManager.updateIdentity(contentId, newIdentity)
+                        Log.i(TAG, "switchExtension: identity.json update " +
+                            "${if (updated) "succeeded" else "skipped (no folder found)"} " +
+                            "(contentId=$contentId, new sourceId=${source.id}, new url=${sAnime.url})")
+                    } else {
+                        Log.w(TAG, "switchExtension: cannot compute contentId for identity " +
+                            "update (anilistId=$anilistId, oldExt=$oldExt) — skipping")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "switchExtension: identity.json update failed (non-fatal) — " +
+                        "downloads may keep the old source identity", e)
+                }
+            }
+        }
+
         // Update the active request to the new extension (for future "View from Extension").
         activeRequest = DetailsRequest.ByExtension(
             sourceId = source.id,

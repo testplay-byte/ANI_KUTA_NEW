@@ -40,6 +40,13 @@ import app.confused.anikuta.core.download.advanced.DownloadResumeManager
  * @param okHttp Shared OkHttp client (connection-pooled; injected by DI).
  * @param preferences Download settings (folder URI, method, Wi-Fi-only, concurrency).
  * @param store The persisted task list (injected so it shares the PreferenceStore).
+ * @param storage The SAF storage provider. DOWNLOAD-IDENTITY-STORAGE-UPDATE:
+ *   previously constructed inline (`DownloadStorageProvider(appContext, preferences)`),
+ *   now injected via Koin so that the same instance is shared with
+ *   `DownloadMigration` + the `DownloadIdentityManager`'s `animeBaseDir` lambda.
+ *   The injected instance carries the wired-up `DownloadIdentityManager`
+ *   (see `DownloadAppModule`), enabling identity.json writes on folder creation
+ *   + identity-aware folder lookup in [isEpisodeDownloaded] etc.
  * @param scope Long-lived coroutine scope (default: app-scoped IO supervisor).
  */
 class DefaultDownloadManager(
@@ -50,6 +57,7 @@ class DefaultDownloadManager(
     private val tempCache: TempDownloadCache,
     private val advancedDownloader: AdvancedHttpDownloader,
     private val resumeManager: DownloadResumeManager,
+    private val storage: DownloadStorageProvider,
     scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
             DownloadLogger.e("Uncaught coroutine exception in download scope (suppressed)", e)
@@ -58,7 +66,6 @@ class DefaultDownloadManager(
 ) : DownloadManager {
 
     private val appContext = context.applicationContext
-    private val storage = DownloadStorageProvider(appContext, preferences)
     private val downloader = HttpDownloader(okHttp, storage, tempCache, preferences, advancedDownloader)
     private val notifier = DownloadNotificationManager(appContext)
 

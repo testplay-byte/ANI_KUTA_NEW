@@ -4,6 +4,7 @@ import android.content.Context
 import app.confused.anikuta.core.download.DefaultDownloadManager
 import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadPreferences
+import app.confused.anikuta.core.download.DownloadStorageProvider
 import app.confused.anikuta.core.download.DownloadStore
 import app.confused.anikuta.core.download.HttpDownloader
 import app.confused.anikuta.core.download.ServerDiscoveryStore
@@ -35,6 +36,15 @@ import java.util.concurrent.TimeUnit
  *    `DownloadPreferences.method()` pref — ADR-020 future-proofing).
  *
  * Added to `App.kt`'s `startKoin { modules(...) }` list.
+ *
+ * DOWNLOAD-IDENTITY-STORAGE-UPDATE: [DownloadStorageProvider] is NO LONGER
+ * registered here — it moved to `:app`'s `DownloadAppModule` so it can be
+ * wired up with the `DownloadIdentityManager` (which itself needs the
+ * provider via an `animeBaseDir` lambda — the two are mutually dependent at
+ * construction-time, so they live in the same module).
+ * `DefaultDownloadManager`'s constructor now takes `storage: DownloadStorageProvider`
+ * via `get()` — Koin resolves it from the `:app` module at runtime (both
+ * modules are loaded together in `App.kt`'s `startKoin`).
  */
 val downloadModule: Module = module {
     single { DownloadPreferences(get<PreferenceStore>()) }
@@ -66,6 +76,9 @@ val downloadModule: Module = module {
             tempCache = get(),
             advancedDownloader = get(),
             resumeManager = get(),
+            // Resolved from :app's DownloadAppModule (which owns the
+            // DownloadStorageProvider single + injects the DownloadIdentityManager).
+            storage = get<DownloadStorageProvider>(),
         )
     }
 }

@@ -47,6 +47,17 @@ class App : Application() {
         // can hand the Application context to ConfigurableAnimeSource extensions.
         ExtensionAppHolder.init(this)
 
+        // ── :core:download-identity — provide the app context for SAF/ContentResolver ──
+        // AppContextProvider is a tiny object singleton used by DownloadIdentityStore
+        // (which reads/writes identity.json inside each download folder via SAF).
+        // MUST be initialized before any DownloadIdentityManager call (e.g. the
+        // DownloadMigration phase-6 step that runs below, or any link/unlink/switch
+        // path that calls DownloadIdentityManager.updateIdentity). Initialized here,
+        // BEFORE Koin starts, so the context is available as soon as DI constructs
+        // DownloadIdentityManager.
+        app.confused.anikuta.core.downloadidentity.AppContextProvider.init(this)
+        Log.i(TAG, "AppContextProvider initialized (for :core:download-identity)")
+
         // ── Injekt singletons (for extension compat — ADR-029) ──
         // We use Koin for our own DI (ADR-023), but extensions call
         // Injekt.get<T>() for several host-provided singletons. These MUST be

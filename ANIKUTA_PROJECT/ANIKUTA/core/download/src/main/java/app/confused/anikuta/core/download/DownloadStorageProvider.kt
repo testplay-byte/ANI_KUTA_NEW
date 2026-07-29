@@ -6,6 +6,9 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
+import app.confused.anikuta.core.downloadidentity.DownloadIdentity
+import app.confused.anikuta.core.downloadidentity.DownloadIdentityManager
+import app.confused.anikuta.core.downloadidentity.DownloadIdentityStore
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.OutputStream
@@ -42,6 +45,20 @@ import java.io.OutputStream
 class DownloadStorageProvider(
     private val context: Context,
     private val preferences: DownloadPreferences,
+    /**
+     * High-level manager for per-folder `identity.json` files.
+     *
+     * When non-null, [findAnimeDir] delegates to it (identity.json scan + legacy
+     * suffix fallback), and [ensureEpisodeDir] writes an `identity.json` into
+     * the anime folder on creation. When null, the provider falls back to the
+     * pre-refactor suffix-match behavior (legacy folders only) — kept for
+     * backward compat with any caller that doesn't wire the manager in.
+     *
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: this is the seam that decouples folder
+     * names from anime identity. Folder names are now just the sanitized title
+     * (no `[contentId]` bracket suffix); all identity lives in identity.json.
+     */
+    private val downloadIdentityManager: DownloadIdentityManager? = null,
 ) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
@@ -80,21 +97,44 @@ class DownloadStorageProvider(
     /** True iff a writable download folder is configured. */
     fun isFolderReady(): Boolean = rootTree() != null
 
+    /**
+     * The `anime/` directory inside the download root (`<root>/ANIKUTA/downloads/anime/`).
+     *
+     * Creates the directory chain if missing. Returns null if no download
+     * folder is configured or any segment couldn't be created.
+     *
+     * Used by [DownloadIdentityManager] (via the `animeBaseDir` lambda wired in
+     * `DownloadAppModule`) to scan all anime folders for identity.json files.
+     */
+    fun getAnimeBaseDir(): DocumentFile? {
+        val root = rootTree() ?: return null
+        val anikutaDir = ensureDir(root, "ANIKUTA") ?: return null
+        val downloadsDir = ensureDir(anikutaDir, "downloads") ?: return null
+        return ensureDir(downloadsDir, "anime")
+    }
+
     // ── Path/folder-name helpers ──
 
     /**
-     * `"Jujutsu Kaisen [al-101522]"` — title sanitised for filesystem +
-     * content_id bracket (sanitised: `:` → `-` so the folder name is
-     * filesystem-safe + the `endsWith` lookups in [deleteAnime] +
-     * [findEpisodeDirByNumber] work).
+     * `"Jujutsu Kaisen"` — title sanitised for filesystem use. NO content_id
+     * bracket (the identity lives in `identity.json` next to the episode
+     * folders, NOT in the folder name).
      *
-     * Phase 6 (ADR-050): the bracket now contains the content_id (e.g.,
-     * `al-154587` for AniList-linked, `aniyomi-123-https-...` for unlinked)
-     * instead of the old anilistId.
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: previously returned
+     * `"$safeTitle [${sanitizeContentIdForFolder(contentId)}]"` (e.g.
+     * `"Jujutsu Kaisen [al-101522]"`). The bracket suffix is now redundant —
+     * folder lookup goes through [findAnimeDir], which scans `anime/` + reads
+     * each folder's `identity.json` (with a legacy suffix-match fallback for
+     * folders created before this refactor).
+     *
+     * Title collisions (two anime with the same sanitized title) are tolerated
+     * — the folders coexist on disk + are disambiguated by identity.json. This
+     * is the whole point of the refactor: the folder name is human-readable,
+     * identity is machine-readable, and they no longer fight each other.
      */
     fun animeFolderName(anime: DownloadAnimeInfo): String {
         val safeTitle = sanitizeFileName(anime.title.ifBlank { "Unknown" })
-        return "$safeTitle [${sanitizeContentIdForFolder(anime.contentId)}]"
+        return safeTitle
     }
 
     /**
@@ -124,8 +164,28 @@ class DownloadStorageProvider(
 
     // ── Directory creation ──
 
-    /** Ensures `<root>/ANIKUTA/downloads/anime/<Anime Title [id]>/Episode NNN/data/subtitles/` exists. Returns the Episode dir. */
-    fun ensureEpisodeDir(anime: DownloadAnimeInfo, episode: DownloadEpisodeInfo): DocumentFile? {
+    /**
+     * Ensures `<root>/ANIKUTA/downloads/anime/<Anime Title>/Episode NNN/data/subtitles/`
+     * exists. Returns the Episode dir.
+     *
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: after creating the anime folder
+     * (`showDir`), writes an `identity.json` into it on first creation. The
+     * identity carries the anime's contentId + sourceId + sourceUrl + title +
+     * cover info, decoupling the folder NAME (just the title) from the folder
+     * IDENTITY (everything else). Subsequent link/unlink/switch operations
+     * update identity.json in place — no folder rename, no orphaned downloads.
+     *
+     * The `sourceId` + `sourceUrl` params carry the request's source identity.
+     * They default to `0L` + `""` for backward compat with callers that don't
+     * have a DownloadRequest handy (the identity.json will be backfilled on
+     * the next link/unlink/switch operation).
+     */
+    fun ensureEpisodeDir(
+        anime: DownloadAnimeInfo,
+        episode: DownloadEpisodeInfo,
+        sourceId: Long = 0L,
+        sourceUrl: String = "",
+    ): DocumentFile? {
         val root = rootTree() ?: run {
             DownloadLogger.e("ensureEpisodeDir: no download folder configured")
             return null
@@ -134,20 +194,50 @@ class DownloadStorageProvider(
         val downloadsDir = ensureDir(anikutaDir, "downloads") ?: return null
         val animeDir = ensureDir(downloadsDir, "anime") ?: return null
         val showDir = ensureDir(animeDir, animeFolderName(anime)) ?: return null
+
+        // ── Write identity.json on first folder creation ──
+        // The manager's ensureIdentity is idempotent: if identity.json already
+        // exists (e.g. re-downloading an episode into an existing folder), it
+        // updates fields that changed (cover URL/color, title) and preserves
+        // the createdAt + migration history. If the manager is null (legacy
+        // path), identity.json is NOT written — the folder will be found via
+        // the suffix-match fallback in [findAnimeDir] (which the manager also
+        // uses when present).
+        if (downloadIdentityManager != null && !DownloadIdentityStore.exists(showDir)) {
+            val identity = DownloadIdentity(
+                contentId = anime.contentId,
+                sourceId = sourceId,
+                sourceUrl = sourceUrl,
+                title = anime.title,
+                coverUrl = anime.coverUrl,
+                coverColor = anime.coverColor?.let { String.format("#%06X", it) },
+            )
+            downloadIdentityManager.ensureIdentity(showDir, identity)
+            DownloadLogger.i("ensureEpisodeDir: wrote identity.json " +
+                "(contentId='${anime.contentId}', title='${anime.title}', " +
+                "sourceId=$sourceId)")
+        }
+
         val epDir = ensureDir(showDir, episodeFolderName(episode)) ?: return null
         ensureDir(epDir, "data") ?: return null
         ensureDir(epDir, "data/subtitles") ?: return null
         return epDir
     }
 
-    /** Finds (without creating) the Episode dir, or null if it doesn't exist. */
+    /**
+     * Finds (without creating) the Episode dir, or null if it doesn't exist.
+     *
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: now delegates the anime-folder lookup
+     * to [findAnimeDir] (identity.json scan + legacy suffix fallback) instead
+     * of an exact-name match on `animeFolderName(anime)`. This is necessary
+     * because `animeFolderName` no longer includes the `[contentId]` bracket,
+     * so an exact-name match would miss legacy folders (which still have the
+     * bracket). The identity-aware lookup handles both new + legacy folders
+     * uniformly.
+     */
     fun findEpisodeDir(anime: DownloadAnimeInfo, episode: DownloadEpisodeInfo): DocumentFile? {
-        val root = rootTree() ?: return null
-        return root.findFile("ANIKUTA")
-            ?.findFile("downloads")
-            ?.findFile("anime")
-            ?.findFile(animeFolderName(anime))
-            ?.findFile(episodeFolderName(episode))
+        val animeDir = findAnimeDir(anime.contentId) ?: return null
+        return animeDir.findFile(episodeFolderName(episode))?.takeIf { it.isDirectory }
     }
 
     /**
@@ -173,8 +263,10 @@ class DownloadStorageProvider(
         tempSubtitlesDir: java.io.File,
         tempMetadataFile: java.io.File,
         videoExtension: String,
+        sourceId: Long = 0L,
+        sourceUrl: String = "",
     ): PublishResult {
-        val epDir = ensureEpisodeDir(anime, episode)
+        val epDir = ensureEpisodeDir(anime, episode, sourceId = sourceId, sourceUrl = sourceUrl)
             ?: return PublishResult.Error("Download folder not configured or not writable")
 
         try {
@@ -341,16 +433,15 @@ class DownloadStorageProvider(
     /**
      * Checks if the anime folder has no remaining episode folders. If empty,
      * deletes it. Called after [deleteEpisode] + after [deleteAnimeDownloads].
+     *
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: now uses [findAnimeDir] (identity.json
+     * scan + legacy suffix fallback) instead of an exact-name match on
+     * `animeFolderName(anime)`. This keeps cleanup working for both new
+     * (title-only names) + legacy (`Title [contentId]`) folders.
      */
     fun cleanupEmptyAnimeFolder(anime: DownloadAnimeInfo) {
         try {
-            val root = rootTree() ?: return
-            val animeDir = root.findFile("ANIKUTA")
-                ?.findFile("downloads")
-                ?.findFile("anime")
-                ?.listFiles()
-                ?.firstOrNull { it.name == animeFolderName(anime) }
-                ?: return
+            val animeDir = findAnimeDir(anime.contentId) ?: return
 
             // Check if there are any remaining episode folders (or any files).
             val remaining = animeDir.listFiles().filterNotNull()
@@ -363,12 +454,17 @@ class DownloadStorageProvider(
         }
     }
 
-    /** Deletes the entire anime folder (all episodes). */
     /**
      * Delete the entire anime folder (all episodes) by content_id.
      *
      * Phase 6 (ADR-050): takes [contentId] (String) instead of anilistId (Int).
-     * The folder suffix is the sanitized content_id (e.g., `[al-154587]`).
+     * The folder is located via [findAnimeDir] (identity.json scan + legacy
+     * suffix fallback).
+     *
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: the `animeTitle` parameter is unused
+     * (kept for source-compat with [DefaultDownloadManager.deleteAnimeDownloads]
+     * — the legacy caller passes it for log context but [findAnimeDir] keys
+     * purely off `contentId`).
      */
     fun deleteAnime(contentId: String, animeTitle: String): Boolean {
         val root = rootTree() ?: return false
@@ -380,14 +476,37 @@ class DownloadStorageProvider(
     }
 
     /**
-     * Find the anime directory by content_id (scans the `anime/` folder for a
-     * directory whose name ends with `[sanitized-contentId]`).
+     * Find the anime directory by content_id.
      *
-     * Used by [deleteAnime] + the source-switching fix in
-     * [DefaultDownloadManager.isEpisodeDownloaded] (falls back to a filesystem
-     * scan when no in-memory task matches).
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: now delegates to
+     * [DownloadIdentityManager.findAnimeDir] when the manager is wired in
+     * (scans `anime/` + reads each folder's `identity.json`, with a legacy
+     * suffix-match fallback for folders created before this refactor). When
+     * the manager is null (legacy callers / unit tests), falls back directly
+     * to [legacyFindAnimeDir] (suffix match only).
+     *
+     * Used by [deleteAnime] + [findEpisodeDirByNumber] + [findEpisodeDir] +
+     * [cleanupEmptyAnimeFolder]. All four call sites now go through the
+     * identity-aware lookup, so new (title-only) + legacy (`Title [id]`)
+     * folders are handled uniformly.
      */
     fun findAnimeDir(contentId: String): DocumentFile? {
+        return downloadIdentityManager?.findAnimeDir(contentId) ?: legacyFindAnimeDir(contentId)
+    }
+
+    /**
+     * Legacy suffix-match fallback for finding an anime directory by content_id.
+     *
+     * Scans the `anime/` folder for a directory whose name ends with
+     * `[sanitized-contentId]`. Used by [findAnimeDir] when
+     * [downloadIdentityManager] is null, AND as the inner fallback inside
+     * [DownloadIdentityManager.findAnimeDir] itself (for folders created
+     * before the identity.json refactor that haven't been backfilled yet).
+     *
+     * Kept public so the manager can call into it (the manager doesn't have
+     * direct access to the SAF root tree).
+     */
+    fun legacyFindAnimeDir(contentId: String): DocumentFile? {
         val root = rootTree() ?: return null
         val suffix = "[${sanitizeContentIdForFolder(contentId)}]"
         return root.findFile("ANIKUTA")

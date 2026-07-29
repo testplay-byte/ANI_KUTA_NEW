@@ -13,6 +13,8 @@ import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadStatus
 import app.confused.anikuta.core.download.DownloadTask
 import app.confused.anikuta.core.download.ServerDiscoveryStore
+import app.confused.anikuta.core.downloadidentity.DownloadIdentity
+import app.confused.anikuta.core.downloadidentity.DownloadIdentityManager
 import app.confused.anikuta.core.tracker.Tracker
 import app.confused.anikuta.core.tracker.TrackerManager
 import app.confused.anikuta.data.extension.AnimeExtensionManager
@@ -44,7 +46,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -112,6 +113,14 @@ class AppController(
     val themePrefs: app.confused.anikuta.core.preferences.ThemePreferences,
     val linkingPreferences: app.confused.anikuta.core.preferences.LinkingPreferences,
     val animeRepository: AnimeRepository,
+    /**
+     * DOWNLOAD-IDENTITY-STORAGE-UPDATE: high-level manager for per-folder
+     * `identity.json`. Used in [performUnlink] / [onLinked] /
+     * [switchAnilistAnime] to atomically rewrite the folder's identity when
+     * the user links/unlinks/switches — no folder rename needed, so downloads
+     * are NEVER orphaned by an identity change.
+     */
+    val downloadIdentityManager: DownloadIdentityManager,
     private val context: Context,
 ) {
 
@@ -130,20 +139,6 @@ class AppController(
 
     /** Extension → AniList linking sheet target (null = sheet hidden). */
     var linkingTarget by mutableStateOf<Pair<AnimeCatalogueSource, SAnime>?>(null)
-
-    // ── Pending unlink download action ──
-    // When the user taps "Unlink from AniList" and the anime has downloaded episodes,
-    // this state is set with the details. AnikutaRoot observes it + shows an AlertDialog
-    // asking: "Transfer downloads to the extension-only entry, or delete them?"
-    data class UnlinkDownloadAction(
-        val anilistId: Int,
-        val sourceId: Long?,
-        val animeUrl: String?,
-        val animeTitle: String,
-        val hasDownloads: Boolean,
-    )
-    var pendingUnlinkDownloadAction by mutableStateOf<UnlinkDownloadAction?>(null)
-        private set
 
     /** Download video picker sheet target (null = sheet hidden). */
     var downloadPickerTarget by mutableStateOf<EnqueueResult.ShowPicker?>(null)
@@ -352,6 +347,15 @@ class AppController(
      *    if the source extension was uninstalled) with the sourceId + SAnime from the
      *    saved link — so the details page reopens in extension mode.
      *
+     * **DOWNLOAD-IDENTITY-STORAGE-UPDATE:** the old "Transfer or Delete" prompt
+     * (which asked the user what to do with downloaded episodes) is GONE. Now
+     * `performUnlink` silently rewrites the folder's `identity.json` so the
+     * `contentId` changes from `"al:$anilistId"` to `"aniyomi:$sid:$url"` — the
+     * folder itself stays on disk untouched, and is now findable by the new
+     * (post-unlink) contentId. No prompt, no user choice, no orphaned downloads.
+     * If the user wants to actually delete the downloads, they can do so from
+     * the Downloads screen.
+     *
      * @param anilistId the AniList ID to unlink.
      * @param sourceId the extension source ID (if known — otherwise resolved from SourceLinkStore).
      * @param animeUrl the extension anime URL (if known — otherwise resolved from SourceLinkStore).
@@ -365,70 +369,17 @@ class AppController(
         val title = link?.animeTitle ?: "Unknown"
 
         scope.launch {
-            // ── Check if the anime has downloaded episodes ──
-            // If yes, prompt the user: transfer or delete?
-            val hasDownloads = withContext(Dispatchers.IO) {
-                try {
-                    downloadManager.getDownloadedEpisodes(contentId).isNotEmpty()
-                } catch (e: Exception) {
-                    Log.w(TAG, "unlinkFromAniList: failed to check downloads (assuming none)", e)
-                    false
-                }
-            }
-
-            if (hasDownloads) {
-                Log.i(TAG, "unlinkFromAniList: anime has downloaded episodes — prompting user")
-                pendingUnlinkDownloadAction = UnlinkDownloadAction(
-                    anilistId = anilistId,
-                    sourceId = sid,
-                    animeUrl = url,
-                    animeTitle = title,
-                    hasDownloads = true,
-                )
-            } else {
-                // No downloads — proceed directly with the unlink.
-                performUnlink(anilistId, sid, url, title, contentId, deleteDownloads = false)
-            }
+            // DOWNLOAD-IDENTITY-STORAGE-UPDATE: no more "Transfer or Delete"
+            // prompt — just call performUnlink directly. The folder's
+            // identity.json is updated atomically inside performUnlink, so
+            // downloads stay findable by the new (post-unlink) contentId.
+            // No need to check `getDownloadedEpisodes(contentId)` first —
+            // the identity rewrite is a no-op if no folder exists.
+            Log.i(TAG, "unlinkFromAniList: proceeding directly with unlink " +
+                "(anilistId=$anilistId, sid=$sid, url=$url) — identity.json " +
+                "will be updated in performUnlink")
+            performUnlink(anilistId, sid, url, title, contentId)
         }
-    }
-
-    /**
-     * Called by the AnikutaRoot's AlertDialog when the user picks an action
-     * for the downloads during unlink.
-     *
-     * @param deleteDownloads true = delete all downloaded episodes for this anime.
-     *   false = transfer (keep them — the contentId changes from "al:X" to the
-     *   extension's local_id, so the ContentIdMigrator re-keys them).
-     */
-    fun confirmUnlinkWithDownloadAction(deleteDownloads: Boolean) {
-        val action = pendingUnlinkDownloadAction ?: return
-        pendingUnlinkDownloadAction = null
-        val contentId = "al:${action.anilistId}"
-        scope.launch {
-            if (deleteDownloads) {
-                Log.i(TAG, "confirmUnlink: deleting downloads for contentId=$contentId")
-                try {
-                    downloadManager.deleteAnimeDownloads(contentId)
-                } catch (e: Exception) {
-                    Log.e(TAG, "confirmUnlink: failed to delete downloads (non-fatal)", e)
-                }
-            } else {
-                Log.i(TAG, "confirmUnlink: transferring downloads (ContentIdMigrator will re-key)")
-                // The ContentIdMigrator (Phase 5) handles re-keying from "al:X" to the
-                // extension's local_id when the anilist_id is cleared. The downloads stay
-                // on disk; their keys are updated by the migrator.
-                // TODO: trigger ContentIdMigrator.migrate("al:X", localId) here once
-                // the local_id is known. For now, the downloads stay under the old key
-                // — they'll be found by the filesystem fallback in isEpisodeDownloaded.
-            }
-            performUnlink(action.anilistId, action.sourceId, action.animeUrl,
-                action.animeTitle, contentId, deleteDownloads)
-        }
-    }
-
-    /** Cancels the unlink download action dialog (user tapped "Cancel"). */
-    fun cancelUnlinkDownloadAction() {
-        pendingUnlinkDownloadAction = null
     }
 
     private suspend fun performUnlink(
@@ -437,7 +388,6 @@ class AppController(
         url: String?,
         title: String,
         contentId: String,
-        deleteDownloads: Boolean,
     ) {
         try {
             // ── Step 1+2: Clear anilist_id on the library row (transition to extension-only) ──
@@ -451,6 +401,41 @@ class AppController(
             }
         } catch (e: Exception) {
             Log.e(TAG, "performUnlink: failed to clear anilistId (non-fatal)", e)
+        }
+
+        // ── DOWNLOAD-IDENTITY-STORAGE-UPDATE: rewrite identity.json ──
+        // The folder's contentId changes from "al:X" to "aniyomi:sid:url" (the
+        // extension-only identity). This is an atomic JSON rewrite — no folder
+        // rename, no orphans. The on-disk files (video + subtitles + metadata)
+        // are untouched; only identity.json is rewritten. Subsequent
+        // `findAnimeDir("aniyomi:sid:url")` calls will find this folder.
+        //
+        // If sid or url is null (no saved source link), we can't compute the
+        // new contentId — the folder stays under "al:X" (it'll be orphaned
+        // until the user re-links). This is a pre-existing edge case (the old
+        // "Transfer" path also couldn't handle it); logged as a warning.
+        val newContentId = if (sid != null && url != null) "aniyomi:$sid:$url" else null
+        if (newContentId != null) {
+            try {
+                val newIdentity = DownloadIdentity(
+                    contentId = newContentId,
+                    anilistId = null,
+                    sourceId = sid,
+                    sourceUrl = url,
+                    title = title,
+                )
+                val updated = downloadIdentityManager.updateIdentity("al:$anilistId", newIdentity)
+                Log.i(TAG, "performUnlink: identity.json update " +
+                    "${if (updated) "succeeded" else "skipped (no folder found)"} " +
+                    "(al:$anilistId → $newContentId)")
+            } catch (e: Exception) {
+                Log.w(TAG, "performUnlink: identity.json update failed (non-fatal) — " +
+                    "downloads may be orphaned under al:$anilistId", e)
+            }
+        } else {
+            Log.w(TAG, "performUnlink: cannot compute new contentId " +
+                "(sid=$sid, url=$url) — skipping identity.json update; " +
+                "downloads (if any) stay under al:$anilistId")
         }
 
         // ── Step 3: Remove the SourceLinkStore entry ──
@@ -471,7 +456,7 @@ class AppController(
         }
 
         Log.i(TAG, "performUnlink: unlinked anilistId=$anilistId from source " +
-            "$sid (url=$url, title=$title, deleteDownloads=$deleteDownloads)")
+            "$sid (url=$url, title=$title)")
 
         // ── Step 6: Navigate to the extension-mode details page ──
         if (sid != null && url != null) {
@@ -590,6 +575,35 @@ class AppController(
             migrator.migrate(oldContentId, newContentId)
         } catch (e: Exception) {
             Log.w("AnikutaSearch", "switchAnilistAnime: ContentIdMigrator failed (non-fatal)", e)
+        }
+
+        // ── DOWNLOAD-IDENTITY-STORAGE-UPDATE: rewrite the folder's identity.json ──
+        // The folder's contentId changes from "al:old" to "al:new". As with
+        // unlink/link, this is an atomic JSON rewrite — no folder rename, no
+        // orphans. The on-disk files are untouched; only identity.json is
+        // rewritten. Subsequent `findAnimeDir("al:new")` calls will find this
+        // folder.
+        //
+        // If `link` was null (no saved source link), we still attempt the
+        // identity update with best-effort defaults (sourceId=0, sourceUrl="",
+        // title=""). The folder's identity will be rewritten to point at the
+        // new contentId; the sourceId/sourceUrl fields will be backfilled on
+        // the next link/extension-switch operation.
+        try {
+            val newIdentity = DownloadIdentity(
+                contentId = newContentId,
+                anilistId = newAnilistId,
+                sourceId = link?.sourceId ?: 0L,
+                sourceUrl = link?.animeUrl ?: "",
+                title = link?.animeTitle ?: "Unknown",
+            )
+            val updated = downloadIdentityManager.updateIdentity(oldContentId, newIdentity)
+            Log.i("AnikutaSearch", "switchAnilistAnime: identity.json update " +
+                "${if (updated) "succeeded" else "skipped (no folder found)"} " +
+                "($oldContentId → $newContentId)")
+        } catch (e: Exception) {
+            Log.w("AnikutaSearch", "switchAnilistAnime: identity.json update failed " +
+                "(non-fatal) — downloads may be orphaned under $oldContentId", e)
         }
 
         // Navigate to the new anime (replace — no stacking).
@@ -1076,6 +1090,39 @@ class AppController(
         } catch (e: Exception) {
             Log.w("AnikutaSearch", "onLinked: failed to save SourceLinkStore reverse " +
                 "link (non-fatal) — anilistId=$anilistId", e)
+        }
+
+        // ── DOWNLOAD-IDENTITY-STORAGE-UPDATE: rewrite the folder's identity.json ──
+        // The folder's contentId changes from "aniyomi:sid:url" (extension-only)
+        // to "al:$anilistId" (AniList-linked). This is the symmetric counterpart
+        // of `performUnlink`'s identity rewrite — together they make link/unlink
+        // fully reversible at the on-disk level, with NO folder rename + NO
+        // orphaned downloads.
+        //
+        // Critical for the "link a previously-unlinked anime" flow: the user
+        // downloaded episodes while the anime was unlinked (folder named after
+        // the title + identity.json contentId="aniyomi:sid:url"). They then
+        // link to AniList. Without this rewrite, the folder's identity would
+        // still say "aniyomi:sid:url", but the rest of the system would query
+        // by "al:$anilistId" → MISS → orphaned downloads. With the rewrite,
+        // identity.json now says "al:$anilistId" → HIT → downloads follow the
+        // anime across the link.
+        try {
+            val oldContentId = "aniyomi:${source.id}:${sAnime.url}"
+            val newIdentity = DownloadIdentity(
+                contentId = "al:$anilistId",
+                anilistId = anilistId,
+                sourceId = source.id,
+                sourceUrl = sAnime.url,
+                title = sAnime.title,
+            )
+            val updated = downloadIdentityManager.updateIdentity(oldContentId, newIdentity)
+            Log.i("AnikutaSearch", "onLinked: identity.json update " +
+                "${if (updated) "succeeded" else "skipped (no folder found)"} " +
+                "($oldContentId → al:$anilistId)")
+        } catch (e: Exception) {
+            Log.w("AnikutaSearch", "onLinked: identity.json update failed " +
+                "(non-fatal) — downloads may be orphaned under aniyomi:${source.id}:${sAnime.url}", e)
         }
 
         if (onDetailPage) {

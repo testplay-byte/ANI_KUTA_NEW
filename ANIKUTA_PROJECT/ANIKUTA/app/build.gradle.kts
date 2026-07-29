@@ -85,6 +85,7 @@ dependencies {
     implementation(projects.core.tracker)
     // ── Agent 2: Downloads & Offline Playback ──
     implementation(projects.core.download)
+    implementation(projects.core.downloadIdentity)
     implementation(projects.feature.download)
 
     // Core modules for episode metadata

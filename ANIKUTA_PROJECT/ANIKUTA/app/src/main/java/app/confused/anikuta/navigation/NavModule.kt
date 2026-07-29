@@ -58,6 +58,11 @@ val navModule: Module = module {
             themePrefs = get<ThemePreferences>(),
             linkingPreferences = get(),
             animeRepository = get(),
+            // DOWNLOAD-IDENTITY-STORAGE-UPDATE: wired in so AppController can
+            // atomically rewrite identity.json on link/unlink/switch (no more
+            // "Transfer or Delete" prompt — the folder stays on disk + is
+            // findable by the new contentId via the identity.json scan).
+            downloadIdentityManager = get(),
             context = get(),
         )
     }

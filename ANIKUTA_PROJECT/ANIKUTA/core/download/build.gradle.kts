@@ -33,6 +33,7 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.preferences)
     implementation(projects.core.sourceApi)
+    implementation(projects.core.downloadIdentity)
 
     // OkHttp — for streaming downloads with progress. Comes transitively via
     // :core:source-api (api exposure), but declare explicitly for clarity.

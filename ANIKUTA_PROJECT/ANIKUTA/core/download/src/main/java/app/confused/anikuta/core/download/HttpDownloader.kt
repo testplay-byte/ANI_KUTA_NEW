@@ -132,6 +132,16 @@ class HttpDownloader(
             writeMetadataToCache(tempMeta, task)
 
             // ── 5. Publish to the user's SAF folder ──
+            // DOWNLOAD-IDENTITY-STORAGE-UPDATE: pass sourceId + episodeUrl so
+            // that DownloadStorageProvider.ensureEpisodeDir can write the
+            // anime folder's identity.json with the source identity on first
+            // folder creation. The episodeUrl is the closest analog to the
+            // SAnime.url that we have at this layer (the orchestrator doesn't
+            // thread the SAnime.url through DownloadRequest — see TODO below).
+            // The identity's sourceUrl is backfilled precisely on the next
+            // link/unlink/switch operation (AppController + AnimeDetailViewModel
+            // both call DownloadIdentityManager.updateIdentity with the
+            // canonical SAnime.url).
             val publishResult = storage.publishToUserFolder(
                 anime = anime,
                 episode = episode,
@@ -139,6 +149,8 @@ class HttpDownloader(
                 tempSubtitlesDir = tempSubsDir,
                 tempMetadataFile = tempMeta,
                 videoExtension = videoExt,
+                sourceId = task.request.sourceId,
+                sourceUrl = episode.episodeUrl,
             )
             when (publishResult) {
                 is DownloadStorageProvider.PublishResult.Success -> {

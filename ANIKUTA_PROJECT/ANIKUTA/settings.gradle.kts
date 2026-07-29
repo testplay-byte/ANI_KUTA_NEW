@@ -51,6 +51,7 @@ include(":core:source-api")
 include(":core:player")
 include(":core:update-checker")
 include(":core:download")
+include(":core:download-identity")  // Download folder identity (identity.json) — decouples folder names from contentId
 // :core:notification removed (Phase 9 — empty stub, 0 .kt files; re-add when episode-release notifications are implemented per ADR-014)
 include(":core:backup")
 include(":core:video-resolver")  // Phase 8: video-resolver logic + types (Doc 04 violations 3+4)
