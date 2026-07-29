@@ -194,6 +194,17 @@ class AnimeRepositoryImpl(
         }
     }
 
+    override suspend fun updateSourceAndUrl(id: Long, sourceId: Long, url: String) {
+        Log.d(TAG, "updateSourceAndUrl: id=$id, sourceId=$sourceId, url=$url")
+        withContext(dispatchers.io) {
+            database.animesQueries.updateSourceAndUrl(
+                id = id,
+                sourceId = sourceId,
+                url = url,
+            )
+        }
+    }
+
     override suspend fun updateAnilistMetadata(
         anilistId: Int,
         title: String,

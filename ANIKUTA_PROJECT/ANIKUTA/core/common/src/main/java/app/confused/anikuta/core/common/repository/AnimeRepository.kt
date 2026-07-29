@@ -76,6 +76,12 @@ interface AnimeRepository {
      */
     suspend fun clearAnilistId(id: Long)
 
+    /**
+     * Update the source_id + url on an existing library row (used when switching
+     * extension sources — preserves _id, favorite, category membership, etc.).
+     */
+    suspend fun updateSourceAndUrl(id: Long, sourceId: Long, url: String)
+
     suspend fun updateAnilistMetadata(
         anilistId: Int,
         title: String,
