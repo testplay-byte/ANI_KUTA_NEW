@@ -121,6 +121,16 @@ class ThemePreferences(
      */
     val adaptiveColorsPlayer: Preference<Boolean> = store.getBoolean("pref_adaptive_colors_player", true)
 
+    /**
+     * Whether to show a frosted-glass blur overlay at the bottom edge of pinned
+     * headers when content scrolls beneath them. When `true` (default), a gradient
+     * scrim with rounded bottom corners fades in smoothly on scroll-down + fades
+     * out on scroll-to-top. When `false`, no overlay is rendered.
+     *
+     * Applied to: Browse, Library, Search, Details, Watch screens.
+     */
+    val headerBlurEffect: Preference<Boolean> = store.getBoolean("pref_header_blur_effect", true)
+
     /** Convenience: set a custom accent color + switch to CUSTOM preset. */
     fun setCustomAccent(argb: Int) {
         customAccentColor.set(argb)

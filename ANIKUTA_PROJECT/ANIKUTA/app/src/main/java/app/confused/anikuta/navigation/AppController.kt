@@ -268,19 +268,106 @@ class AppController(
         }
         // Unlinked extension anime — resolve the source.
         val source = sourceMatcher.getSourceById(anime.sourceId)
+        val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+            url = anime.url
+            title = anime.title
+        }
         if (source != null) {
-            val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
-                url = anime.url
-                title = anime.title
-            }
             pushExtensionDetail(source, sAnime, anilistId = null)
         } else {
-            android.widget.Toast.makeText(
+            // Source not installed — still open the details page with saved DB data.
+            // The user can see saved episodes but can't play/download (the source
+            // is gone). They can use the "Source unavailable" chip on the details
+            // page to switch to another extension (or "Link to AniList" to link
+            // the saved DB data to a fresh AniList entry).
+            //
+            // This is the library-no-source fix from the scroll-blur branch: the
+            // previous behavior bailed with a toast, leaving the user stranded
+            // (the only way to see the saved anime was to reinstall the source).
+            Log.w("AnikutaLibrary", "Source ${anime.sourceId} not installed — opening " +
+                "with saved data for '${anime.title}'")
+            navigator?.push(LibraryExtensionDetailDestination(
+                sourceId = anime.sourceId,
+                animeUrl = anime.url,
+                animeTitle = anime.title,
+            ))
+        }
+    }
+
+    /**
+     * Unlinks an anime from AniList — removes both directional links
+     * (SourceLinkStore + ExtensionLinkStore) + the view preference.
+     *
+     * The anime remains in the library with its extension data intact (the
+     * source-extension row in the DB is keyed by sourceId:url, not by anilistId).
+     * After unlinking, navigates to the extension-mode details page so the user
+     * sees their saved data without the AniList overlay.
+     *
+     * Two navigation paths:
+     * - **Source still installed:** `navigator.replace(ExtensionAnimeDetailDestination(...))`
+     *   with a reconstructed SAnime (url + title from the saved link).
+     * - **Source uninstalled:** `navigator.replace(LibraryExtensionDetailDestination(...))`
+     *   — the DB-first path loads saved data; the user can't play/download but
+     *   can see saved episodes + use "Source unavailable" to switch.
+     *
+     * If no source link exists at all (shouldn't happen for a linked anime — the
+     * link IS the link), just shows a toast + pops back.
+     *
+     * @param anilistId the AniList ID to unlink.
+     * @param sourceId the extension source ID (if known — otherwise resolved from SourceLinkStore).
+     * @param animeUrl the extension anime URL (if known — otherwise resolved from SourceLinkStore).
+     */
+    fun unlinkFromAniList(anilistId: Int, sourceId: Long? = null, animeUrl: String? = null) {
+        // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+        val contentId = "al:$anilistId"
+        val link = sourceLinkStore.getLink(contentId)
+        val sid = sourceId ?: link?.sourceId
+        val url = animeUrl ?: link?.animeUrl
+        val title = link?.animeTitle ?: "Unknown"
+
+        // Remove both directional links.
+        sourceLinkStore.removeLink(contentId)
+        if (sid != null && url != null) {
+            extensionLinkStore.unlink(sid, url)
+        }
+
+        // Remove the view preference for this anilistId (so a future re-link
+        // starts fresh — no stale "show Extension view" pref pointing at a
+        // now-removed link).
+        try {
+            org.koin.core.context.GlobalContext.get()
+                .get<app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore>()
+                .remove(anilistId)
+        } catch (e: Exception) {
+            Log.w(TAG, "unlinkFromAniList: failed to remove view preference " +
+                "(non-fatal) — anilistId=$anilistId", e)
+        }
+
+        Log.i(TAG, "unlinkFromAniList: unlinked anilistId=$anilistId from source " +
+            "$sid (url=$url, title=$title)")
+
+        // Navigate to the extension-mode details page (replace — no stacking).
+        if (sid != null && url != null) {
+            val source = sourceMatcher.getSourceById(sid)
+            val sAnime = SAnimeImpl().apply {
+                this.url = url
+                this.title = title
+            }
+            if (source != null) {
+                navigator?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
+            } else {
+                // Source uninstalled — open the DB-first details page so the user
+                // can still see saved episodes.
+                navigator?.replace(LibraryExtensionDetailDestination(sid, url, title))
+            }
+        } else {
+            // No source link to navigate to — just go back.
+            Toast.makeText(
                 context,
-                "Source no longer installed for '${anime.title}'",
-                android.widget.Toast.LENGTH_LONG,
+                "Unlinked from AniList",
+                Toast.LENGTH_SHORT,
             ).show()
-            Log.w("AnikutaLibrary", "Cannot open library anime: source ${anime.sourceId} not installed")
+            navigator?.pop()
         }
     }
 

@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
+import app.confused.anikuta.core.designsystem.component.ScrollBlurOverlay
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.preferences.ThemePreferences
 import app.confused.anikuta.core.providerapi.HomeFeedProvider
 import app.confused.anikuta.core.providerapi.MetadataCapability
 import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
@@ -180,24 +183,44 @@ fun BrowseScreen(
         isRefreshing = false
     }
 
+    val prefs = remember { org.koin.core.context.GlobalContext.get().get<ThemePreferences>() }
+    val headerBlurEnabled by prefs.headerBlurEffect.changes()
+        .collectAsState(initial = prefs.headerBlurEffect.get())
+
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "Browse", collapsed = collapsed)
 
-        when {
-            loading && anime.isEmpty() -> LoadingState()
-            error != null && anime.isEmpty() -> ErrorState(message = error!!)
-            anime.isEmpty() -> EmptyState()
-            else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = manualRefresh,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                AnimeGrid(
-                    anime = anime,
-                    gridState = gridState,
-                    onOpenAnime = onOpenAnime,
-                )
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                loading && anime.isEmpty() -> LoadingState()
+                error != null && anime.isEmpty() -> ErrorState(message = error!!)
+                anime.isEmpty() -> EmptyState()
+                else -> androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = manualRefresh,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    AnimeGrid(
+                        anime = anime,
+                        gridState = gridState,
+                        onOpenAnime = onOpenAnime,
+                    )
+                }
             }
+            // Scroll blur overlay — fades in when content scrolls under the header.
+            // The flicker-fix: when firstVisibleItemIndex > 0, return MAX_VALUE so the
+            // overlay stays at full opacity (firstVisibleItemScrollOffset resets to 0
+            // on every item boundary crossing — without this guard the overlay would
+            // flicker disappear → reappear).
+            ScrollBlurOverlay(
+                scrollOffset = {
+                    if (gridState.firstVisibleItemIndex > 0) Float.MAX_VALUE
+                    else gridState.firstVisibleItemScrollOffset.toFloat()
+                },
+                backgroundColor = MaterialTheme.colorScheme.background,
+                enabled = headerBlurEnabled,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }

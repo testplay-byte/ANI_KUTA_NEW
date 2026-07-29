@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,8 +59,10 @@ import app.confused.anikuta.core.designsystem.component.AddCategoryDialog
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomSheet
 import app.confused.anikuta.core.designsystem.component.CategoryPickerDialog
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
+import app.confused.anikuta.core.designsystem.component.ScrollBlurOverlay
 import app.confused.anikuta.core.designsystem.component.SearchField
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.preferences.ThemePreferences
 import app.confused.anikuta.feature.library.components.CategoryTabs
 import app.confused.anikuta.feature.library.components.ContinueWatchingSection
 import app.confused.anikuta.feature.library.components.CustomizeSheet
@@ -113,6 +116,10 @@ fun LibraryScreen(
         state.showTotalEntries -> "${state.totalEntryCount} in Library"
         else -> "Library"
     }
+
+    val prefs = remember { org.koin.core.context.GlobalContext.get().get<ThemePreferences>() }
+    val headerBlurEnabled by prefs.headerBlurEffect.changes()
+        .collectAsState(initial = prefs.headerBlurEffect.get())
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -180,69 +187,92 @@ fun LibraryScreen(
             val showContinueWatching = state.showContinueWatching &&
                 state.continueWatching.isNotEmpty() && !state.selectionMode
 
-            if (state.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "Loading…",
-                        fontFamily = RobotoFamily,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (state.isLoading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "Loading…",
+                            fontFamily = RobotoFamily,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else if (state.isLibraryEmpty) {
+                    LibraryEmptyState(isEmpty = true)
+                } else if (items.isEmpty()) {
+                    LibraryEmptyState(isEmpty = false)
+                } else {
+                    when (state.displayMode) {
+                        LibraryDisplayMode.LIST -> ListContent(
+                            items = items,
+                            state = state,
+                            listState = listState,
+                            showContinueWatching = showContinueWatching,
+                            continueWatching = state.continueWatching,
+                            onOpenAnime = onOpenAnime,
+                            onOpenContinueWatching = {
+                                viewModel.updateLastWatched(it.anilistId)
+                                onOpenContinueWatching(it)
+                            },
+                            onItemClick = { anime ->
+                                if (state.selectionMode) viewModel.toggleSelection(anime.id)
+                                else {
+                                    val anilistId = anime.anilistId
+                                    if (anilistId != null) onOpenAnime(anilistId)
+                                    else onOpenExtensionAnime(anime)
+                                }
+                            },
+                            onItemLongClick = { anime ->
+                                viewModel.toggleSelection(anime.id)
+                            },
+                        )
+                        LibraryDisplayMode.COMPACT_GRID,
+                        LibraryDisplayMode.COMFORTABLE_GRID,
+                        LibraryDisplayMode.COVER_ONLY -> GridContent(
+                            items = items,
+                            state = state,
+                            gridState = gridState,
+                            showContinueWatching = showContinueWatching,
+                            continueWatching = state.continueWatching,
+                            onOpenAnime = onOpenAnime,
+                            onOpenContinueWatching = {
+                                viewModel.updateLastWatched(it.anilistId)
+                                onOpenContinueWatching(it)
+                            },
+                            onItemClick = { anime ->
+                                if (state.selectionMode) viewModel.toggleSelection(anime.id)
+                                else {
+                                    val anilistId = anime.anilistId
+                                    if (anilistId != null) onOpenAnime(anilistId)
+                                    else onOpenExtensionAnime(anime)
+                                }
+                            },
+                            onItemLongClick = { anime ->
+                                viewModel.toggleSelection(anime.id)
+                            },
+                        )
+                    }
                 }
-            } else if (state.isLibraryEmpty) {
-                LibraryEmptyState(isEmpty = true)
-            } else if (items.isEmpty()) {
-                LibraryEmptyState(isEmpty = false)
-            } else {
-                when (state.displayMode) {
-                    LibraryDisplayMode.LIST -> ListContent(
-                        items = items,
-                        state = state,
-                        listState = listState,
-                        showContinueWatching = showContinueWatching,
-                        continueWatching = state.continueWatching,
-                        onOpenAnime = onOpenAnime,
-                        onOpenContinueWatching = {
-                            viewModel.updateLastWatched(it.anilistId)
-                            onOpenContinueWatching(it)
-                        },
-                        onItemClick = { anime ->
-                            if (state.selectionMode) viewModel.toggleSelection(anime.id)
-                            else {
-                                val anilistId = anime.anilistId
-                                if (anilistId != null) onOpenAnime(anilistId)
-                                else onOpenExtensionAnime(anime)
-                            }
-                        },
-                        onItemLongClick = { anime ->
-                            viewModel.toggleSelection(anime.id)
-                        },
-                    )
-                    LibraryDisplayMode.COMPACT_GRID,
-                    LibraryDisplayMode.COMFORTABLE_GRID,
-                    LibraryDisplayMode.COVER_ONLY -> GridContent(
-                        items = items,
-                        state = state,
-                        gridState = gridState,
-                        showContinueWatching = showContinueWatching,
-                        continueWatching = state.continueWatching,
-                        onOpenAnime = onOpenAnime,
-                        onOpenContinueWatching = {
-                            viewModel.updateLastWatched(it.anilistId)
-                            onOpenContinueWatching(it)
-                        },
-                        onItemClick = { anime ->
-                            if (state.selectionMode) viewModel.toggleSelection(anime.id)
-                            else {
-                                val anilistId = anime.anilistId
-                                if (anilistId != null) onOpenAnime(anilistId)
-                                else onOpenExtensionAnime(anime)
-                            }
-                        },
-                        onItemLongClick = { anime ->
-                            viewModel.toggleSelection(anime.id)
-                        },
-                    )
-                }
+
+                // Scroll blur overlay — fades in when content scrolls under the header.
+                // Mode-aware (LIST uses listState, GRID uses gridState). The flicker-fix:
+                // when firstVisibleItemIndex > 0, return MAX_VALUE so the overlay stays
+                // at full opacity (firstVisibleItemScrollOffset resets to 0 on every
+                // item boundary crossing — without this guard the overlay would flicker
+                // disappear → reappear).
+                ScrollBlurOverlay(
+                    scrollOffset = {
+                        if (state.displayMode == LibraryDisplayMode.LIST) {
+                            if (listState.firstVisibleItemIndex > 0) Float.MAX_VALUE
+                            else listState.firstVisibleItemScrollOffset.toFloat()
+                        } else {
+                            if (gridState.firstVisibleItemIndex > 0) Float.MAX_VALUE
+                            else gridState.firstVisibleItemScrollOffset.toFloat()
+                        }
+                    },
+                    backgroundColor = MaterialTheme.colorScheme.background,
+                    enabled = headerBlurEnabled,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
             }
         }
 

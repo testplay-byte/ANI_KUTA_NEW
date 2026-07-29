@@ -37,4 +37,10 @@ dependencies {
     // Lifecycle + ViewModel (Compose integration)
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+
+    // Koin — SearchScreen uses GlobalContext.get().get<ThemePreferences>() for
+    // the scroll-blur overlay toggle; ExtensionLinkingSheet uses koinInject.
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.core)
+    implementation(libs.koin.android)
 }

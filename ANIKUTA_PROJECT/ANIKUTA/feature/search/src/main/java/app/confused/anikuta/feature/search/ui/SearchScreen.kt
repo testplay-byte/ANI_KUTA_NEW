@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,7 +33,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.confused.anikuta.core.anilist.api.AniListApi
+import app.confused.anikuta.core.designsystem.component.ScrollBlurOverlay
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.preferences.ThemePreferences
 import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
@@ -104,7 +107,7 @@ fun SearchScreen(
         onClearQuery = { vm.onQueryChange("") },
         onSourceSelect = vm::onSourceChange,
         onSourceRetap = { showSourcePicker = true },
-        onSubmit = { /* IME search — debounce handles it */ },
+        onSubmit = { vm.onSubmit() },
         onOpenFilters = { showFilterSheet = true },
         onSortChange = vm::onSortChange,
         onPickRecent = vm::onPickRecent,
@@ -132,9 +135,12 @@ fun SearchScreen(
     )
 
     // Filter sheet — edits a PENDING copy; only "Apply" syncs + re-fetches.
+    // pendingFilters is now a reactive StateFlow (was a private var) so the
+    // FilterSheet's genre chips update visually in real time as the user toggles
+    // them (previously the selection was invisible until "Apply").
     FilterSheet(
         show = showFilterSheet,
-        pendingFilters = vm.getPendingFilters(),
+        pendingFilters = vm.pendingFilters.collectAsState().value,
         appliedSort = state.sort,
         onPendingFiltersChange = vm::onPendingFiltersChange,
         onSortChange = vm::onSortChange, // sort is applied live (single-select, instant)
@@ -190,6 +196,10 @@ private fun SearchContent(
     // LaunchedEffect).
     ObserveScrollNearBottom(scrollState) { onLoadMore() }
 
+    val prefs = remember { org.koin.core.context.GlobalContext.get().get<ThemePreferences>() }
+    val headerBlurEnabled by prefs.headerBlurEffect.changes()
+        .collectAsState(initial = prefs.headerBlurEffect.get())
+
     Column(modifier = Modifier.fillMaxSize()) {
         SearchTopBar(
             collapsed = collapsed,
@@ -209,57 +219,71 @@ private fun SearchContent(
         // Scrollable content — reduced top padding to bring content closer
         // to the filter/sort row (was 4dp, now 0dp — the SearchTopBar already
         // has bottom padding). Bottom padding for floating nav clearance.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(top = 0.dp, bottom = 110.dp),
-        ) {
-            val sectionLabel = when {
-                state.query.isNotBlank() && state.source == SearchSource.ANILIST ->
-                    "Results for \"${state.query}\""
-                state.query.isNotBlank() && state.source == SearchSource.EXTENSION ->
-                    "Extension results for \"${state.query}\""
-                state.source == SearchSource.EXTENSION -> "Extension"
-                else -> "Popular anime"
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(top = 0.dp, bottom = 110.dp),
+            ) {
+                val sectionLabel = when {
+                    state.query.isNotBlank() && state.source == SearchSource.ANILIST ->
+                        "Results for \"${state.query}\""
+                    state.query.isNotBlank() && state.source == SearchSource.EXTENSION ->
+                        "Extension results for \"${state.query}\""
+                    state.source == SearchSource.EXTENSION -> "Extension"
+                    else -> "Popular anime"
+                }
+
+                // Recent searches — per source, shown when query is blank, no
+                // applied filters, and recents exist. Both AniList AND Extension
+                // show their own (separate) recents list.
+                val showRecent = state.query.isBlank() &&
+                    state.filters.isEmpty &&
+                    state.recents.isNotEmpty()
+                if (showRecent) {
+                    RecentSearchesCard(
+                        recents = state.recents,
+                        collapsed = state.recentsCollapsed,
+                        onToggleCollapsed = onToggleRecentsCollapsed,
+                        onPick = onPickRecent,
+                        onRemove = onRemoveRecent,
+                        onClear = onClearRecents,
+                    )
+                }
+
+                if (state.source == SearchSource.EXTENSION && state.query.isBlank()) {
+                    ExtensionResultsView(
+                        loading = state.loading,
+                        error = state.error,
+                        rows = state.extensionRows,
+                        onResultTap = onResultTap,
+                    )
+                } else {
+                    ResultsCard(
+                        sectionLabel = sectionLabel,
+                        loading = state.loading,
+                        isLoadingMore = state.isLoadingMore,
+                        error = state.error,
+                        hasSearched = state.hasSearched,
+                        query = state.query,
+                        results = state.results,
+                        onResultTap = onResultTap,
+                    )
+                }
             }
 
-            // Recent searches — per source, shown when query is blank, no
-            // applied filters, and recents exist. Both AniList AND Extension
-            // show their own (separate) recents list.
-            val showRecent = state.query.isBlank() &&
-                state.filters.isEmpty &&
-                state.recents.isNotEmpty()
-            if (showRecent) {
-                RecentSearchesCard(
-                    recents = state.recents,
-                    collapsed = state.recentsCollapsed,
-                    onToggleCollapsed = onToggleRecentsCollapsed,
-                    onPick = onPickRecent,
-                    onRemove = onRemoveRecent,
-                    onClear = onClearRecents,
-                )
-            }
-
-            if (state.source == SearchSource.EXTENSION && state.query.isBlank()) {
-                ExtensionResultsView(
-                    loading = state.loading,
-                    error = state.error,
-                    rows = state.extensionRows,
-                    onResultTap = onResultTap,
-                )
-            } else {
-                ResultsCard(
-                    sectionLabel = sectionLabel,
-                    loading = state.loading,
-                    isLoadingMore = state.isLoadingMore,
-                    error = state.error,
-                    hasSearched = state.hasSearched,
-                    query = state.query,
-                    results = state.results,
-                    onResultTap = onResultTap,
-                )
-            }
+            // Scroll blur overlay — fades in when content scrolls under the header.
+            // SearchScreen uses a regular ScrollState (verticalScroll), so the
+            // raw value (scrollState.value) is the total pixel offset (never resets).
+            // No flicker-fix needed here (the LazyListState flicker only happens
+            // when firstVisibleItemIndex changes).
+            ScrollBlurOverlay(
+                scrollOffset = { scrollState.value.toFloat() },
+                backgroundColor = MaterialTheme.colorScheme.background,
+                enabled = headerBlurEnabled,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }

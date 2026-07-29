@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
@@ -157,6 +158,9 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
             onLinkToAniList = { appController.startLinkingFromAnilist(animeId) },
             // "Switch anime" picked — update links + navigate to the new anime.
             onSwitchAnimePicked = { newId -> appController.switchAnilistAnime(animeId, newId) },
+            // "Unlink from AniList" — remove both directional links + navigate to
+            // the extension-mode details page (or DB-first if source uninstalled).
+            onUnlinkFromAniList = { appController.unlinkFromAniList(animeId) },
         )
     }
 }
@@ -222,6 +226,72 @@ data class ExtensionAnimeDetailDestination(
                     appController.switchAnilistAnime(anilistId, newId)
                 }
             },
+            // "Unlink from AniList" (linked only) — pass the live source.id + sAnime.url
+            // so AppController doesn't have to re-resolve from SourceLinkStore.
+            onUnlinkFromAniList = {
+                if (anilistId != null) {
+                    appController.unlinkFromAniList(anilistId, source.id, sAnime.url)
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Library anime with a missing source extension. Opens the unified details page
+ * using [extensionSourceId] (no live source object) — the provider's DB-first
+ * path loads saved data. The user can see saved episodes but can't play/download
+ * (the source is gone). They can use the "Source unavailable" chip on the
+ * details page to switch to another extension.
+ *
+ * This is the library-no-source destination from the scroll-blur branch. Pushed
+ * by `AppController.openLibraryAnime` when the user taps a library anime whose
+ * source extension was uninstalled (instead of bailing with a toast).
+ */
+data class LibraryExtensionDetailDestination(
+    val sourceId: Long,
+    val animeUrl: String,
+    val animeTitle: String,
+) : Screen {
+    override val key: ScreenKey = "LibraryExtDetail($sourceId:$animeUrl)"
+
+    @Composable
+    override fun Content() {
+        val appController = koinInject<AppController>()
+        val navigator = LocalNavigator.currentOrThrow
+        val context = androidx.compose.ui.platform.LocalContext.current
+
+        val sAnime = remember {
+            eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+                url = animeUrl
+                title = animeTitle
+            }
+        }
+
+        AnimeDetailScreen(
+            extensionSource = null, // Source not installed — the screen uses extensionSourceId.
+            extensionSAnime = sAnime,
+            extensionAnilistId = null,
+            extensionSourceId = sourceId,
+            onBack = { navigator.pop() },
+            onOpenEpisode = { _, _, _, _ ->
+                // Source not installed — no live source to resolve against. The
+                // user can still see saved episodes (rendered from the DB) but
+                // can't play. Toast + log so the no-op is observable.
+                android.widget.Toast.makeText(
+                    context,
+                    "Source not installed — cannot play this episode",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            },
+            onDownloadEpisode = { _, _, _ ->
+                android.widget.Toast.makeText(
+                    context,
+                    "Source not installed — cannot download",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            },
+            onLinkToAniList = { appController.startLinkingFromAnilist(0) },
         )
     }
 }

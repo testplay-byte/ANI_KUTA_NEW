@@ -620,8 +620,25 @@ class AnimeDetailViewModel(
         _episodeState.value = EpisodeState.Loaded(sEpisodes, anime.sourceName)
     }
 
-    /** Searches all sources in the background (for the source switcher) without blocking. */
+    /**
+     * Searches all sources in the background (for the source switcher) without blocking.
+     *
+     * **Deferred — only runs once per anime.** Skips if [_allMatches] is already
+     * populated. The sequential `matchAll()` across all installed extensions is
+     * CPU-intensive (Levenshtein distance per source) + makes network calls.
+     * Running it on every load/refresh/switch is wasteful — the results don't
+     * change unless the user installs/uninstalls an extension (which triggers a
+     * re-load via the source-change flow).
+     *
+     * Logcat emits a `Log.d` when the call is skipped so the deferral is
+     * observable in diagnostics.
+     */
     private suspend fun searchAllSourcesInBackground(title: String) {
+        if (_allMatches.value.isNotEmpty()) {
+            Log.d(TAG, "searchAllSourcesInBackground: skipped — allMatches already populated " +
+                "(${_allMatches.value.size} match(es))")
+            return
+        }
         try {
             val all = sourceMatcher.matchAll(title)
             _allMatches.value = all
