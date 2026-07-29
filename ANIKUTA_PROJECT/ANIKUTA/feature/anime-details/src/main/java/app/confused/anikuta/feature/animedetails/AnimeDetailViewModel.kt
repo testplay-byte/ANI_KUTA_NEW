@@ -92,6 +92,13 @@ class AnimeDetailViewModel(
     private val api: AniListApi,
     private val viewPreferenceStore: app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore,
     private val appContext: Context,
+    /** Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the [init] block calls
+     * `loadInternal(forceRefresh = true)` instead of `load()` — bypassing the
+     * DB-first short-circuit + forcing a fresh fetch from the provider. Used by
+     * `AppController.unlinkFromAniList` so the post-unlink page shows fresh
+     * extension data (overwriting stale AniList metadata via
+     * `updateMetadataFromExtension` in `persistEpisodes`). */
+    private val forceInitialRefresh: Boolean = false,
 ) : ViewModel() {
 
     // ── State ──
@@ -173,7 +180,16 @@ class AnimeDetailViewModel(
     private var activeRequest: DetailsRequest = initialRequest
 
     init {
-        load()
+        // Fix 2 (SOURCE-SWITCH-FIXES): when forceInitialRefresh is true (passed by
+        // AppController.unlinkFromAniList), bypass the DB-first short-circuit + force
+        // a fresh fetch from the provider — so the post-unlink page shows fresh
+        // extension data instead of stale AniList metadata.
+        if (forceInitialRefresh) {
+            Log.i(TAG, "init: forceInitialRefresh=true — bypassing DB-first short-circuit")
+            loadInternal(forceRefresh = true)
+        } else {
+            load()
+        }
         observeLibraryState()
         viewModelScope.launch {
             categoryRepository.observeVisible().collect { _categories.value = it }
@@ -388,7 +404,15 @@ class AnimeDetailViewModel(
             reloadEpisodesOnly()
         } else {
             // ── In Extension mode: full reload (the extension IS the data source) ──
-            load()
+            // Fix 4 (SOURCE-SWITCH-FIXES): force-refresh (not load()) so the DB-first
+            // short-circuit is bypassed. The provider re-fetches from the new extension
+            // + calls updateMetadataFromExtension (Fix 3) to overwrite the row's
+            // title/description/cover/genre/etc. with the new source's data. Without
+            // this, the DB-first short-circuit would return the OLD source's stale
+            // metadata even though source_id + url were updated above.
+            Log.i(TAG, "switchExtension: Extension mode — calling loadInternal(forceRefresh=true) " +
+                "to fetch fresh metadata from new source '${source.name}'")
+            loadInternal(forceRefresh = true)
         }
     }
 
@@ -641,14 +665,43 @@ class AnimeDetailViewModel(
         }
     }
 
-    /** Sets up [_currentMatch] from the unified anime's sourceId (for the source switcher). */
+    /**
+     * Sets up [_currentMatch] from the unified anime's sourceId (for the source switcher).
+     *
+     * Fix 5 (SOURCE-SWITCH-FIXES): defensive guard — DON'T overwrite [_currentMatch] if
+     * the load result's sourceId matches the already-set match's source.id. This prevents
+     * `loadInternal` (called after `switchExtension`) from clobbering the user-picked
+     * SAnime (which has the correct title from the new source) with a fresh SAnime built
+     * from the (possibly stale) DB row's title. Only overwrite when the sourceId actually
+     * changed (meaning a different source was loaded — e.g. on the very first load, or
+     * when the DB row's sourceId differs from what the user picked).
+     */
     private fun setupCurrentMatch(anime: UnifiedAnime) {
-        val sourceId = anime.sourceId ?: return
-        val source = sourceMatcher.getSourceById(sourceId) ?: return
+        val sourceId = anime.sourceId ?: run {
+            Log.d(TAG, "setupCurrentMatch: anime.sourceId is null — not setting _currentMatch")
+            return
+        }
+        // Defensive guard: don't clobber a freshly-set _currentMatch from switchExtension.
+        // The user-picked SAnime has the correct title; the DB row's title may be stale
+        // during the refresh window (between switchExtension setting _currentMatch and
+        // updateMetadataFromExtension writing the new title to the DB).
+        val existing = _currentMatch.value
+        if (existing != null && existing.source.id == sourceId) {
+            Log.d(TAG, "setupCurrentMatch: skipping overwrite — _currentMatch.source.id " +
+                "($sourceId) matches the load result; preserving user-picked SAnime " +
+                "(title='${existing.sAnime.title}')")
+            return
+        }
+        val source = sourceMatcher.getSourceById(sourceId) ?: run {
+            Log.w(TAG, "setupCurrentMatch: source $sourceId not installed — not setting _currentMatch")
+            return
+        }
         val sAnime = SAnimeImpl().apply {
             url = anime.url
             title = anime.title
         }
+        Log.i(TAG, "setupCurrentMatch: setting _currentMatch from load result " +
+            "(sourceId=$sourceId, source='${source.name}', title='${anime.title}')")
         _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
     }
 

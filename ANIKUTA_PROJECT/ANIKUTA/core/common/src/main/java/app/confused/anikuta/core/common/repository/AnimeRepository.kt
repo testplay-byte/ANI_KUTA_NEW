@@ -105,6 +105,39 @@ interface AnimeRepository {
      */
     suspend fun updatePreferredCoverBySourceAndUrl(sourceId: Long, url: String, coverUrl: String?, coverColor: String?)
 
+    /**
+     * Updates title/description/genre/cover_url/cover_color/status/artist/author
+     * on an existing anime row from the extension's (enriched) SAnime data.
+     *
+     * Fix 3 (SOURCE-SWITCH-FIXES): used by
+     * [app.confused.anikuta.data.extension.details.ExtensionDetailsProvider.persistEpisodes]
+     * to overwrite stale AniList metadata when the extension re-fetches (e.g. after
+     * unlink, after switchExtension, after pull-to-refresh). Called for BOTH
+     * newly-inserted AND existing rows so the row always reflects the extension's
+     * view of the anime.
+     *
+     * @param id the anime row's `_id`.
+     * @param title the extension's title (`sAnime.title`).
+     * @param description the extension's description (`sAnime.description`), nullable.
+     * @param genre the extension's genres as a comma-separated string (`sAnime.genre`), nullable.
+     * @param coverUrl the extension's cover URL (`sAnime.thumbnail_url`), nullable.
+     * @param coverColor the Palette-extracted cover color hex (e.g. "#B1F256"), nullable.
+     * @param status the extension's status int (`sAnime.status`).
+     * @param artist the extension's artist (`sAnime.artist`), nullable.
+     * @param author the extension's author (`sAnime.author`), nullable.
+     */
+    suspend fun updateMetadataFromExtension(
+        id: Long,
+        title: String,
+        description: String?,
+        genre: String?,
+        coverUrl: String?,
+        coverColor: String?,
+        status: Int,
+        artist: String?,
+        author: String?,
+    )
+
     suspend fun delete(id: Long)
 
     // ═══ Two-tier identity (ADR-050 — Phase 1) ═══

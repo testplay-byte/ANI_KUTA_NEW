@@ -183,7 +183,10 @@ class ExtensionDetailsProvider(
         }
 
         // ── Stage E: fetch + persist episodes ──
-        val episodes = fetchAndPersistEpisodes(source, enriched, effectiveAnilistId)
+        // Fix 3 (SOURCE-SWITCH-FIXES): pass the Palette-extracted coverColorHex through
+        // to persistEpisodes so it can be written to the DB row via
+        // updateMetadataFromExtension (overwriting stale AniList metadata).
+        val episodes = fetchAndPersistEpisodes(source, enriched, effectiveAnilistId, coverColorHex)
         unified = unified.copy(episodeCount = episodes.size.takeIf { it > 0 } ?: unified.episodeCount)
 
         return DetailsResult(anime = unified, episodes = episodes)
@@ -281,16 +284,22 @@ class ExtensionDetailsProvider(
      * For **unlinked** anime (anilistId == null): keyed by `sourceId + url` via
      * `AnimeRepository.getBySourceAndUrl` — this makes unlinked extension anime
      * visible in the library (doc 04 §6, owner requirement Q2).
+     *
+     * @param coverColorHex Fix 3 (SOURCE-SWITCH-FIXES): the Palette-extracted cover
+     *   color (from `loadByExtension`). Threaded through to `persistEpisodes` so the
+     *   DB row's `cover_color` is updated via `updateMetadataFromExtension`. Null
+     *   when called from `loadEpisodes` (no Palette extraction there).
      */
     private suspend fun fetchAndPersistEpisodes(
         source: AnimeCatalogueSource,
         sAnime: SAnime,
         anilistId: Int?,
+        coverColorHex: String? = null,
     ): List<Episode> {
         return try {
             val sEpisodes = withContext(Dispatchers.IO) { source.getEpisodeList(sAnime) }
             if (sEpisodes.isEmpty()) return emptyList()
-            persistEpisodes(sEpisodes, source.id, sAnime.url, sAnime.title, anilistId, sAnime, source)
+            persistEpisodes(sEpisodes, source.id, sAnime.url, sAnime.title, anilistId, sAnime, source, coverColorHex)
             sEpisodes.mapIndexed { index, ep -> ep.toDomainEpisode(index) }
         } catch (e: Throwable) {
             Log.e(TAG, "getEpisodeList failed on '${source.name}'", e)
@@ -307,6 +316,7 @@ class ExtensionDetailsProvider(
         anilistId: Int?,
         sAnime: SAnime,
         source: AnimeCatalogueSource,
+        coverColorHex: String? = null,
     ) {
         try {
             // Find or create the anime row. Linked → by anilistId; unlinked → by sourceId+url.
@@ -357,6 +367,43 @@ class ExtensionDetailsProvider(
                 // to display the source name + extension name + version — instead of
                 // the wrong fallback (`dbAnime.title`).
                 persistProvenance(dbAnime.id, source)
+
+                // ── Fix 3 (SOURCE-SWITCH-FIXES): overwrite metadata from the extension ──
+                // ALWAYS call updateMetadataFromExtension after the row exists (whether
+                // newly inserted OR already existed). This overwrites stale AniList
+                // metadata (title/cover/description/genre/status/artist/author) with the
+                // extension's view of the anime — so the row reflects the extension, not
+                // the cached AniList data.
+                //
+                // Guard: only call when `sAnime.initialized == true` (i.e. getAnimeDetails
+                // was called and the SAnime has full metadata). The `loadEpisodes()` path
+                // (used by reloadEpisodesOnly in AniList mode) builds a partial SAnime with
+                // just url+title — calling updateMetadataFromExtension there would null
+                // out description/genre/artist/author/cover. The `loadByExtension()` path
+                // always enriches the SAnime via `enrichAnimeDetails` before reaching here.
+                if (sAnime.initialized) {
+                    try {
+                        animeRepository.updateMetadataFromExtension(
+                            id = dbAnime.id,
+                            title = sAnime.title,
+                            description = sAnime.description,
+                            genre = sAnime.genre, // already comma-separated String
+                            coverUrl = sAnime.thumbnail_url,
+                            coverColor = coverColorHex,
+                            status = sAnime.status,
+                            artist = sAnime.artist,
+                            author = sAnime.author,
+                        )
+                        Log.i(TAG, "persistEpisodes: updateMetadataFromExtension applied to " +
+                            "row id=${dbAnime.id} (title='${sAnime.title}', coverColor=$coverColorHex)")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "persistEpisodes: updateMetadataFromExtension failed " +
+                            "(non-fatal) — id=${dbAnime.id}", e)
+                    }
+                } else {
+                    Log.d(TAG, "persistEpisodes: skipping updateMetadataFromExtension — " +
+                        "sAnime not initialized (loadEpisodes path); preserving existing DB metadata")
+                }
 
                 episodeRepository.deleteByAnimeId(dbAnime.id)
                 sEpisodes.forEachIndexed { index, ep ->

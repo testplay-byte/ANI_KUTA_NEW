@@ -72,6 +72,12 @@ fun AnimeDetailScreen(
      *  user can see saved episodes but can't play/download (toast: "Source not
      *  installed"). They can use the "Source unavailable" chip to switch extensions. */
     extensionSourceId: Long? = null,
+    /** Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the VM's `init { load() }` becomes
+     *  `init { loadInternal(forceRefresh = true) }` — bypassing the DB-first short-circuit
+     *  + forcing a fresh fetch from the provider. Used by `AppController.unlinkFromAniList`
+     *  so the post-unlink page shows fresh extension data (overwriting stale AniList
+     *  metadata via `updateMetadataFromExtension` in `persistEpisodes`). */
+    forceInitialRefresh: Boolean = false,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit = { _, _, _, _ -> },
     /** Agent 2 — Downloads: enqueues a download for an episode (from the episode row button). */
@@ -170,6 +176,9 @@ fun AnimeDetailScreen(
                     api = api,
                     viewPreferenceStore = org.koin.core.context.GlobalContext.get().get(),
                     appContext = context.applicationContext,
+                    // Fix 2 (SOURCE-SWITCH-FIXES): bypass the DB-first short-circuit on
+                    // initial load so the post-unlink page shows fresh extension data.
+                    forceInitialRefresh = forceInitialRefresh,
                 ) as T
         },
     )

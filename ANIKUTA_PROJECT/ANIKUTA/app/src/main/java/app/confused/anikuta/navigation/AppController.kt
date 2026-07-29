@@ -370,11 +370,31 @@ class AppController(
                     this.title = title
                 }
                 if (source != null) {
-                    navigator?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
+                    // Fix 2 (SOURCE-SWITCH-FIXES): pass forceInitialRefresh=true so the new
+                    // VM's `init { loadInternal(forceRefresh = true) }` bypasses the DB-first
+                    // short-circuit + forces a fresh fetch from the extension. Combined with
+                    // Fix 3 (updateMetadataFromExtension in persistEpisodes), this overwrites
+                    // the stale AniList metadata (title/cover/description) on the DB row — so
+                    // the user sees the extension's data, not the cached AniList data.
+                    Log.i(TAG, "unlinkFromAniList: navigating to ExtensionAnimeDetailDestination " +
+                        "(source='${source.name}', url='$url', forceInitialRefresh=true)")
+                    navigator?.replace(ExtensionAnimeDetailDestination(
+                        source = source,
+                        sAnime = sAnime,
+                        anilistId = null,
+                        forceInitialRefresh = true,
+                    ))
                 } else {
                     // Source uninstalled — open the DB-first details page so the user
                     // can still see saved episodes.
-                    navigator?.replace(LibraryExtensionDetailDestination(sid, url, title))
+                    Log.i(TAG, "unlinkFromAniList: navigating to LibraryExtensionDetailDestination " +
+                        "(sourceId=$sid, url='$url', forceInitialRefresh=true)")
+                    navigator?.replace(LibraryExtensionDetailDestination(
+                        sourceId = sid,
+                        animeUrl = url,
+                        animeTitle = title,
+                        forceInitialRefresh = true,
+                    ))
                 }
             } else {
                 // No source link to navigate to — just go back.
@@ -902,10 +922,27 @@ class AppController(
 
     /**
      * Called when the extension→AniList linking sheet successfully links.
-     * Navigates to the anime detail page. If the extension detail page is on
-     * top, it's replaced; otherwise the detail page is pushed.
+     *
+     * **Fix 1 (SOURCE-SWITCH-FIXES):** Now navigates to
+     * [ExtensionAnimeDetailDestination] (passing the original extension [source]
+     * + [sAnime] that the user tapped) instead of [AnimeDetailDestination].
+     * This way:
+     *  - The details page opens in **Extension mode** (uses the tapped extension
+     *    as the source — no SourceMatcher re-matching needed).
+     *  - The [anilistId] is passed for AniList metadata enrichment (Stage-D
+     *    merge in `ExtensionDetailsProvider`).
+     *  - The original extension source + SAnime that the user tapped is
+     *    preserved (previously lost when navigating to the AniList-mode page).
+     *
+     * If the extension detail page is on top, it's replaced; otherwise the
+     * detail page is pushed.
      */
-    fun onLinked(anilistId: Int, wasCached: Boolean, sAnimeTitle: String) {
+    fun onLinked(
+        anilistId: Int,
+        wasCached: Boolean,
+        source: AnimeCatalogueSource,
+        sAnime: SAnime,
+    ) {
         linkingTarget = null
         val nav = navigator
         // If we're ALREADY on a detail page (either flavor), REPLACE it — don't push
@@ -913,16 +950,23 @@ class AppController(
         // SaveableStateHolder key collision crash during the transition.
         val onDetailPage = nav?.lastItem is ExtensionAnimeDetailDestination ||
             nav?.lastItem is AnimeDetailDestination
+        // Navigate to ExtensionAnimeDetailDestination so the page opens in Extension
+        // mode (using the tapped extension as the source). The anilistId is passed
+        // for AniList metadata enrichment (Stage-D merge). No re-matching via
+        // SourceMatcher needed — the source is already known.
+        Log.i("AnikutaSearch", "onLinked: navigating to ExtensionAnimeDetailDestination " +
+            "(source='${source.name}', sAnime.title='${sAnime.title}', anilistId=$anilistId, " +
+            "wasCached=$wasCached, onDetailPage=$onDetailPage)")
         if (onDetailPage) {
-            nav?.replace(AnimeDetailDestination(anilistId))
+            nav?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = anilistId))
         } else {
-            nav?.push(AnimeDetailDestination(anilistId))
+            nav?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId = anilistId))
         }
         if (!wasCached) {
             Toast.makeText(context, "Linked to AniList", Toast.LENGTH_SHORT).show()
-            Log.i("AnikutaSearch", "Linked (fresh): $sAnimeTitle → AniList $anilistId")
+            Log.i("AnikutaSearch", "Linked (fresh): ${sAnime.title} → AniList $anilistId")
         } else {
-            Log.i("AnikutaSearch", "Linked (cached): $sAnimeTitle → AniList $anilistId (no toast)")
+            Log.i("AnikutaSearch", "Linked (cached): ${sAnime.title} → AniList $anilistId (no toast)")
         }
     }
 

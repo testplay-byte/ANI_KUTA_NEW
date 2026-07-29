@@ -188,8 +188,13 @@ private fun AppOverlays(appController: AppController) {
             anilistApi = appController.anilistApi,
             linkStore = appController.extensionLinkStore,
             linkingPreferences = appController.linkingPreferences,
+            // Fix 1 (SOURCE-SWITCH-FIXES): forward the original extension source + sAnime
+            // to AppController.onLinked so the navigation target is
+            // ExtensionAnimeDetailDestination (Extension mode + Stage-D AniList merge),
+            // NOT AnimeDetailDestination (which loses the source + re-matches via
+            // SourceMatcher).
             onLinked = { anilistId, wasCached ->
-                appController.onLinked(anilistId, wasCached, sAnime.title)
+                appController.onLinked(anilistId, wasCached, source, sAnime)
             },
             onGoWithoutLinking = { extSource, extSAnime ->
                 appController.onGoWithoutLinking(extSource, extSAnime)
