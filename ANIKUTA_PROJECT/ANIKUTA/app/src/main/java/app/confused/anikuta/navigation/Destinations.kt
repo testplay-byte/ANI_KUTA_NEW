@@ -186,8 +186,11 @@ data class ExtensionAnimeDetailDestination(
     val anilistId: Int? = null,
     val forceInitialRefresh: Boolean = false,
 ) : Screen {
-    /** Unique key per source+url — prevents Voyager SaveableStateHolder collision. */
-    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url})"
+    /** Unique key per source+url+anilistId — prevents Voyager SaveableStateHolder collision.
+     *  Includes anilistId + forceInitialRefresh so that navigating from a linked entry
+     *  (anilistId=12345) to an unlinked entry (anilistId=null) doesn't reuse the same key
+     *  (which would crash with "Key was used multiple times"). */
+    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url}_${anilistId ?: "none"}_$forceInitialRefresh)"
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
@@ -269,7 +272,7 @@ data class LibraryExtensionDetailDestination(
     val animeTitle: String,
     val forceInitialRefresh: Boolean = false,
 ) : Screen {
-    override val key: ScreenKey = "LibraryExtDetail($sourceId:$animeUrl)"
+    override val key: ScreenKey = "LibraryExtDetail($sourceId:$animeUrl:$forceInitialRefresh)"
 
     @Composable
     override fun Content() {

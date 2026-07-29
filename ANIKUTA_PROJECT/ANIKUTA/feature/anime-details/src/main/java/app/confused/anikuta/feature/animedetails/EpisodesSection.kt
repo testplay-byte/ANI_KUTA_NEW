@@ -235,7 +235,16 @@ fun EpisodesSection(
                 // was previously saved with + its ID, with a "Switch source" CTA
                 // that opens the ManualSearchSheet.
                 episodeState is EpisodeState.Loaded && currentMatch == null -> {
-                    val sourceName = episodeState.sourceName
+                    // Per user feedback: don't show "AniList" as the source name when
+                    // the extension is unavailable. AniList is a metadata provider, not
+                    // an episode source. Fall back to "Unknown" if the sourceName is
+                    // "AniList" (the mapper default) or blank.
+                    val rawSourceName = episodeState.sourceName
+                    val sourceName = when {
+                        rawSourceName.isBlank() -> "Unknown"
+                        rawSourceName.equals("AniList", ignoreCase = true) -> "Unknown"
+                        else -> rawSourceName
+                    }
                     // Per user feedback: the pill should blend with the background
                     // (surfaceVariant), and only the extension name should be
                     // highlighted (primary). "— unavailable" uses onSurfaceVariant
@@ -325,7 +334,13 @@ fun EpisodesSection(
     // "Copy ID" (leftmost — copies the extension ID to clipboard) +
     // "Switch source" (opens ManualSearchSheet) + "Dismiss".
     if (showUnavailableInfo && episodeState is EpisodeState.Loaded) {
-        val sourceName = episodeState.sourceName
+        // Same sourceName cleanup as the chip — don't show "AniList" as the source.
+        val rawSourceName = episodeState.sourceName
+        val sourceName = when {
+            rawSourceName.isBlank() -> "Unknown"
+            rawSourceName.equals("AniList", ignoreCase = true) -> "Unknown"
+            else -> rawSourceName
+        }
         val context = androidx.compose.ui.platform.LocalContext.current
         AlertDialog(
             onDismissRequest = { showUnavailableInfo = false },
