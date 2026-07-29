@@ -187,6 +187,7 @@ private fun AppOverlays(appController: AppController) {
             sAnime = sAnime,
             anilistApi = appController.anilistApi,
             linkStore = appController.extensionLinkStore,
+            linkingPreferences = appController.linkingPreferences,
             onLinked = { anilistId, wasCached ->
                 appController.onLinked(anilistId, wasCached, sAnime.title)
             },

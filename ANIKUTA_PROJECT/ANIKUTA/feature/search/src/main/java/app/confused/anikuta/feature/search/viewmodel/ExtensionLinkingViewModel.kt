@@ -85,6 +85,7 @@ class ExtensionLinkingViewModel(
     private val sAnime: SAnime,
     private val anilistApi: AniListApi,
     private val linkStore: ExtensionLinkStore,
+    private val linkingPreferences: app.confused.anikuta.core.preferences.LinkingPreferences,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ExtensionLinkingState>(ExtensionLinkingState.Loading)
@@ -99,9 +100,11 @@ class ExtensionLinkingViewModel(
         attemptLink()
     }
 
-    /** Entry point — cache check, then AniList auto-search. */
+    /** Entry point — cache check, then (if auto-link is ON) AniList auto-search. */
     private fun attemptLink() {
         // 1. Cache check — skip the sheet entirely if we've linked this before.
+        //    This runs regardless of the auto-link setting (if the user previously
+        //    linked this anime, the cached link is used).
         val cached = linkStore.getAniListId(source.id, sAnime.url)
         if (cached != null) {
             Log.i(TAG, "Cache hit: ${sAnime.title} → AniList $cached (no sheet shown, no toast)")
@@ -109,7 +112,16 @@ class ExtensionLinkingViewModel(
             return
         }
 
-        // 2. Auto-search AniList by the extension title.
+        // 2. Check the auto-link setting. If OFF, go straight to the extension-only
+        //    details page (no auto-search, no linking sheet). The user can still
+        //    manually link later via the "A" re-link button on the details page.
+        if (!linkingPreferences.isAutoLinkEnabled()) {
+            Log.i(TAG, "Auto-link is OFF — opening '${sAnime.title}' as extension-only")
+            _state.value = ExtensionLinkingState.GoWithoutLinking(source, sAnime)
+            return
+        }
+
+        // 3. Auto-search AniList by the extension title.
         viewModelScope.launch {
             _state.value = ExtensionLinkingState.Loading
             try {

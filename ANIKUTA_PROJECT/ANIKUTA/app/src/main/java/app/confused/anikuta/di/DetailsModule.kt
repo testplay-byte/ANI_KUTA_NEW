@@ -11,6 +11,7 @@ import app.confused.anikuta.data.extension.cache.SourceLinkStore
 import app.confused.anikuta.data.extension.details.ExtensionDetailsProvider
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -37,7 +38,11 @@ import org.koin.dsl.module
  */
 val detailsModule: Module = module {
     // ── The two providers, bundled as a single list to avoid Koin key collision ──
-    single<List<AnimeDetailsProvider>> {
+    // CRITICAL: Use a named qualifier ("animeDetailsProviders") to distinguish
+    // this List<*> binding from List<MetadataProvider> + List<BackupProvider>.
+    // Without the qualifier, Koin's type erasure causes all List<*> bindings to
+    // share the same key → ClassCastException at runtime.
+    single<List<AnimeDetailsProvider>>(named("animeDetailsProviders")) {
         listOf(
             AniListDetailsProvider(
                 anilistApi = get<AniListApi>(),
@@ -58,5 +63,5 @@ val detailsModule: Module = module {
             ),
         )
     }
-    single { AnimeDetailsProviderRegistry(get<List<AnimeDetailsProvider>>()) }
+    single { AnimeDetailsProviderRegistry(get<List<AnimeDetailsProvider>>(named("animeDetailsProviders"))) }
 }

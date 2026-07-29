@@ -103,6 +103,7 @@ fun ExtensionLinkingSheet(
     sAnime: SAnime,
     anilistApi: AniListApi,
     linkStore: ExtensionLinkStore,
+    linkingPreferences: app.confused.anikuta.core.preferences.LinkingPreferences,
     onLinked: (anilistId: Int, wasCached: Boolean) -> Unit,
     onGoWithoutLinking: (AnimeCatalogueSource, SAnime) -> Unit,
     onDismiss: () -> Unit,
@@ -116,6 +117,7 @@ fun ExtensionLinkingSheet(
                 sAnime = sAnime,
                 anilistApi = anilistApi,
                 linkStore = linkStore,
+                linkingPreferences = linkingPreferences,
             ) as T
         },
     )
