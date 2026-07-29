@@ -59,6 +59,11 @@ class AnimeRepositoryImpl(
             .asFlow()
             .mapToOneOrNull(dispatchers.io)
 
+    override fun observeBySourceAndUrl(sourceId: Long, url: String): Flow<Anime?> =
+        database.animesQueries.selectBySourceAndUrl(sourceId, url, AnimeMapper::map)
+            .asFlow()
+            .mapToOneOrNull(dispatchers.io)
+
     override suspend fun getById(id: Long): Anime? =
         database.animesQueries.selectById(id, AnimeMapper::map)
             .executeAsOneOrNull()
@@ -180,6 +185,13 @@ class AnimeRepositoryImpl(
             lastWatched = lastWatched,
             anilistId = anilistId.toLong(),
         )
+    }
+
+    override suspend fun clearAnilistId(id: Long) {
+        Log.d(TAG, "clearAnilistId: id=$id")
+        withContext(dispatchers.io) {
+            database.animesQueries.clearAnilistId(id)
+        }
     }
 
     override suspend fun updateAnilistMetadata(

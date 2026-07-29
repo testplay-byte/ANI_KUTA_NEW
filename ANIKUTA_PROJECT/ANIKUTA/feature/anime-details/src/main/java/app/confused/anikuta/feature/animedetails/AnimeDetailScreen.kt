@@ -180,6 +180,7 @@ fun AnimeDetailScreen(
     val allMatches by vm.allMatches.collectAsState()
     val watchedEpisodes by vm.watchedEpisodes.collectAsState()
     val episodeMetadata by vm.episodeMetadata.collectAsState()
+    val metadataFetchComplete by vm.metadataFetchComplete.collectAsState()
     val isRefreshing by vm.isRefreshing.collectAsState()
     val isSearching by vm.isSearching.collectAsState()
     val manualSearchResults by vm.manualSearchResults.collectAsState()
@@ -261,6 +262,7 @@ fun AnimeDetailScreen(
                     onManualSearch = { sourceId, query -> vm.manualSearch(sourceId, query) },
                     onLinkManual = vm::linkManual,
                     onClearManualSearch = vm::clearManualSearch,
+                    metadataFetchComplete = metadataFetchComplete,
                     onDownloadEpisode = onDownloadEpisode,
                     downloadStates = downloadStates,
                     onDownloadCancel = onDownloadCancel,

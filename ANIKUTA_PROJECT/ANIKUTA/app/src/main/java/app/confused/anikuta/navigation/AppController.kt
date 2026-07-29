@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import app.confused.anikuta.core.anilist.api.AniListApi
+import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.download.DownloadStatus
 import app.confused.anikuta.core.download.DownloadTask
@@ -109,6 +110,7 @@ class AppController(
     private val serverDiscoveryStore: ServerDiscoveryStore,
     val themePrefs: app.confused.anikuta.core.preferences.ThemePreferences,
     val linkingPreferences: app.confused.anikuta.core.preferences.LinkingPreferences,
+    val animeRepository: AnimeRepository,
     private val context: Context,
 ) {
 
@@ -295,23 +297,18 @@ class AppController(
     }
 
     /**
-     * Unlinks an anime from AniList — removes both directional links
-     * (SourceLinkStore + ExtensionLinkStore) + the view preference.
+     * Unlinks an anime from AniList — transitions the library entry to extension-only.
      *
-     * The anime remains in the library with its extension data intact (the
-     * source-extension row in the DB is keyed by sourceId:url, not by anilistId).
-     * After unlinking, navigates to the extension-mode details page so the user
-     * sees their saved data without the AniList overlay.
-     *
-     * Two navigation paths:
-     * - **Source still installed:** `navigator.replace(ExtensionAnimeDetailDestination(...))`
-     *   with a reconstructed SAnime (url + title from the saved link).
-     * - **Source uninstalled:** `navigator.replace(LibraryExtensionDetailDestination(...))`
-     *   — the DB-first path loads saved data; the user can't play/download but
-     *   can see saved episodes + use "Source unavailable" to switch.
-     *
-     * If no source link exists at all (shouldn't happen for a linked anime — the
-     * link IS the link), just shows a toast + pops back.
+     * **Behavior (Phase fix):**
+     * 1. Find the existing library row by anilistId.
+     * 2. Clear `anilist_id` on that row (keeps `source_id`/`url`/`favorite=true`
+     *    — so the anime stays saved in the library as an extension-only entry).
+     * 3. Remove the SourceLinkStore entry for `"al:$anilistId"` (AniList → ext link).
+     * 4. Remove the ExtensionLinkStore entry (ext → AniList reverse-link).
+     * 5. Remove the per-anime view preference (so a future re-link starts fresh).
+     * 6. Navigate to `ExtensionAnimeDetailDestination` (or `LibraryExtensionDetailDestination`
+     *    if the source extension was uninstalled) with the sourceId + SAnime from the
+     *    saved link — so the details page reopens in extension mode.
      *
      * @param anilistId the AniList ID to unlink.
      * @param sourceId the extension source ID (if known — otherwise resolved from SourceLinkStore).
@@ -325,49 +322,69 @@ class AppController(
         val url = animeUrl ?: link?.animeUrl
         val title = link?.animeTitle ?: "Unknown"
 
-        // Remove both directional links.
-        sourceLinkStore.removeLink(contentId)
-        if (sid != null && url != null) {
-            extensionLinkStore.unlink(sid, url)
-        }
-
-        // Remove the view preference for this anilistId (so a future re-link
-        // starts fresh — no stale "show Extension view" pref pointing at a
-        // now-removed link).
-        try {
-            org.koin.core.context.GlobalContext.get()
-                .get<app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore>()
-                .remove(anilistId)
-        } catch (e: Exception) {
-            Log.w(TAG, "unlinkFromAniList: failed to remove view preference " +
-                "(non-fatal) — anilistId=$anilistId", e)
-        }
-
-        Log.i(TAG, "unlinkFromAniList: unlinked anilistId=$anilistId from source " +
-            "$sid (url=$url, title=$title)")
-
-        // Navigate to the extension-mode details page (replace — no stacking).
-        if (sid != null && url != null) {
-            val source = sourceMatcher.getSourceById(sid)
-            val sAnime = SAnimeImpl().apply {
-                this.url = url
-                this.title = title
+        scope.launch {
+            try {
+                // ── Step 1+2: Clear anilist_id on the library row (transition to extension-only) ──
+                // Find the existing library entry by anilistId + null out its anilist_id.
+                // This keeps the row saved (favorite flag untouched) but severs the AniList link.
+                val existing = animeRepository.getByAnilistId(anilistId)
+                if (existing != null) {
+                    animeRepository.clearAnilistId(existing.id)
+                    Log.i(TAG, "unlinkFromAniList: cleared anilistId on row id=${existing.id} " +
+                        "(now extension-only, favorite=${existing.favorite})")
+                } else {
+                    Log.w(TAG, "unlinkFromAniList: no library row found for anilistId=$anilistId " +
+                        "— nothing to clear (the row will not be re-saved as extension-only)")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "unlinkFromAniList: failed to clear anilistId on library row " +
+                    "(non-fatal — link stores + navigation still proceed)", e)
             }
-            if (source != null) {
-                navigator?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
+
+            // ── Step 3: Remove the SourceLinkStore entry (AniList → ext link) ──
+            sourceLinkStore.removeLink(contentId)
+
+            // ── Step 4: Remove the ExtensionLinkStore entry (ext → AniList reverse-link) ──
+            if (sid != null && url != null) {
+                extensionLinkStore.unlink(sid, url)
+            }
+
+            // ── Step 5: Remove the view preference ──
+            try {
+                org.koin.core.context.GlobalContext.get()
+                    .get<app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore>()
+                    .remove(anilistId)
+            } catch (e: Exception) {
+                Log.w(TAG, "unlinkFromAniList: failed to remove view preference " +
+                    "(non-fatal) — anilistId=$anilistId", e)
+            }
+
+            Log.i(TAG, "unlinkFromAniList: unlinked anilistId=$anilistId from source " +
+                "$sid (url=$url, title=$title) — library entry is now extension-only")
+
+            // ── Step 6: Navigate to the extension-mode details page (replace — no stacking) ──
+            if (sid != null && url != null) {
+                val source = sourceMatcher.getSourceById(sid)
+                val sAnime = SAnimeImpl().apply {
+                    this.url = url
+                    this.title = title
+                }
+                if (source != null) {
+                    navigator?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
+                } else {
+                    // Source uninstalled — open the DB-first details page so the user
+                    // can still see saved episodes.
+                    navigator?.replace(LibraryExtensionDetailDestination(sid, url, title))
+                }
             } else {
-                // Source uninstalled — open the DB-first details page so the user
-                // can still see saved episodes.
-                navigator?.replace(LibraryExtensionDetailDestination(sid, url, title))
+                // No source link to navigate to — just go back.
+                Toast.makeText(
+                    context,
+                    "Unlinked from AniList",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                navigator?.pop()
             }
-        } else {
-            // No source link to navigate to — just go back.
-            Toast.makeText(
-                context,
-                "Unlinked from AniList",
-                Toast.LENGTH_SHORT,
-            ).show()
-            navigator?.pop()
         }
     }
 

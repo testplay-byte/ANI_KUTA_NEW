@@ -106,6 +106,17 @@ class AnimeDetailViewModel(
     private val _episodeMetadata = MutableStateFlow<Map<Int, EpisodeMetadata>>(emptyMap())
     val episodeMetadata: StateFlow<Map<Int, EpisodeMetadata>> = _episodeMetadata.asStateFlow()
 
+    /**
+     * Whether the episode-metadata fetch has completed (success OR early-return OR error).
+     *
+     * Drives the small spinner next to the "Episodes" heading. The spinner shows
+     * while metadata is being fetched AND the metadata map is empty. For unlinked
+     * extension anime (anilistId == null) the fetch is skipped — without this flag
+     * the spinner would spin forever (the empty map never fills).
+     */
+    private val _metadataFetchComplete = MutableStateFlow(false)
+    val metadataFetchComplete: StateFlow<Boolean> = _metadataFetchComplete.asStateFlow()
+
     /** The currently-active data source (drives the three-dot menu). */
     private val _currentDataSource = MutableStateFlow(initialDataSource())
     val currentDataSource: StateFlow<DataSource> = _currentDataSource.asStateFlow()
@@ -465,9 +476,16 @@ class AnimeDetailViewModel(
                         favorite = newFav,
                         dateAdded = if (newFav) System.currentTimeMillis() else existing.dateAdded,
                     )
+                    // Quick-win fallback: reflect the change immediately in the UI
+                    // so the save icon flips before the reactive flow emits.
+                    _isSaved.value = newFav
+                    Log.i(TAG, "toggleSave: updated existing id=${existing.id}, newFav=$newFav")
                     if (newFav) categoryRepository.setAnimeCategories(existing.id, listOf(Category.DEFAULT_ID))
                 } else {
                     saveAnimeToLibrary(unified)
+                    // Quick-win fallback: reflect the new save immediately.
+                    _isSaved.value = true
+                    Log.i(TAG, "toggleSave: saved new library entry for '${unified.title}'")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "toggleSave failed", e)
@@ -650,9 +668,13 @@ class AnimeDetailViewModel(
 
     /** Fetches per-episode metadata (titles, descriptions, thumbnails, air dates). */
     private suspend fun fetchEpisodeMetadata(anime: UnifiedAnime, episodeCount: Int) {
+        // Reset the completion flag at the start so the spinner can show again
+        // on reload / refresh / source switch.
+        _metadataFetchComplete.value = false
         try {
             val anilistId = anime.anilistId ?: run {
                 Log.i(TAG, "Skipping episode metadata — no anilistId (unlinked extension anime)")
+                _metadataFetchComplete.value = true
                 return
             }
             // Phase 4: EpisodeMetadataCache is keyed by content_id ("al:$anilistId").
@@ -671,8 +693,10 @@ class AnimeDetailViewModel(
             Log.i(TAG, "Fetching episode metadata: contentId=$contentId, anilistId=$anilistId, malId=${anime.malId}")
             val metadata = episodeMetadataRepository.fetchAll(request)
             _episodeMetadata.value = metadata
+            _metadataFetchComplete.value = true
         } catch (e: Exception) {
             Log.w(TAG, "Episode metadata fetch failed (non-fatal)", e)
+            _metadataFetchComplete.value = true
         }
     }
 
@@ -691,9 +715,8 @@ class AnimeDetailViewModel(
      * Observes the library save state (favorite flag) for this anime.
      *
      * - Linked anime (anilistId != null): reactive via `observeByAnilistId`.
-     * - Unlinked extension anime: polled after each load via `getBySourceAndUrl`
-     *   (no reactive Flow for sourceId+url keying today — acceptable; the flag
-     *   refreshes on load/switch).
+     * - Unlinked extension anime: reactive via `observeBySourceAndUrl`
+     *   (Phase fix — was previously polled after each load via `getBySourceAndUrl`).
      */
     private fun observeLibraryState() {
         viewModelScope.launch {
@@ -703,11 +726,23 @@ class AnimeDetailViewModel(
                     _isSaved.value = anime?.favorite == true
                 }
             } else {
-                // Unlinked extension anime — refresh the saved flag after each load.
-                animeState.collect { state ->
-                    if (state is DetailState.Success) {
-                        val existing = findLibraryAnime(state.anime)
-                        _isSaved.value = existing?.favorite == true
+                // Unlinked extension anime — observe reactively by sourceId + url.
+                val req = activeRequest
+                val sourceId = (req as? DetailsRequest.ByExtension)?.sourceId
+                val url = (req as? DetailsRequest.ByExtension)?.animeUrl
+                if (sourceId != null && url != null) {
+                    Log.i(TAG, "observeLibraryState: observing extension-only anime " +
+                        "by sourceId=$sourceId url=$url")
+                    animeRepository.observeBySourceAndUrl(sourceId, url).collect { anime ->
+                        _isSaved.value = anime?.favorite == true
+                    }
+                } else {
+                    // No usable identity — fall back to polling on load.
+                    animeState.collect { state ->
+                        if (state is DetailState.Success) {
+                            val existing = findLibraryAnime(state.anime)
+                            _isSaved.value = existing?.favorite == true
+                        }
                     }
                 }
             }

@@ -87,6 +87,9 @@ fun DetailContent(
     onManualSearch: suspend (Long, String) -> Unit,
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
+    /** Whether the episode-metadata fetch has completed (success / skipped / error).
+     *  Drives the small spinner next to the "Episodes" heading. */
+    metadataFetchComplete: Boolean = false,
     /** Agent 2 — Downloads: enqueues a download for an episode. */
     onDownloadEpisode: (SEpisode, AnimeSource, WatchEpisodeContext) -> Unit = { _, _, _ -> },
     /** Per-episode download states keyed by episode URL (for the row UI). */
@@ -208,6 +211,8 @@ fun DetailContent(
                         onManualSearch = onManualSearch,
                         onLinkManual = onLinkManual,
                         onClearManualSearch = onClearManualSearch,
+                        metadataFetchComplete = metadataFetchComplete,
+                        sourceId = anime.sourceId,
                         onDownloadEpisode = { episode, source ->
                             onDownloadEpisode(episode, source, watchCtx)
                         },
