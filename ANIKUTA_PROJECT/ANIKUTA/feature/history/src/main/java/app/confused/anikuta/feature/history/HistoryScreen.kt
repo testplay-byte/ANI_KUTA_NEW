@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.util.formatDuration
 import app.confused.anikuta.core.common.util.formatTimeAgo
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
@@ -60,13 +61,17 @@ import org.koin.androidx.compose.koinViewModel
  * a relative "watched X ago" timestamp. Tap → opens the anime detail page.
  *
  * @param onBack Pop the History screen.
- * @param onOpenAnime Open the anime detail page by AniList ID.
+ * @param onOpenAnime Open the anime detail page. Receives the resolved [Anime] —
+ *   the navigation layer handles BOTH linked (`anilistId != null` → AniList
+ *   details) and unlinked (`anilistId == null` → extension details) anime
+ *   via `AppController.openLibraryAnime`. This is the Phase 3 bug fix: unlinked
+ *   anime history rows are now openable.
  * @param viewModel Injected via Koin.
  */
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
-    onOpenAnime: (Int) -> Unit,
+    onOpenAnime: (Anime) -> Unit,
     viewModel: HistoryViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -131,13 +136,13 @@ fun HistoryScreen(
                         items(
                             count = entries.size,
                             key = { idx ->
-                                entries[idx].anilistId.toString() + ":" + entries[idx].episodeUrl
+                                "${entries[idx].contentId}|${entries[idx].episodeNumber}"
                             },
                         ) { idx ->
                             val entry = entries[idx]
                             HistoryRow(
                                 entry = entry,
-                                onClick = { onOpenAnime(entry.anilistId) },
+                                onClick = { entry.anime?.let { onOpenAnime(it) } },
                             )
                         }
                     }

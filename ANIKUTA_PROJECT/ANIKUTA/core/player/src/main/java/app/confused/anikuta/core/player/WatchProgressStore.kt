@@ -13,29 +13,41 @@ import kotlinx.serialization.decodeFromString
  * Lightweight watch-progress store.
  *
  * Saves the last playback position per episode so the user can resume where
- * they left off. Keyed by AniList ID + episode URL (stable across sessions).
+ * they left off.
  *
- * Phase 1 revamp changes:
- *  - Added [changes] Flow so the History page reacts to progress saves without
- *    a manual refresh.
- *  - Added nullable [Progress.coverUrl] / [Progress.animeTitle] /
- *    [Progress.episodeNumber] / [Progress.thumbnailUrl] fields so the History
- *    page can show real covers + episode thumbnails (Phase 2). Old data
- *    deserializes fine (ignoreUnknownKeys + nullable defaults).
- *  - Added [deleteAll] for O(1) clear-all (was O(anime) pref writes).
+ * # Key format (Phase 3, ADR-050)
  *
- * SQLDelight migration note:
- *  The full aniyomi approach stores progress in the `episodes` + `animehistory`
- *  SQLDelight tables. Our app is AniList-first, and `animes.source` + `url`
- *  (NOT NULL) aren't available until AniyomiSourceBridge resolves. Until that
- *  gap is closed, WatchProgressStore remains the source of truth for
- *  AniList-keyed progress. The SQLDelight repos are wired (Phase 0) and ready
- *  for when we resolve source URLs.
+ * Keyed by **content_id + episode number**: `"$contentId|$episodeNumber"`.
  *
- *  Related files (edit one → check the others):
- *    - PlayerActivity.kt saveProgress() — writes here
- *    - HistoryViewModel.kt — reads via [changes]
- *    - LibraryViewModel.kt sort() — reads via [getAll] for LAST_WATCHED sort
+ * - `contentId` is the Tier 2 per-content identity (e.g., `"al:154587"` for an
+ *   AniList-linked anime, or `"aniyomi:123:url"` for an unlinked extension anime).
+ *   It survives source switches — the same anime from a different extension has
+ *   the same content_id.
+ * - `episodeNumber` is the source-independent episode number (e.g., `1.0`, `2.0`).
+ *   It survives source switches — episode 1 is episode 1 regardless of source.
+ * - The `|` separator is used because content_id contains `:` (e.g., `"al:154587"`),
+ *   so `:` would be ambiguous. `|` is unambiguous.
+ *
+ * **Old format** (pre-Phase-3): `"$anilistId:$episodeUrl"`. The [WatchProgressMigrator]
+ * re-keys existing entries on first launch. Entries with `anilistId == 0` (the
+ * polluted unlinked-anime entries — Doc 01 §6.3) are dropped (they were already
+ * unopenable).
+ *
+ * # Why content_id + episodeNumber (not anilistId + episodeUrl)?
+ *
+ * - **Source switching:** when the user switches extension source, episodeUrl
+ *   changes but content_id + episodeNumber stay the same → progress survives.
+ * - **Unlinked anime:** content_id works for unlinked extension anime (falls back
+ *   to local_id), while anilistId=0 was a degenerate key that made history rows
+ *   unopenable (Doc 01 §5.1).
+ *
+ * Related files (edit one → check the others):
+ *   - WatchScreen.kt saveProgress() — writes here
+ *   - HistoryViewModel.kt — reads via [changes], parses keys via [parseKey]
+ *   - TrackSyncManager.kt — reads via [changes], parses keys via [parseKey]
+ *   - StatsCalculator.kt — reads via [changes], parses keys via [parseKey]
+ *   - WatchProgressBackupProvider.kt — reads [getAll], writes [save]
+ *   - WatchProgressMigrator.kt — re-keys on first launch
  */
 class WatchProgressStore(
     private val store: PreferenceStore,
@@ -55,35 +67,63 @@ class WatchProgressStore(
 
     /**
      * Reactive stream of all progress entries. Emits on every save/clear.
-     * Used by HistoryViewModel so the History page updates in real time when
-     * the user watches an episode.
+     * Used by HistoryViewModel + TrackSyncManager + StatsCalculator.
      */
     val changes: Flow<Map<String, Progress>> = progressPref.changes().map { it }
 
-    /** Key = "$anilistId:$episodeUrl" — stable across sessions. */
-    private fun key(anilistId: Int, episodeUrl: String) = "$anilistId:$episodeUrl"
+    /**
+     * Build the key for a content_id + episode number pair.
+     *
+     * Format: `"$contentId|$episodeNumberKey"` where `episodeNumberKey` is the
+     * episode number formatted to 3 decimal places (zero-padded, stable).
+     * The `|` separator is unambiguous because content_id contains `:`.
+     */
+    fun key(contentId: String, episodeNumber: Float): String =
+        "$contentId|${episodeNumberKey(episodeNumber)}"
+
+    /** Format an episode number as a stable key component (3 decimal places). */
+    private fun episodeNumberKey(n: Float): String = "%.3f".format(n)
+
+    /**
+     * Parse a key back into (content_id, episode_number).
+     *
+     * Returns null if the key is malformed or doesn't match the `"$contentId|$epNum"` format.
+     * The content_id is everything before the LAST `|`; the episode number is after it.
+     */
+    fun parseKey(key: String): Pair<String, Float>? {
+        val idx = key.lastIndexOf('|')
+        if (idx < 0) return null
+        val contentId = key.substring(0, idx)
+        val epNumStr = key.substring(idx + 1)
+        val epNum = epNumStr.toFloatOrNull() ?: return null
+        if (contentId.isBlank()) return null
+        return contentId to epNum
+    }
 
     /**
      * Save the current playback position for an episode.
      *
-     * The optional fields ([coverUrl], [animeTitle], [episodeNumber],
-     * [thumbnailUrl]) are used by the History page to show real covers +
-     * episode thumbnails. They are nullable so callers that don't have them
-     * (e.g. legacy code paths) can omit them.
+     * @param contentId the Tier 2 per-content identity (e.g., `"al:154587"`).
+     * @param episodeNumber the episode number (source-independent).
+     * @param positionSeconds current playback position.
+     * @param durationSeconds total episode duration.
+     * @param title episode display title.
+     * @param coverUrl anime cover URL (for History page).
+     * @param animeTitle anime title (for History page).
+     * @param thumbnailUrl episode thumbnail URL (for History page).
      */
     fun save(
-        anilistId: Int,
-        episodeUrl: String,
+        contentId: String,
+        episodeNumber: Float,
         positionSeconds: Int,
         durationSeconds: Int,
         title: String,
         coverUrl: String? = null,
         animeTitle: String? = null,
-        episodeNumber: Float = -1f,
         thumbnailUrl: String? = null,
     ) {
         val map = progressPref.get().toMutableMap()
-        map[key(anilistId, episodeUrl)] = Progress(
+        map[key(contentId, episodeNumber)] = Progress(
             positionSeconds = positionSeconds,
             durationSeconds = durationSeconds,
             title = title,
@@ -92,40 +132,66 @@ class WatchProgressStore(
             animeTitle = animeTitle,
             episodeNumber = episodeNumber,
             thumbnailUrl = thumbnailUrl,
+            contentId = contentId,
         )
         progressPref.set(map)
     }
 
     /** Get the saved position for an episode, or null if none. */
-    fun get(anilistId: Int, episodeUrl: String): Progress? {
-        return progressPref.get()[key(anilistId, episodeUrl)]
+    fun get(contentId: String, episodeNumber: Float): Progress? {
+        return progressPref.get()[key(contentId, episodeNumber)]
     }
 
     /** Clear progress for a single episode. */
-    fun clear(anilistId: Int, episodeUrl: String) {
+    fun clear(contentId: String, episodeNumber: Float) {
         val map = progressPref.get().toMutableMap()
-        map.remove(key(anilistId, episodeUrl))
+        map.remove(key(contentId, episodeNumber))
         progressPref.set(map)
     }
 
-    /** Clear all progress for an anime (all its episodes). */
-    fun clearAnime(anilistId: Int) {
+    /**
+     * Clear all progress for a content (all its episodes).
+     * Matches by key prefix `"$contentId|"` so it catches all episodes.
+     */
+    fun clearContent(contentId: String) {
         val map = progressPref.get().toMutableMap()
-        val prefix = "$anilistId:"
+        val prefix = "$contentId|"
         map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) }
         progressPref.set(map)
     }
 
     /**
      * Delete ALL progress entries in a single pref write.
-     * O(1) — replaces the old O(anime) loop that called clearAnime() per anime.
+     * O(1) — replaces the old O(anime) loop.
      */
     fun deleteAll() {
         progressPref.set(emptyMap())
     }
 
-    /** Get all saved progress entries (for the History page + Library sort). */
+    /** Get all saved progress entries (for the History page, Library sort, backup). */
     fun getAll(): Map<String, Progress> = progressPref.get()
+
+    /**
+     * Re-key an entry from [oldKey] to [newKey] (used by [WatchProgressMigrator] +
+     * the future ContentIdMigrator for link/unlink events).
+     *
+     * If [oldKey] doesn't exist, this is a no-op. If [newKey] already exists,
+     * the old entry is still removed (the new entry wins).
+     */
+    fun rekey(oldKey: String, newKey: String) {
+        val map = progressPref.get().toMutableMap()
+        val progress = map.remove(oldKey) ?: return
+        map[newKey] = progress
+        progressPref.set(map)
+    }
+
+    /**
+     * Replace the entire progress map (used by the migrator for bulk re-keying +
+     * by backup restore). More efficient than calling [rekey] per entry.
+     */
+    fun replaceAll(newMap: Map<String, Progress>) {
+        progressPref.set(newMap)
+    }
 
     @Serializable
     data class Progress(
@@ -141,5 +207,7 @@ class WatchProgressStore(
         val episodeNumber: Float = -1f,
         /** Episode thumbnail URL — for the History page episode thumbnail. Nullable. */
         val thumbnailUrl: String? = null,
+        /** The content_id this progress belongs to (Phase 3, ADR-050). Nullable for pre-Phase-3 entries. */
+        val contentId: String? = null,
     )
 }

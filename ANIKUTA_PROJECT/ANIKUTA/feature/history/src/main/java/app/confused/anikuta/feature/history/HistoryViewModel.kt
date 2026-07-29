@@ -3,6 +3,8 @@ package app.confused.anikuta.feature.history
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.confused.anikuta.core.common.model.ContentId
+import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.common.util.relativeDayBucket
 import app.confused.anikuta.core.player.WatchProgressStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,51 +19,39 @@ import kotlinx.coroutines.launch
  * Data source: [WatchProgressStore] (the active, reactive watch-progress store,
  * already Koin-registered in `playerModule`). We do NOT use `HistoryRepository`
  * (the SQLDelight-backed `animehistory` table) — per the project's current
- * architecture, `WatchProgressStore` is the source of truth for AniList-keyed
- * progress until source URLs are fully resolved. The store's `changes` Flow
- * emits on every save/clear, so the History screen updates in real time as the
- * user watches episodes.
+ * architecture, `WatchProgressStore` is the source of truth for watch progress.
+ * The store's `changes` Flow emits on every save/clear, so the History screen
+ * updates in real time as the user watches episodes.
  *
- * The store keys progress by `"anilistId:episodeUrl"`. We parse that key here
- * to surface the AniList ID for row-tap navigation.
+ * # Phase 3 (ADR-050) — content_id keys
  *
- * ── Backup / Restore (documentation) ──────────────────────────────────────────
+ * The store now keys progress by `"$contentId|$episodeNumber"` (was
+ * `"$anilistId:$episodeUrl"`). We parse keys via [WatchProgressStore.parseKey]
+ * and resolve the content_id back to an [app.confused.anikuta.core.common.model.Anime]
+ * via [AnimeRepository.getByContentId] (taking the first source binding — any
+ * one works for opening the detail page).
  *
- * Watch-progress history MUST be included in the future backup system. The
- * data is fully serializable (it already lives as a JSON map inside
- * `WatchProgressStore` via `PreferenceStore.getObject(...)`). The backup
- * system (when built — see ADR-028, gzipped protobuf) should:
+ * # Bug fix: unlinked anime history rows are now openable
  *
- *  **Export:**
- *   - Read `WatchProgressStore.getAll()` → `Map<String, Progress>`.
- *   - Serialize the map to JSON (use the same `Json { ignoreUnknownKeys = true }`
- *     config as the store) and write it into the backup payload under a
- *     stable key like `"watch_progress"`.
- *   - Each entry's key (`"anilistId:episodeUrl"`) MUST be preserved verbatim —
- *     it's the identity used for resume + dedup.
+ * The old code parsed `anilistId` from the key + called `onOpenAnime(anilistId)`.
+ * For unlinked extension anime (no AniList link), the key was `"0:<url>"` →
+ * `onOpenAnime(0)` → AniList fetchById(0) → error state (Doc 01 §5.1).
  *
- *  **Import:**
- *   - Read the `"watch_progress"` JSON from the backup payload.
- *   - Deserialize to `Map<String, Progress>`.
- *   - Write it back via the store's underlying `PreferenceStore.getObject`
- *     setter (the store doesn't expose a bulk `setAll` today; either add one
- *     or clear-then-iterate-`save`. A bulk `setAll` is the cleaner option —
- *     see the `// TODO backup` note in `WatchProgressStore`).
- *   - Merge semantics: prefer the backup entry with the newer `updatedAt`
- *     timestamp when a key exists in both the device and the backup.
+ * With content_id keys, unlinked anime have a valid content_id (= their
+ * local_id), so the [Anime] resolves successfully (with `anilistId == null`).
+ * The UI's onClick calls `AppController.openLibraryAnime(anime)`, which handles
+ * BOTH linked + unlinked anime — the bug is fixed.
  *
- *  **Data class contract:** `WatchProgressStore.Progress` is `@Serializable`
- *  with nullable defaults for the newer fields (`coverUrl`, `animeTitle`,
- *  `episodeNumber`, `thumbnailUrl`), so older backups deserialize cleanly.
- *  Do NOT remove nullable defaults from `Progress` without a backup-version
- *  bump.
+ * # Backup / Restore
  *
- * This ViewModel does NOT perform backup itself — it only documents the
- * contract. The future backup module will import `WatchProgressStore` and
- * follow the export/import steps above.
+ * See the contract documented on [WatchProgressStore] + [WatchProgressBackupProvider].
+ * The Phase 3 backup provider serializes the content_id + episodeNumber (not
+ * the old anilistId + episodeUrl), so backup/restore round-trips correctly
+ * under the new key format.
  */
 class HistoryViewModel(
     private val watchProgressStore: WatchProgressStore,
+    private val animeRepository: AnimeRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HistoryState())
@@ -75,9 +65,18 @@ class HistoryViewModel(
                     _state.update { it.copy(isLoading = false, isEmpty = true) }
                 }
                 .collect { progressMap ->
-                    val entries = progressMap.map { (key, progress) ->
-                        val (anilistId, episodeUrl) = parseKey(key)
-                        HistoryEntry(anilistId, episodeUrl, progress)
+                    val entries = buildList {
+                        for ((key, progress) in progressMap) {
+                            val (contentId, episodeNumber) = watchProgressStore.parseKey(key)
+                                ?: continue
+                            // Resolve the content_id back to an Anime (any source binding
+                            // works for opening the detail page — `openLibraryAnime`
+                            // re-resolves the source for unlinked anime).
+                            val anime = animeRepository
+                                .getByContentId(ContentId.unsafe(contentId))
+                                .firstOrNull()
+                            add(HistoryEntry(anime, contentId, episodeNumber, progress))
+                        }
                     }.sortedByDescending { it.progress.updatedAt }
 
                     val grouped = entries.groupBy { entry ->
@@ -120,23 +119,6 @@ class HistoryViewModel(
                 Log.e(TAG, "Failed to clear watch history", e)
             }
         }
-    }
-
-    /**
-     * Parses a `WatchProgressStore` key into `(anilistId, episodeUrl)`.
-     *
-     * Keys are `"anilistId:episodeUrl"`. The episode URL may itself contain
-     * colons (e.g. `https://...`), so we split on the FIRST colon only.
-     * Malformed keys (no colon / non-integer anilistId) yield anilistId 0 —
-     * the row still renders but its tap won't navigate.
-     */
-    private fun parseKey(key: String): Pair<Int, String> {
-        val idx = key.indexOf(':')
-        if (idx < 0) return 0 to key
-        val idPart = key.substring(0, idx)
-        val urlPart = key.substring(idx + 1)
-        val anilistId = idPart.toIntOrNull() ?: 0
-        return anilistId to urlPart
     }
 
     companion object {

@@ -153,6 +153,25 @@ class App : Application() {
                     Log.i(TAG, "Identity backfill: complete — $count rows backfilled")
                     backfillDonePref.set(true)
                 }
+
+                // ── Phase 3: Migrate watch progress + playback state to content_id keys ──
+                // Runs AFTER the identity backfill (so animes have content_id populated).
+                // Re-keys WatchProgressStore + PlaybackStateStore from "$anilistId:$episodeUrl"
+                // to "$contentId|$episodeNumber". Gated by a pref; idempotent.
+                val progressMigrationDone = prefStore.getBoolean(KEY_PROGRESS_MIGRATION_DONE, false)
+                if (!progressMigrationDone.get()) {
+                    Log.i(TAG, "Watch progress migration: starting")
+                    try {
+                        val migrator = GlobalContext.get().get<app.confused.anikuta.core.player.migration.WatchProgressMigrator>()
+                        val result = migrator.migrate()
+                        Log.i(TAG, "Watch progress migration: complete — " +
+                            "progress migrated=${result.watchProgressMigrated} dropped=${result.watchProgressDropped}, " +
+                            "playback migrated=${result.playbackStateMigrated} dropped=${result.playbackStateDropped}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Watch progress migration: failed (will retry next launch)", e)
+                    }
+                    progressMigrationDone.set(true)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to run identity backfill", e)
@@ -164,5 +183,6 @@ class App : Application() {
     companion object {
         private const val TAG = "AnikutaApp"
         private const val KEY_IDENTITY_BACKFILL_DONE = "pref_identity_backfill_v1_done"
+        private const val KEY_PROGRESS_MIGRATION_DONE = "pref_progress_migration_v1_done"
     }
 }

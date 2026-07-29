@@ -153,10 +153,19 @@ class StatsCalculator(
         progressMap: Map<String, WatchProgressStore.Progress>,
     ): List<BehindAnime> {
         // Count watched episodes per anilistId from the progress map.
+        //
+        // Phase 3 (ADR-050): keys are now `"$contentId|$episodeNumber"`. We parse
+        // them via [WatchProgressStore.parseKey] + extract the anilistId from the
+        // `"al:<anilistId>"` content_id. Unlinked anime (no "al:" prefix) are
+        // skipped — they don't have an anilistId to match against library anime.
         val watchedByAnilistId = mutableMapOf<Int, Int>()
         for ((key, _) in progressMap) {
-            val anilistIdStr = key.substringBefore(":")
-            val anilistId = anilistIdStr.toIntOrNull() ?: continue
+            val (contentId, _) = watchProgressStore.parseKey(key) ?: continue
+            val anilistId = contentId
+                .takeIf { it.startsWith("al:") }
+                ?.removePrefix("al:")
+                ?.toIntOrNull()
+                ?: continue
             watchedByAnilistId[anilistId] = (watchedByAnilistId[anilistId] ?: 0) + 1
         }
 
