@@ -448,8 +448,23 @@ object SettingsDestination : Screen {
         SettingsScreen(
             onOpenExtensions = { navigator.push(ExtensionsDestination) },
             onOpenAppearance = { navigator.push(AppearanceDestination) },
+            onOpenGeneral = { navigator.push(GeneralSettingsDestination) },
             onOpenPlayer = { navigator.push(PlayerSettingsDestination) },
             onOpenBackup = { navigator.push(BackupDestination) },
+            onBack = { navigator.pop() },
+        )
+    }
+}
+
+/**
+ * The General settings page — auto-link toggle, extension linking behavior,
+ * future per-extension config + provider selection.
+ */
+object GeneralSettingsDestination : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        app.confused.anikuta.feature.settings.GeneralSettingsScreen(
             onBack = { navigator.pop() },
         )
     }

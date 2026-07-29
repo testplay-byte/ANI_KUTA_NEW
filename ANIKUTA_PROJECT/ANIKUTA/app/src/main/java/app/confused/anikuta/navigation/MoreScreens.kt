@@ -109,6 +109,7 @@ fun MoreScreen(
 fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenGeneral: () -> Unit = {},
     onOpenPlayer: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onBack: () -> Unit,
@@ -123,6 +124,14 @@ fun SettingsScreen(
         ) {
             item {
                 SettingsSectionLabel("General")
+                MoreRow(
+                    icon = Icons.Filled.Settings,
+                    title = "General",
+                    subtitle = "Auto-link, extension linking behavior",
+                    onClick = onOpenGeneral,
+                )
+            }
+            item {
                 MoreRow(
                     icon = Icons.Filled.Extension,
                     title = "Extensions",
