@@ -44,7 +44,7 @@ interface DownloadManager {
 
     /**
      * Enqueue a download. Resolves to the existing task if the same episode is
-     * already queued/completed (dedup by `anilistId:episodeUrl`).
+     * already queued/completed (dedup by `contentId|episodeNumber`).
      *
      * @return the task ID (existing or new). Returns -1 if the request is
      *   invalid (blank videoUrl) — logged at ERROR.
@@ -67,7 +67,7 @@ interface DownloadManager {
     suspend fun deleteDownload(taskId: Long)
 
     /** Delete ALL completed downloads for an anime (the whole anime folder). */
-    suspend fun deleteAnimeDownloads(anilistId: Int)
+    suspend fun deleteAnimeDownloads(contentId: String)
 
     /** Retry an errored task (moves it back to QUEUED). */
     suspend fun retryDownload(taskId: Long)
@@ -92,28 +92,39 @@ interface DownloadManager {
     fun isFolderReady(): Boolean
 
     // ── Offline-playback queries ──
+    //
+    // Phase 6 (ADR-050): these take contentId + episodeNumber (NOT anilistId +
+    // episodeUrl). This is the source-switching fix — the same anime from a
+    // different extension has the same contentId + episodeNumber, so offline
+    // playback still finds the download.
 
-    /** True if a completed, on-disk copy exists for this episode. */
-    suspend fun isEpisodeDownloaded(anilistId: Int, episodeUrl: String): Boolean
+    /**
+     * True if a completed, on-disk copy exists for this episode.
+     *
+     * Looks up by `contentId + episodeNumber` (source-independent). Falls back
+     * to a filesystem scan if no in-memory task matches (covers files from a
+     * prior install or after a source switch that changed the episodeUrl).
+     */
+    suspend fun isEpisodeDownloaded(contentId: String, episodeNumber: Float): Boolean
 
     /**
      * The content:// URI of the downloaded video for offline playback, or null.
      * The URI is playable by MPV via `resolveUrlForMpv` (fd:// / real-path).
      */
-    suspend fun getDownloadedVideoUri(anilistId: Int, episodeUrl: String): String?
+    suspend fun getDownloadedVideoUri(contentId: String, episodeNumber: Float): String?
 
     /**
      * The content:// URIs of downloaded subtitle files for this episode
      * (loaded into MPV as external sub tracks). Empty if none.
      */
-    suspend fun getDownloadedSubtitleUris(anilistId: Int, episodeUrl: String): List<String>
+    suspend fun getDownloadedSubtitleUris(contentId: String, episodeNumber: Float): List<String>
 
     /** All completed episodes for an anime (for the Downloads screen grouping). */
-    suspend fun getDownloadedEpisodes(anilistId: Int): List<DownloadedEpisode>
+    suspend fun getDownloadedEpisodes(contentId: String): List<DownloadedEpisode>
 
     /**
      * A reactive map of download state for ALL tasks, keyed by
-     * `"$anilistId:$episodeUrl"`. Used by the episode-row UI to show
+     * `"$contentId|$episodeNumber"`. Used by the episode-row UI to show
      * download/progress/downloaded state per episode without per-row queries.
      *
      * Collect this once per screen (not per row) and build a local lookup map.

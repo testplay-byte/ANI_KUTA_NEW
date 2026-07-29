@@ -307,7 +307,7 @@ class DownloadQueue(
     private fun now() = System.currentTimeMillis()
 
     private fun keyFor(request: DownloadRequest): String =
-        "${request.anime.anilistId}:${request.episode.episodeUrl}"
+        "${request.anime.contentId}|${"%.3f".format(request.episode.episodeNumber)}"
 
     companion object {
         private const val PERSIST_INTERVAL_MS = 1_000L // throttle SharedPreferences writes

@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.model.SAnimeImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,15 +51,18 @@ import kotlinx.coroutines.launch
  * watch context (anime title, cover, metadata map). Used for retry-on-error
  * and for constructing the [WatchRequest] when the user picks a video.
  *
- * Stores [anilistId] so the resolver overlay (rendered at the root level) can
- * build the [WatchRequest] without needing a reference to the detail screen.
+ * Stores [contentId] (Phase 6 identity — e.g. `"al:154587"`) so the resolver
+ * overlay (rendered at the root level) can build the [WatchRequest] without
+ * needing a reference to the detail screen. The AniList ID for the
+ * [WatchRequest] is derived from [contentId] (parsed from the `"al:NNN"`
+ * format) — see [AppController.anilistIdFromContentId].
  */
 data class ResolveTarget(
     val episode: SEpisode,
     val source: AnimeSource,
     val episodeList: List<SEpisode>,
     val watchCtx: WatchEpisodeContext,
-    val anilistId: Int,
+    val contentId: String,
 )
 
 /**
@@ -168,6 +172,67 @@ class AppController(
 
     fun pushDetail(anilistId: Int) {
         navigator?.push(AnimeDetailDestination(anilistId))
+    }
+
+    /**
+     * Open the anime detail page for a downloaded anime, given its [contentId].
+     *
+     * **Phase 6 (ADR-050):** handles BOTH content_id flavors:
+     *  - `"al:NNN"` (AniList-linked): extracts the AniList ID + pushes [AnimeDetailDestination].
+     *  - `"aniyomi:<sourceId>:<url>"` (unlinked extension anime): resolves the
+     *    source via [sourceMatcher], reconstructs a minimal `SAnime` (url only —
+     *    the title is loaded by the detail page from the source), and pushes
+     *    [ExtensionAnimeDetailDestination] in extension mode.
+     *
+     * Used by the Downloaded Files screen's "tap an episode" callback. The actual
+     * offline playback happens when the user taps an episode on the detail page
+     * (`resolveEpisode` short-circuits to the local copy).
+     *
+     * If the source is no longer installed, shows a toast + logs (the user can
+     * still delete the download or find the anime via Search).
+     */
+    fun openDownloadedAnimeByContentId(contentId: String) {
+        val anilistId = anilistIdFromContentId(contentId)
+        if (anilistId != 0) {
+            pushDetail(anilistId)
+            return
+        }
+        // Unlinked extension anime — parse "aniyomi:<sourceId>:<url>".
+        val parts = contentId.split(":", limit = 3)
+        if (parts.size == 3 && parts[0] == "aniyomi") {
+            val sourceId = parts[1].toLongOrNull()
+            val sourceContentId = parts[2]
+            if (sourceId != null && sourceContentId.isNotBlank()) {
+                val source = sourceMatcher.getSourceById(sourceId)
+                if (source != null) {
+                    val sAnime = SAnimeImpl().apply {
+                        url = sourceContentId
+                        // Title left blank — ExtensionDetailsProvider loads it
+                        // from the source on the detail page.
+                        title = ""
+                    }
+                    pushExtensionDetail(source, sAnime, anilistId = null)
+                    Log.i(TAG, "openDownloadedAnimeByContentId: opened unlinked anime " +
+                        "(contentId=$contentId source=${source.name})")
+                    return
+                } else {
+                    Toast.makeText(
+                        context,
+                        "Source no longer installed for this download",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    Log.w(TAG, "openDownloadedAnimeByContentId: source $sourceId not installed " +
+                        "(contentId=$contentId)")
+                    return
+                }
+            }
+        }
+        Toast.makeText(
+            context,
+            "Cannot open this anime from here — use the Library",
+            Toast.LENGTH_LONG,
+        ).show()
+        Log.w(TAG, "openDownloadedAnimeByContentId: cannot resolve contentId=$contentId")
     }
 
     /**
@@ -373,24 +438,34 @@ class AppController(
      * builds a [WatchRequest] from the local file URI + local subtitle URIs
      * and pushes [WatchDestination] directly — skipping the resolver sheet.
      * Otherwise falls through to streaming resolution.
+     *
+     * **Phase 6 (ADR-050):** identity is [contentId] (e.g. `"al:154587"`).
+     * Offline checks look up by `(contentId, episodeNumber)` — source-
+     * independent, so a switched extension source still finds the download.
+     * The [WatchRequest.anilistId] is derived from [contentId] (the `"al:NNN"`
+     * segment) — 0 when the anime is unlinked (watch-progress save is skipped
+     * in that case; flagged as a Phase 6 follow-up).
      */
     fun resolveEpisode(
         episode: SEpisode,
         source: AnimeSource,
         episodeList: List<SEpisode>,
         watchCtx: WatchEpisodeContext,
-        anilistId: Int,
+        contentId: String,
     ) {
         val epNum = episode.episode_number.toInt().let { if (it > 0) it else 0 }
+        val anilistId = anilistIdFromContentId(contentId)
 
         scope.launch {
             // ── Offline-playback short-circuit ──
             try {
-                if (anilistId != 0 && downloadManager.isEpisodeDownloaded(anilistId, episode.url)) {
-                    val videoUri = downloadManager.getDownloadedVideoUri(anilistId, episode.url)
-                    val subUris = downloadManager.getDownloadedSubtitleUris(anilistId, episode.url)
+                if (downloadManager.isEpisodeDownloaded(contentId, episode.episode_number)) {
+                    Log.i(TAG, "Offline hit: contentId=$contentId EP ${episode.episode_number} " +
+                        "(anilistId=$anilistId) — using local copy")
+                    val videoUri = downloadManager.getDownloadedVideoUri(contentId, episode.episode_number)
+                    val subUris = downloadManager.getDownloadedSubtitleUris(contentId, episode.episode_number)
                     if (videoUri != null) {
-                        Log.i("AnikutaDownload", "Playing offline: ${episode.name} ($videoUri)")
+                        Log.i(TAG, "Playing offline: ${episode.name} ($videoUri)")
                         pushWatch(
                             WatchRequest(
                                 videoUrl = videoUri,
@@ -417,16 +492,19 @@ class AppController(
                             )
                         )
                         return@launch
+                    } else {
+                        Log.w(TAG, "isEpisodeDownloaded=true but videoUri=null — falling back to stream")
                     }
                 }
             } catch (e: Exception) {
-                Log.w("AnikutaDownload", "Offline check failed, falling back to stream", e)
+                Log.w(TAG, "Offline check failed, falling back to stream", e)
             }
 
             // ── Streaming path ──
-            resolveTarget = ResolveTarget(episode, source, episodeList, watchCtx, anilistId)
+            resolveTarget = ResolveTarget(episode, source, episodeList, watchCtx, contentId)
             resolverState = VideoResolverState.Resolving(epNum)
-            Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name} (${episodeList.size} episodes)")
+            Log.i("AnikutaResolver", "Resolving: ${episode.name} from ${source.name} " +
+                "(${episodeList.size} episodes) contentId=$contentId")
 
             when (val result = resolverService.resolve(source, episode)) {
                 is ResolverResult.Success -> {
@@ -435,7 +513,7 @@ class AppController(
                     try {
                         serverDiscoveryStore.recordServers(source.id, result.servers.map { it.name })
                     } catch (e: Exception) {
-                        Log.w("AnikutaDownload", "Failed to record servers during watch", e)
+                        Log.w(TAG, "Failed to record servers during watch", e)
                     }
                     resolverState = VideoResolverState.Show(epNum, result.servers)
                 }
@@ -478,13 +556,14 @@ class AppController(
             }
             // Parse quality int from the quality string (e.g. "1080p" → 1080)
             val qualityInt = video.quality.replace("p", "").toIntOrNull() ?: 0
+            val anilistId = anilistIdFromContentId(target.contentId)
 
             pushWatch(
                 WatchRequest(
                     videoUrl = video.url,
                     videoHeaders = video.videoHeaders,
                     videoTitle = video.videoTitle.ifBlank { target.episode.name },
-                    anilistId = target.anilistId,
+                    anilistId = anilistId,
                     animeTitle = target.watchCtx.animeTitle,
                     coverUrl = target.watchCtx.coverUrl,
                     coverColor = target.watchCtx.coverColorArgb.takeIf { it != 0 },
@@ -508,7 +587,7 @@ class AppController(
     /** Retry the last resolution (from the resolver sheet's error state). */
     fun retryResolve() {
         val target = resolveTarget ?: return
-        resolveEpisode(target.episode, target.source, target.episodeList, target.watchCtx, target.anilistId)
+        resolveEpisode(target.episode, target.source, target.episodeList, target.watchCtx, target.contentId)
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -518,25 +597,35 @@ class AppController(
     /**
      * Enqueues a download for an episode. Resolves the video URL (same flow as
      * watching) then enqueues via [DownloadOrchestrator].
+     *
+     * **Phase 6 (ADR-050):** takes [contentId] (String, e.g. `"al:154587"`).
+     * The old `if (anilistId == 0)` hard gate is REMOVED — unlinked extension
+     * anime (whose content_id is the local_id, e.g. `"aniyomi:123:url"`) are
+     * now downloadable. The [contentId] should be derived by the caller from
+     * the anime's content_id (Phase 1 backfill populates this), or fall back to
+     * `"al:$anilistId"` for AniList-linked anime. Should never be empty — if
+     * it is, log a warning + return (defensive; shouldn't happen with Phase 1).
      */
     fun downloadEpisode(
         episode: SEpisode,
         source: AnimeSource,
         watchCtx: WatchEpisodeContext,
-        anilistId: Int,
+        contentId: String,
     ) {
-        if (anilistId == 0) {
-            Toast.makeText(context, "Cannot download — anime not linked", Toast.LENGTH_SHORT).show()
+        if (contentId.isBlank()) {
+            Log.w(TAG, "downloadEpisode: blank contentId — cannot enqueue (anilistId fallback should have produced one)")
+            Toast.makeText(context, "Cannot download — no content identity for this anime", Toast.LENGTH_SHORT).show()
             return
         }
         val animeInfo = app.confused.anikuta.core.download.DownloadAnimeInfo(
-            anilistId = anilistId,
-            title = watchCtx.animeTitle.ifBlank { "Anime $anilistId" },
+            contentId = contentId,
+            title = watchCtx.animeTitle.ifBlank { "Anime" },
             coverUrl = watchCtx.coverUrl,
         )
         // Immediate Resolving state on the row — instant feedback.
         resolvingEpisodes[episode.url] = true
-        Log.i("AnikutaDownload", "Download requested: ${animeInfo.title} EP ${episode.episode_number}")
+        Log.i(TAG, "Download requested: ${animeInfo.title} EP ${episode.episode_number} " +
+            "(contentId=$contentId)")
         scope.launch {
             try {
                 val result = downloadOrchestrator.enqueueDownload(animeInfo, episode, source)
@@ -552,7 +641,7 @@ class AppController(
                         Toast.makeText(context, "Download failed: ${result.message}", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
-                Log.e("AnikutaDownload", "Download enqueue failed", e)
+                Log.e(TAG, "Download enqueue failed", e)
                 Toast.makeText(context, "Download failed: ${e.message ?: e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
             } finally {
                 resolvingEpisodes.remove(episode.url)
@@ -591,8 +680,15 @@ class AppController(
     }
 
     // ── Download row actions ──
+    //
+    // Phase 6 (ADR-050): these take (contentId, episodeUrl) — the contentId
+    // replaces the old anilistId, and the task is located by iterating the
+    // downloadTasksFlow (keyed by `"$contentId|$episodeNumber"`) and matching
+    // on (contentId, episodeUrl). Keeping episodeUrl in the signature means
+    // the UI callbacks (EpisodesSection / EpisodeRow / AnimeDetailScreen) don't
+    // need to change.
 
-    fun cancelDownload(anilistId: Int, episodeUrl: String) {
+    fun cancelDownload(contentId: String, episodeUrl: String) {
         // If resolving, just clear the resolving flag (the resolve coroutine
         // will complete + its result is ignored since the user cancelled).
         if (resolvingEpisodes[episodeUrl] == true) {
@@ -600,22 +696,33 @@ class AppController(
             downloadPickerTarget?.let { if (it.episode.url == episodeUrl) downloadPickerTarget = null }
             return
         }
-        val task = downloadTasksFlow.value["$anilistId:$episodeUrl"] ?: return
+        val task = downloadTasksFlow.value.values.firstOrNull {
+            it.request.anime.contentId == contentId && it.request.episode.episodeUrl == episodeUrl
+        } ?: run {
+            Log.w(TAG, "cancelDownload: no task for contentId=$contentId episodeUrl=$episodeUrl")
+            return
+        }
         scope.launch { downloadManager.cancelDownload(task.id) }
     }
 
-    fun resumeDownload(anilistId: Int, episodeUrl: String) {
-        val task = downloadTasksFlow.value["$anilistId:$episodeUrl"] ?: return
+    fun resumeDownload(contentId: String, episodeUrl: String) {
+        val task = downloadTasksFlow.value.values.firstOrNull {
+            it.request.anime.contentId == contentId && it.request.episode.episodeUrl == episodeUrl
+        } ?: return
         scope.launch { downloadManager.resumeDownload(task.id) }
     }
 
-    fun retryDownload(anilistId: Int, episodeUrl: String) {
-        val task = downloadTasksFlow.value["$anilistId:$episodeUrl"] ?: return
+    fun retryDownload(contentId: String, episodeUrl: String) {
+        val task = downloadTasksFlow.value.values.firstOrNull {
+            it.request.anime.contentId == contentId && it.request.episode.episodeUrl == episodeUrl
+        } ?: return
         scope.launch { downloadManager.retryDownload(task.id) }
     }
 
-    fun deleteDownload(anilistId: Int, episodeUrl: String) {
-        val task = downloadTasksFlow.value["$anilistId:$episodeUrl"] ?: return
+    fun deleteDownload(contentId: String, episodeUrl: String) {
+        val task = downloadTasksFlow.value.values.firstOrNull {
+            it.request.anime.contentId == contentId && it.request.episode.episodeUrl == episodeUrl
+        } ?: return
         scope.launch {
             downloadManager.deleteDownload(task.id)
             Toast.makeText(context, "Download deleted", Toast.LENGTH_SHORT).show()
@@ -628,20 +735,25 @@ class AppController(
 
     /**
      * Builds the per-episode download-state map for the given anime.
-     * Keyed by episode URL (stripped of the anilistId prefix).
+     *
+     * **Phase 6 (ADR-050):** iterates [tasksMap] + filters by
+     * `task.request.anime.contentId == contentId`. The returned map is keyed by
+     * `episodeUrl` (derived from each task's `request.episode.episodeUrl`) so
+     * the UI (`EpisodesSection`/`EpisodeRow`) can keep looking up state by
+     * `episode.url` — no UI changes needed despite the underlying composite
+     * task key changing from `"$anilistId:$episodeUrl"` → `"$contentId|$episodeNumber"`.
      *
      * Reads [resolvingEpisodes] (a Compose SnapshotStateMap) so that composables
      * calling this during composition will recompose when it changes.
      */
     fun getDownloadStates(
-        anilistId: Int,
+        contentId: String,
         tasksMap: Map<String, DownloadTask>,
     ): Map<String, EpisodeDownloadState> {
-        val states = tasksMap
-            .filterKeys { it.startsWith("$anilistId:") }
-            .mapKeys { it.key.substringAfter(':') }
-            .mapValues { (_, task) ->
-                when (task.status) {
+        val states = mutableMapOf<String, EpisodeDownloadState>()
+        tasksMap.values.forEach { task ->
+            if (task.request.anime.contentId == contentId) {
+                states[task.request.episode.episodeUrl] = when (task.status) {
                     DownloadStatus.QUEUED -> EpisodeDownloadState.Queued
                     DownloadStatus.DOWNLOADING -> EpisodeDownloadState.Downloading(task.progress)
                     DownloadStatus.PAUSED -> EpisodeDownloadState.Paused
@@ -650,7 +762,7 @@ class AppController(
                     DownloadStatus.CANCELLED -> EpisodeDownloadState.NotDownloaded
                 }
             }
-            .toMutableMap()
+        }
         // Merge resolving episodes — these take priority (immediate spinner).
         resolvingEpisodes.forEach { (episodeUrl, isResolving) ->
             if (isResolving) {
@@ -760,5 +872,28 @@ class AppController(
         } else {
             pendingTrackerAuth = null
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Phase 6 helpers (ADR-050 — content_id migration)
+    // ════════════════════════════════════════════════════════════════════
+
+    /**
+     * Extracts the AniList media ID from a [contentId] of the form `"al:NNN"`.
+     * Returns 0 for non-AniList content_ids (unlinked extension anime,
+     * MAL/TMDB-linked anime, etc.) — WatchRequest.anilistId is a legacy Int
+     * field used by watch-progress saving (Phase 3) + tracker sync, both of
+     * which skip cleanly when anilistId == 0.
+     *
+     * Tricky: a future Phase 6 follow-up should add `contentId: String` to
+     * WatchRequest so unlinked offline playback also saves watch progress.
+     */
+    private fun anilistIdFromContentId(contentId: String): Int {
+        if (!contentId.startsWith("al:")) return 0
+        return contentId.removePrefix("al:").toIntOrNull() ?: 0
+    }
+
+    companion object {
+        private const val TAG = "AnikutaAppController"
     }
 }

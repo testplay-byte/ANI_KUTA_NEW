@@ -75,8 +75,8 @@ class DownloadViewModel(
 
     fun deleteEpisode(taskId: Long) = viewModelScope.launch { manager.deleteDownload(taskId) }
 
-    fun deleteAnime(anilistId: Int) = viewModelScope.launch {
-        manager.deleteAnimeDownloads(anilistId)
+    fun deleteAnime(contentId: String) = viewModelScope.launch {
+        manager.deleteAnimeDownloads(contentId)
     }
 
     /** Persist the SAF folder permission + URI (from the folder picker). */
@@ -94,7 +94,7 @@ class DownloadViewModel(
         return tasks
             .groupBy {
                 DownloadedAnimeKey(
-                    anilistId = it.request.anime.anilistId,
+                    contentId = it.request.anime.contentId,
                     title = it.request.anime.title,
                     coverUrl = it.request.anime.coverUrl,
                     coverColor = it.request.anime.coverColor,

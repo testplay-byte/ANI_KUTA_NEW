@@ -203,6 +203,26 @@ class App : Application() {
                     }
                     metadataMigrationDone.set(true)
                 }
+
+                // ── Phase 6: Migrate downloads from anilistId to content_id ──
+                // Re-keys DownloadStore tasks (legacyAnilistId → contentId) +
+                // moves on-disk folders from [anilistId] to [al-anilistId].
+                // Runs AFTER all other migrations. Gated by a pref; idempotent.
+                val downloadMigrationDone = prefStore.getBoolean(KEY_DOWNLOAD_MIGRATION_DONE, false)
+                if (!downloadMigrationDone.get()) {
+                    Log.i(TAG, "Download migration: starting")
+                    try {
+                        val downloadMigrator = GlobalContext.get()
+                            .get<app.confused.anikuta.migration.DownloadMigration>()
+                        val result = downloadMigrator.migrate()
+                        Log.i(TAG, "Download migration: complete — " +
+                            "tasks migrated=${result.tasksMigrated} skipped=${result.tasksSkipped}, " +
+                            "folders moved=${result.foldersMoved} failed=${result.foldersFailed}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Download migration: failed (will retry next launch)", e)
+                    }
+                    downloadMigrationDone.set(true)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to run identity backfill", e)
@@ -216,5 +236,6 @@ class App : Application() {
         private const val KEY_IDENTITY_BACKFILL_DONE = "pref_identity_backfill_v1_done"
         private const val KEY_PROGRESS_MIGRATION_DONE = "pref_progress_migration_v1_done"
         private const val KEY_METADATA_MIGRATION_DONE = "pref_metadata_migration_v1_done"
+        private const val KEY_DOWNLOAD_MIGRATION_DONE = "pref_download_migration_v1_done"
     }
 }
