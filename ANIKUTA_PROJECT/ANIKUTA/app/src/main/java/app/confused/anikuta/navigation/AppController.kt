@@ -261,39 +261,67 @@ class AppController(
      *
      * This fixes the bug where unlinked extension anime saved to the library were
      * not openable on tap (the old `onOpenAnime(anilistId ?: return)` silently bailed).
+     *
+     * ═══ Fix 6 (UNLINK-LINK-SAVE-FIXES) ═══
+     * **Branching change:** when `anime.sourceId > 0` we now ALWAYS open in
+     * Extension mode (passing `anilistId` along) — even if `anilistId != null`.
+     * This survives stale library snapshots: the library list re-emits rows
+     * asynchronously after `unlinkFromAniList` clears `anilist_id`, so a brief
+     * window exists where the snapshot still has the old `anilist_id` but the DB
+     * row's `anilist_id` is already NULL. Opening in AniList mode during that
+     * window would put the new VM in AniList mode → `observeByAnilistId` returns
+     * null → `_isSaved = false` (the "saved anime sometimes shows unsaved" bug).
+     * Opening in Extension mode keeps the `(sourceId, url)` natural key as the
+     * primary identity, which is always present on the row.
      */
     fun openLibraryAnime(anime: app.confused.anikuta.core.common.model.Anime) {
         val anilistId = anime.anilistId
+        val sourceId = anime.sourceId
+
+        // ── Branch 1: extension-sourced row (sourceId > 0) — always Extension mode ──
+        if (sourceId > 0L) {
+            val source = sourceMatcher.getSourceById(sourceId)
+            val sAnime = SAnimeImpl().apply {
+                url = anime.url
+                title = anime.title
+            }
+            if (source != null) {
+                Log.i(TAG, "openLibraryAnime: opening in Extension mode " +
+                    "(sourceId=$sourceId, anilistId=$anilistId, title='${anime.title}')")
+                pushExtensionDetail(source, sAnime, anilistId = anilistId)
+            } else {
+                // Source not installed — still open the details page with saved DB data.
+                // The user can see saved episodes but can't play/download (the source
+                // is gone). They can use the "Source unavailable" chip on the details
+                // page to switch to another extension (or "Link to AniList" to link
+                // the saved DB data to a fresh AniList entry).
+                Log.w(TAG, "openLibraryAnime: Source $sourceId not installed — opening " +
+                    "with saved data for '${anime.title}' (anilistId=$anilistId)")
+                navigator?.push(LibraryExtensionDetailDestination(
+                    sourceId = sourceId,
+                    animeUrl = anime.url,
+                    animeTitle = anime.title,
+                ))
+            }
+            return
+        }
+
+        // ── Branch 2: AniList-only row (sourceId == 0, anilistId != null) — AniList mode ──
         if (anilistId != null) {
+            Log.i(TAG, "openLibraryAnime: opening in AniList mode " +
+                "(sourceId=$sourceId, anilistId=$anilistId, title='${anime.title}')")
             pushDetail(anilistId)
             return
         }
-        // Unlinked extension anime — resolve the source.
-        val source = sourceMatcher.getSourceById(anime.sourceId)
-        val sAnime = eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
-            url = anime.url
-            title = anime.title
-        }
-        if (source != null) {
-            pushExtensionDetail(source, sAnime, anilistId = null)
-        } else {
-            // Source not installed — still open the details page with saved DB data.
-            // The user can see saved episodes but can't play/download (the source
-            // is gone). They can use the "Source unavailable" chip on the details
-            // page to switch to another extension (or "Link to AniList" to link
-            // the saved DB data to a fresh AniList entry).
-            //
-            // This is the library-no-source fix from the scroll-blur branch: the
-            // previous behavior bailed with a toast, leaving the user stranded
-            // (the only way to see the saved anime was to reinstall the source).
-            Log.w("AnikutaLibrary", "Source ${anime.sourceId} not installed — opening " +
-                "with saved data for '${anime.title}'")
-            navigator?.push(LibraryExtensionDetailDestination(
-                sourceId = anime.sourceId,
-                animeUrl = anime.url,
-                animeTitle = anime.title,
-            ))
-        }
+
+        // ── Branch 3: no usable identity — bail with a toast (defensive) ──
+        Log.w(TAG, "openLibraryAnime: no usable identity (sourceId=$sourceId, " +
+            "anilistId=$anilistId) — cannot open '${anime.title}'")
+        Toast.makeText(
+            context,
+            "Cannot open '${anime.title}' — no source or AniList link",
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     /**
@@ -957,6 +985,30 @@ class AppController(
         Log.i("AnikutaSearch", "onLinked: navigating to ExtensionAnimeDetailDestination " +
             "(source='${source.name}', sAnime.title='${sAnime.title}', anilistId=$anilistId, " +
             "wasCached=$wasCached, onDetailPage=$onDetailPage)")
+
+        // ═══ Fix 5 (UNLINK-LINK-SAVE-FIXES) ═══
+        // Persist the REVERSE link (AniList → extension) in SourceLinkStore so:
+        //   - Cold starts can resolve the extension source from the AniList ID
+        //     (ExtensionDetailsProvider.load(ByAniListId) reverse-looks-up via
+        //     sourceLinkStore.getLink("al:$anilistId")).
+        //   - `unlinkFromAniList` can find the source/url without relying on the
+        //     live destination (which may not be on the stack at unlink time).
+        // The ExtensionLinkStore (ext → AniList) is written by
+        // ExtensionLinkingViewModel.attemptLink — this is the symmetric write.
+        try {
+            sourceLinkStore.saveLink(
+                contentId = "al:$anilistId",
+                sourceId = source.id,
+                animeUrl = sAnime.url,
+                animeTitle = sAnime.title,
+            )
+            Log.i("AnikutaSearch", "onLinked: saved SourceLinkStore reverse link " +
+                "(contentId=al:$anilistId → sourceId=${source.id}, url=${sAnime.url})")
+        } catch (e: Exception) {
+            Log.w("AnikutaSearch", "onLinked: failed to save SourceLinkStore reverse " +
+                "link (non-fatal) — anilistId=$anilistId", e)
+        }
+
         if (onDetailPage) {
             nav?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = anilistId))
         } else {

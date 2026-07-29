@@ -77,6 +77,26 @@ interface AnimeRepository {
     suspend fun clearAnilistId(id: Long)
 
     /**
+     * Sets the `anilist_id` column on the row with the given id — WITHOUT
+     * touching `favorite`, `date_added`, category membership, or any other field.
+     *
+     * Companion of [clearAnilistId]. Used by
+     * [app.confused.anikuta.data.extension.details.ExtensionDetailsProvider.persistEpisodes]
+     * when a previously-unlinked extension-only row (anilist_id = NULL) is being
+     * linked to AniList for the first time — e.g. the user opened an extension
+     * anime, saved it to the library, then went through the linking flow. The
+     * natural-key lookup `(sourceId, url)` finds the existing row; we stamp the
+     * anilist_id on it WITHOUT going through [upsert] (which would overwrite
+     * `favorite` with the freshly-built `newAnime.favorite = false`).
+     *
+     * @param id the anime row's `_id`.
+     * @param anilistId the AniList media ID to set (or null to clear, mirroring
+     *   [clearAnilistId] — though [clearAnilistId] is preferred for that case
+     *   because it's named after its intent).
+     */
+    suspend fun updateAnilistId(id: Long, anilistId: Int?)
+
+    /**
      * Update the source_id + url on an existing library row (used when switching
      * extension sources — preserves _id, favorite, category membership, etc.).
      */

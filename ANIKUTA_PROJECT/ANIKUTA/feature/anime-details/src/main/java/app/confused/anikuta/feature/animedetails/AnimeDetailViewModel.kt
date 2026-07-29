@@ -781,12 +781,36 @@ class AnimeDetailViewModel(
         }
     }
 
-    /** Finds the library anime row (linked by anilistId, or unlinked by sourceId+url). */
+    /**
+     * Finds the library anime row (linked by anilistId, or unlinked by sourceId+url).
+     *
+     * **Fix 4 (UNLINK-LINK-SAVE-FIXES):** when `anilistId != null` but the
+     * anilist-keyed lookup returns null (e.g. the row was unlinked — anilist_id
+     * cleared — but is still saved as an extension-only row), falls back to a
+     * `(sourceId, url)` lookup. This keeps `toggleSave` / `saveToCategories`
+     * working through the unlink transition window — without it, the user would
+     * see the save button as unsaved (the lookup missed) and toggling would
+     * insert a duplicate row.
+     */
     private suspend fun findLibraryAnime(anime: UnifiedAnime): Anime? {
         val anilistId = anime.anilistId  // local vals so Kotlin can smart-cast
         val sourceId = anime.sourceId
         return when {
-            anilistId != null -> animeRepository.getByAnilistId(anilistId)
+            anilistId != null -> {
+                val byAnilist = animeRepository.getByAnilistId(anilistId)
+                if (byAnilist != null) {
+                    byAnilist
+                } else if (sourceId != null) {
+                    val bySrc = animeRepository.getBySourceAndUrl(sourceId, anime.url)
+                    if (bySrc != null) {
+                        Log.d(TAG, "findLibraryAnime: anilistId=$anilistId missed — " +
+                            "fallback (sourceId=$sourceId, url=${anime.url}) → id=${bySrc.id}")
+                    }
+                    bySrc
+                } else {
+                    null
+                }
+            }
             sourceId != null -> animeRepository.getBySourceAndUrl(sourceId, anime.url)
             else -> null
         }
@@ -796,36 +820,51 @@ class AnimeDetailViewModel(
      * Observes the library save state (favorite flag) for this anime.
      *
      * - Linked anime (anilistId != null): reactive via `observeByAnilistId`.
+     *   **Fix 3 (UNLINK-LINK-SAVE-FIXES):** falls back to `getBySourceAndUrl`
+     *   when the anilist-keyed row is missing (e.g. after `unlinkFromAniList`
+     *   cleared `anilist_id`). Without the fallback, the unlink transition
+     *   window would briefly (or permanently, if the observer was started in
+     *   AniList mode with a stale anilistId) show `_isSaved = false`.
      * - Unlinked extension anime: reactive via `observeBySourceAndUrl`
      *   (Phase fix — was previously polled after each load via `getBySourceAndUrl`).
      */
     private fun observeLibraryState() {
         viewModelScope.launch {
             val anilistId = currentAnilistId()
+            val req = activeRequest
+            val extSourceId = (req as? DetailsRequest.ByExtension)?.sourceId
+            val extUrl = (req as? DetailsRequest.ByExtension)?.animeUrl
+
             if (anilistId != null) {
+                Log.i(TAG, "observeLibraryState: primary=anilistId=$anilistId" +
+                    (if (extSourceId != null && extUrl != null) ", fallback=(sourceId=$extSourceId, url=$extUrl)" else ""))
+                // Primary: observe by anilistId. Fall back to (sourceId, url) when the
+                // anilist-keyed row is missing (e.g., after unlink cleared anilist_id).
                 animeRepository.observeByAnilistId(anilistId).collect { anime ->
+                    if (anime != null) {
+                        _isSaved.value = anime.favorite
+                    } else if (extSourceId != null && extUrl != null) {
+                        // Fallback: the row may have been unlinked (anilist_id cleared).
+                        // Look it up by the extension's source+url.
+                        val extAnime = withContext(Dispatchers.IO) {
+                            animeRepository.getBySourceAndUrl(extSourceId, extUrl)
+                        }
+                        _isSaved.value = extAnime?.favorite == true
+                        Log.d(TAG, "observeLibraryState: anilistId=$anilistId missed — " +
+                            "fallback (sourceId=$extSourceId, url=$extUrl) → favorite=${extAnime?.favorite}")
+                    } else {
+                        _isSaved.value = false
+                    }
+                }
+            } else if (extSourceId != null && extUrl != null) {
+                // Extension-only anime — observe by source+url.
+                Log.i(TAG, "observeLibraryState: observing extension-only anime " +
+                    "by sourceId=$extSourceId url=$extUrl")
+                animeRepository.observeBySourceAndUrl(extSourceId, extUrl).collect { anime ->
                     _isSaved.value = anime?.favorite == true
                 }
             } else {
-                // Unlinked extension anime — observe reactively by sourceId + url.
-                val req = activeRequest
-                val sourceId = (req as? DetailsRequest.ByExtension)?.sourceId
-                val url = (req as? DetailsRequest.ByExtension)?.animeUrl
-                if (sourceId != null && url != null) {
-                    Log.i(TAG, "observeLibraryState: observing extension-only anime " +
-                        "by sourceId=$sourceId url=$url")
-                    animeRepository.observeBySourceAndUrl(sourceId, url).collect { anime ->
-                        _isSaved.value = anime?.favorite == true
-                    }
-                } else {
-                    // No usable identity — fall back to polling on load.
-                    animeState.collect { state ->
-                        if (state is DetailState.Success) {
-                            val existing = findLibraryAnime(state.anime)
-                            _isSaved.value = existing?.favorite == true
-                        }
-                    }
-                }
+                _isSaved.value = false
             }
         }
     }
