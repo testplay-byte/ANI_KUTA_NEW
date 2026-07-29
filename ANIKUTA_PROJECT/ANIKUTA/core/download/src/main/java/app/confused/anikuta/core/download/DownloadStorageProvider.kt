@@ -82,10 +82,32 @@ class DownloadStorageProvider(
 
     // ── Path/folder-name helpers ──
 
-    /** `"Jujutsu Kaisen [101522]"` — title sanitised for filesystem + ID bracket. */
+    /**
+     * `"Jujutsu Kaisen [al-101522]"` — title sanitised for filesystem +
+     * content_id bracket (sanitised: `:` → `-` so the folder name is
+     * filesystem-safe + the `endsWith` lookups in [deleteAnime] +
+     * [findEpisodeDirByNumber] work).
+     *
+     * Phase 6 (ADR-050): the bracket now contains the content_id (e.g.,
+     * `al-154587` for AniList-linked, `aniyomi-123-https-...` for unlinked)
+     * instead of the old anilistId.
+     */
     fun animeFolderName(anime: DownloadAnimeInfo): String {
         val safeTitle = sanitizeFileName(anime.title.ifBlank { "Unknown" })
-        return "$safeTitle [${anime.anilistId}]"
+        return "$safeTitle [${sanitizeContentIdForFolder(anime.contentId)}]"
+    }
+
+    /**
+     * Sanitize a content_id for use in a folder name.
+     *
+     * Content_ids contain `:` (e.g., `"al:154587"`) which [sanitizeFileName]
+     * replaces with space — that would break `endsWith` lookups. This helper
+     * replaces `:` with `-` instead, producing a stable, filesystem-safe suffix
+     * (e.g., `"al-154587"`) that [deleteAnime] + [findEpisodeDirByNumber] can
+     * match via `endsWith("[al-154587]")`.
+     */
+    private fun sanitizeContentIdForFolder(contentId: String): String {
+        return contentId.replace(":", "-").replace("/", "-")
     }
 
     /** `"Episode 001"` — zero-padded 3-digit, floored episode number. */
@@ -307,7 +329,7 @@ class DownloadStorageProvider(
     fun deleteEpisode(anime: DownloadAnimeInfo, episode: DownloadEpisodeInfo): Boolean {
         val epDir = findEpisodeDir(anime, episode) ?: return false
         val ok = epDir.delete()
-        DownloadLogger.i("Deleted episode ${episode.episodeNumber} for anime ${anime.anilistId}: $ok")
+        DownloadLogger.i("Deleted episode ${episode.episodeNumber} for anime ${anime.contentId}: $ok")
 
         // Auto-delete the anime folder if it's now empty.
         if (ok) {
@@ -334,7 +356,7 @@ class DownloadStorageProvider(
             val remaining = animeDir.listFiles().filterNotNull()
             if (remaining.isEmpty()) {
                 animeDir.delete()
-                DownloadLogger.i("Auto-deleted empty anime folder: ${anime.title} [${anime.anilistId}]")
+                DownloadLogger.i("Auto-deleted empty anime folder: ${anime.title} [${anime.contentId}]")
             }
         } catch (e: Exception) {
             DownloadLogger.w("Failed to cleanup empty anime folder (non-fatal)", e)
@@ -342,17 +364,71 @@ class DownloadStorageProvider(
     }
 
     /** Deletes the entire anime folder (all episodes). */
-    fun deleteAnime(anilistId: Int, animeTitle: String): Boolean {
+    /**
+     * Delete the entire anime folder (all episodes) by content_id.
+     *
+     * Phase 6 (ADR-050): takes [contentId] (String) instead of anilistId (Int).
+     * The folder suffix is the sanitized content_id (e.g., `[al-154587]`).
+     */
+    fun deleteAnime(contentId: String, animeTitle: String): Boolean {
         val root = rootTree() ?: return false
-        val animeDir = root.findFile("ANIKUTA")
+        val animeDir = findAnimeDir(contentId)
+            ?: return false
+        val ok = animeDir.delete()
+        DownloadLogger.i("Deleted anime folder for contentId=$contentId: $ok")
+        return ok
+    }
+
+    /**
+     * Find the anime directory by content_id (scans the `anime/` folder for a
+     * directory whose name ends with `[sanitized-contentId]`).
+     *
+     * Used by [deleteAnime] + the source-switching fix in
+     * [DefaultDownloadManager.isEpisodeDownloaded] (falls back to a filesystem
+     * scan when no in-memory task matches).
+     */
+    fun findAnimeDir(contentId: String): DocumentFile? {
+        val root = rootTree() ?: return null
+        val suffix = "[${sanitizeContentIdForFolder(contentId)}]"
+        return root.findFile("ANIKUTA")
             ?.findFile("downloads")
             ?.findFile("anime")
             ?.listFiles()
-            ?.firstOrNull { it.name?.endsWith("[$anilistId]") == true }
-            ?: return false
-        val ok = animeDir.delete()
-        DownloadLogger.i("Deleted anime folder for $anilistId: $ok")
-        return ok
+            ?.firstOrNull { it.name?.endsWith(suffix) == true && it.isDirectory }
+    }
+
+    /**
+     * Find a specific episode directory by content_id + episode number.
+     *
+     * This is the **source-switching fix**: when the user switches extension
+     * source, the episodeUrl changes but the episodeNumber stays the same.
+     * This method finds the on-disk `Episode NNN` folder by episode number,
+     * independent of the episodeUrl.
+     *
+     * Used by [DefaultDownloadManager.isEpisodeDownloaded] as a filesystem
+     * fallback when no in-memory task matches the new (contentId, episodeNumber).
+     */
+    fun findEpisodeDirByNumber(contentId: String, episodeNumber: Float): DocumentFile? {
+        val animeDir = findAnimeDir(contentId) ?: return null
+        val epFolderName = "Episode %03d".format(episodeNumber.toInt().coerceAtLeast(0))
+        return animeDir.findFile(epFolderName)?.takeIf { it.isDirectory }
+    }
+
+    /**
+     * Find a legacy anime directory (pre-Phase-6 format: `<Title [anilistId]>`).
+     *
+     * Used by [app.confused.anikuta.migration.DownloadMigration] to find old
+     * folders that need renaming to the new `<Title [al-anilistId]>` format.
+     *
+     * @param oldSuffix the suffix to match (e.g., `"[154587]"`).
+     */
+    fun findLegacyAnimeDir(oldSuffix: String): DocumentFile? {
+        val root = rootTree() ?: return null
+        return root.findFile("ANIKUTA")
+            ?.findFile("downloads")
+            ?.findFile("anime")
+            ?.listFiles()
+            ?.firstOrNull { it.name?.endsWith(oldSuffix) == true && it.isDirectory }
     }
 
     // ── Internal helpers ──
@@ -449,10 +525,16 @@ class DownloadStorageProvider(
 /**
  * The cached episode metadata written to `data/metadata.json` alongside the
  * video. Human-readable so a user browsing the folder can identify the episode.
+ *
+ * **Phase 6 (ADR-050):** [contentId] replaced the old `anilistId: Int` field.
+ * Existing on-disk `metadata.json` files with the old `anilistId` key parse
+ * cleanly (Json `ignoreUnknownKeys = true`) — the missing `contentId` field
+ * defaults to `""`. The cache is informational-only + is overwritten with the
+ * new format on the next re-download, so no on-disk migration is required.
  */
 @kotlinx.serialization.Serializable
 data class EpisodeMetadataCache(
-    val anilistId: Int,
+    val contentId: String,
     val animeTitle: String,
     val episodeNumber: Float,
     val episodeName: String,

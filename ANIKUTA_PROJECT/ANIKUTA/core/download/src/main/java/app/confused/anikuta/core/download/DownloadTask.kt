@@ -8,7 +8,7 @@ import kotlinx.serialization.Serializable
  * / [DownloadManager.completedDownloads] Flows for the UI.
  *
  * Identity: [id] is a monotonic Long assigned at enqueue time. The composite
- * key `(anime.anilistId, episode.episodeUrl)` is unique — enqueuing the same
+ * key `(anime.contentId, episode.episodeNumber)` is unique — enqueuing the same
  * episode twice is a no-op (the manager checks first).
  *
  * @param id Unique task ID (assigned by the manager).
@@ -37,8 +37,17 @@ data class DownloadTask(
     val videoUri: String? = null,
     val subtitleUris: List<String> = emptyList(),
 ) {
-    /** Composite key for dedup + offline-playback lookup. */
-    val key: String get() = "${request.anime.anilistId}:${request.episode.episodeUrl}"
+    /**
+     * Composite key for dedup + offline-playback lookup.
+     *
+     * **Phase 6 (ADR-050):** `"$contentId|$episodeNumber"` — source-independent.
+     * The `|` separator is unambiguous (contentId contains `:`). The episode
+     * number is formatted to 3 decimal places (stable, zero-padded).
+     *
+     * This key survives source switches — the same anime from a different
+     * extension has the same contentId + episodeNumber.
+     */
+    val key: String get() = "${request.anime.contentId}|${"%.3f".format(request.episode.episodeNumber)}"
 
     /** True when the task is in the queue (not terminal, not yet completed). */
     val isInQueue: Boolean

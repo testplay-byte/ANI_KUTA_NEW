@@ -485,7 +485,7 @@ class HttpDownloader(
                 prettyPrint = true
             }
             val cache = EpisodeMetadataCache(
-                anilistId = task.request.anime.anilistId,
+                contentId = task.request.anime.contentId,
                 animeTitle = task.request.anime.title,
                 episodeNumber = task.request.episode.episodeNumber,
                 episodeName = task.request.episode.name,
@@ -494,6 +494,8 @@ class HttpDownloader(
                 sourceId = task.request.sourceId,
             )
             metaFile.writeText(json.encodeToString(EpisodeMetadataCache.serializer(), cache))
+            DownloadLogger.d("Wrote metadata.json: contentId=${cache.contentId} " +
+                "EP ${cache.episodeNumber} (${cache.animeTitle})")
         } catch (e: Exception) {
             DownloadLogger.w("Failed to write metadata.json (non-fatal)", e)
         }

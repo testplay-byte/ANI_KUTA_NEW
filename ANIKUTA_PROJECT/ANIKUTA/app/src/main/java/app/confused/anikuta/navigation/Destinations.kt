@@ -119,25 +119,29 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
 
+        // Phase 6 (ADR-050): download identity is content_id. AnimeDetailDestination
+        // is the AniList-linked entry point — contentId is always "al:$animeId".
+        val contentId = "al:$animeId"
+
         // Collect download tasks reactively for this anime's episode rows.
         val downloadTasksMap by appController.downloadTasksFlow
             .collectAsStateWithLifecycle(initialValue = emptyMap())
-        val downloadStates = appController.getDownloadStates(animeId, downloadTasksMap)
+        val downloadStates = appController.getDownloadStates(contentId, downloadTasksMap)
 
         AnimeDetailScreen(
             animeId = animeId,
             onBack = { navigator.pop() },
             onOpenEpisode = { episode, source, episodeList, watchCtx ->
-                appController.resolveEpisode(episode, source, episodeList, watchCtx, animeId)
+                appController.resolveEpisode(episode, source, episodeList, watchCtx, contentId)
             },
             onDownloadEpisode = { episode, source, watchCtx ->
-                appController.downloadEpisode(episode, source, watchCtx, animeId)
+                appController.downloadEpisode(episode, source, watchCtx, contentId)
             },
             downloadStates = downloadStates,
-            onDownloadCancel = { episodeUrl -> appController.cancelDownload(animeId, episodeUrl) },
-            onDownloadResume = { episodeUrl -> appController.resumeDownload(animeId, episodeUrl) },
-            onDownloadRetry = { episodeUrl -> appController.retryDownload(animeId, episodeUrl) },
-            onDownloadDelete = { episodeUrl -> appController.deleteDownload(animeId, episodeUrl) },
+            onDownloadCancel = { episodeUrl -> appController.cancelDownload(contentId, episodeUrl) },
+            onDownloadResume = { episodeUrl -> appController.resumeDownload(contentId, episodeUrl) },
+            onDownloadRetry = { episodeUrl -> appController.retryDownload(contentId, episodeUrl) },
+            onDownloadDelete = { episodeUrl -> appController.deleteDownload(contentId, episodeUrl) },
             // "Switch anime" from the AniList page — resolve the source from the saved
             // link + start the linking flow (corrects a wrong auto-match).
             onLinkToAniList = { appController.startLinkingFromAnilist(animeId) },
@@ -167,13 +171,19 @@ data class ExtensionAnimeDetailDestination(
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
 
-        // For unlinked extension anime, download states are keyed by sourceId+url
-        // (not anilistId). Use 0 as the download-key fallback — the download
-        // orchestrator resolves by episode URL regardless.
-        val downloadKey = anilistId ?: 0
+        // Phase 6 (ADR-050): compute the content_id for this extension anime.
+        //  - Linked:   "al:$anilistId" (matches the AniList-linked grouping).
+        //  - Unlinked: "aniyomi:${source.id}:${sAnime.url}" — the per-source
+        //    local_id fallback (matches LocalId format from Phase 1). This is
+        //    the gate-removal fix: unlinked extension anime are now downloadable
+        //    (their content_id = local_id), so the user can download without
+        //    first linking to AniList.
+        val contentId = if (anilistId != null) "al:$anilistId"
+            else "aniyomi:${source.id}:${sAnime.url}"
+
         val downloadTasksMap by appController.downloadTasksFlow
             .collectAsStateWithLifecycle(initialValue = emptyMap())
-        val downloadStates = appController.getDownloadStates(downloadKey, downloadTasksMap)
+        val downloadStates = appController.getDownloadStates(contentId, downloadTasksMap)
 
         AnimeDetailScreen(
             extensionSource = source,
@@ -183,17 +193,17 @@ data class ExtensionAnimeDetailDestination(
             onOpenEpisode = { episode, src, episodeList, watchCtx ->
                 appController.resolveEpisode(
                     episode, src, episodeList, watchCtx,
-                    anilistId = anilistId ?: 0,
+                    contentId = contentId,
                 )
             },
             onDownloadEpisode = { episode, src, watchCtx ->
-                appController.downloadEpisode(episode, src, watchCtx, downloadKey)
+                appController.downloadEpisode(episode, src, watchCtx, contentId)
             },
             downloadStates = downloadStates,
-            onDownloadCancel = { episodeUrl -> appController.cancelDownload(downloadKey, episodeUrl) },
-            onDownloadResume = { episodeUrl -> appController.resumeDownload(downloadKey, episodeUrl) },
-            onDownloadRetry = { episodeUrl -> appController.retryDownload(downloadKey, episodeUrl) },
-            onDownloadDelete = { episodeUrl -> appController.deleteDownload(downloadKey, episodeUrl) },
+            onDownloadCancel = { episodeUrl -> appController.cancelDownload(contentId, episodeUrl) },
+            onDownloadResume = { episodeUrl -> appController.resumeDownload(contentId, episodeUrl) },
+            onDownloadRetry = { episodeUrl -> appController.retryDownload(contentId, episodeUrl) },
+            onDownloadDelete = { episodeUrl -> appController.deleteDownload(contentId, episodeUrl) },
             // Extension mode: "Link to AniList" opens the AniList linking sheet overlay.
             onLinkToAniList = { appController.startLinking(source, sAnime) },
             // "Switch anime" picked (linked only) — update links + navigate to the new anime.
@@ -376,8 +386,11 @@ object DownloadedFilesDestination : Screen {
         val navigator = LocalNavigator.currentOrThrow
         DownloadedFilesScreen(
             onBack = { navigator.pop() },
-            onPlayEpisode = { anilistId, episodeUrl ->
-                appController.pushDetail(anilistId)
+            // Phase 6 (ADR-050): the callback now receives a content_id (String,
+            // e.g. "al:154587" or "aniyomi:123:url") instead of an anilistId (Int).
+            // openDownloadedAnimeByContentId handles both flavors.
+            onPlayEpisode = { contentId, episodeUrl ->
+                appController.openDownloadedAnimeByContentId(contentId)
             },
         )
     }

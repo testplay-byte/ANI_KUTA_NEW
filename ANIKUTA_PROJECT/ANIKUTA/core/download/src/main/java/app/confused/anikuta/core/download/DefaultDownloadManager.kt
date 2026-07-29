@@ -104,7 +104,7 @@ class DefaultDownloadManager(
 
     override val allDownloads: Flow<List<DownloadTask>> = queue.tasks
 
-    /** Reactive map keyed by `"$anilistId:$episodeUrl"` → task, for episode-row UI. */
+    /** Reactive map keyed by `"$contentId|$episodeNumber"` → task, for episode-row UI. */
     override val episodeDownloadStates: Flow<Map<String, DownloadTask>> =
         queue.tasks.map { list -> list.associateBy { it.key } }
 
@@ -147,46 +147,75 @@ class DefaultDownloadManager(
         queue.removeCompleted(taskId)
     }
 
-    override suspend fun deleteAnimeDownloads(anilistId: Int) {
+    override suspend fun deleteAnimeDownloads(contentId: String) {
         val tasks = queue.tasks.value.filter {
-            it.request.anime.anilistId == anilistId && it.status == DownloadStatus.COMPLETED
+            it.request.anime.contentId == contentId && it.status == DownloadStatus.COMPLETED
         }
         val first = tasks.firstOrNull()
         tasks.forEach { queue.removeCompleted(it.id) }
         if (first != null) {
-            storage.deleteAnime(anilistId, first.request.anime.title)
+            storage.deleteAnime(contentId, first.request.anime.title)
         }
     }
 
     // ── Offline-playback queries ──
+    //
+    // Phase 6 (ADR-050): these take contentId + episodeNumber (NOT anilistId +
+    // episodeUrl). The source-switching fix: when no in-memory task matches
+    // (because the user switched source + the episodeUrl changed), fall back to
+    // a filesystem scan by episode number.
 
-    override suspend fun isEpisodeDownloaded(anilistId: Int, episodeUrl: String): Boolean {
-        val task = findTask(anilistId, episodeUrl)
+    override suspend fun isEpisodeDownloaded(contentId: String, episodeNumber: Float): Boolean {
+        // 1. Try the in-memory task lookup (fast path).
+        val task = findTask(contentId, episodeNumber)
         if (task?.status == DownloadStatus.COMPLETED) return true
-        // Fallback: check the filesystem (covers files from a prior install).
-        if (task == null) return false
-        return storage.isEpisodeDownloaded(task.request.anime, task.request.episode)
+
+        // 2. Filesystem fallback (source-switching fix): scan the on-disk folder
+        //    by contentId + episodeNumber. The folder structure is
+        //    `<root>/ANIKUTA/downloads/anime/<Title [contentId]>/Episode NNN/`,
+        //    so a match by episode number works even if the episodeUrl changed.
+        return storage.findEpisodeDirByNumber(contentId, episodeNumber)?.let { epDir ->
+            epDir.listFiles().any { it.isFile && it.name?.startsWith("video.") == true }
+        } ?: false
     }
 
-    override suspend fun getDownloadedVideoUri(anilistId: Int, episodeUrl: String): String? {
-        val task = findTask(anilistId, episodeUrl) ?: return null
-        if (task.status != DownloadStatus.COMPLETED) return null
-        return storage.getVideoUri(task.request.anime, task.request.episode) ?: task.videoUri
+    override suspend fun getDownloadedVideoUri(contentId: String, episodeNumber: Float): String? {
+        // 1. Try the in-memory task (has the exact videoUri).
+        val task = findTask(contentId, episodeNumber)
+        if (task?.status == DownloadStatus.COMPLETED) {
+            return storage.getVideoUri(task.request.anime, task.request.episode) ?: task.videoUri
+        }
+
+        // 2. Filesystem fallback (source-switching): find the episode dir by
+        //    number + look for a video file inside it.
+        return storage.findEpisodeDirByNumber(contentId, episodeNumber)?.let { epDir ->
+            epDir.listFiles().firstOrNull { it.isFile && it.name?.startsWith("video.") == true }?.uri?.toString()
+        }
     }
 
     override suspend fun getDownloadedSubtitleUris(
-        anilistId: Int,
-        episodeUrl: String,
+        contentId: String,
+        episodeNumber: Float,
     ): List<String> {
-        val task = findTask(anilistId, episodeUrl) ?: return emptyList()
-        if (task.status != DownloadStatus.COMPLETED) return emptyList()
-        return storage.getSubtitleUris(task.request.anime, task.request.episode)
-            .ifEmpty { task.subtitleUris }
+        // 1. Try the in-memory task.
+        val task = findTask(contentId, episodeNumber)
+        if (task?.status == DownloadStatus.COMPLETED) {
+            return storage.getSubtitleUris(task.request.anime, task.request.episode)
+                .ifEmpty { task.subtitleUris }
+        }
+
+        // 2. Filesystem fallback: scan the subtitles/ folder.
+        return storage.findEpisodeDirByNumber(contentId, episodeNumber)?.let { epDir ->
+            epDir.findFile("data")?.findFile("subtitles")?.listFiles()
+                ?.filter { it.isFile }
+                ?.map { it.uri.toString() }
+                ?: emptyList()
+        } ?: emptyList()
     }
 
-    override suspend fun getDownloadedEpisodes(anilistId: Int): List<DownloadedEpisode> {
+    override suspend fun getDownloadedEpisodes(contentId: String): List<DownloadedEpisode> {
         return queue.tasks.value
-            .filter { it.request.anime.anilistId == anilistId && it.status == DownloadStatus.COMPLETED }
+            .filter { it.request.anime.contentId == contentId && it.status == DownloadStatus.COMPLETED }
             .map { task ->
                 DownloadedEpisode(
                     episode = task.request.episode,
@@ -199,8 +228,14 @@ class DefaultDownloadManager(
             }
     }
 
-    private fun findTask(anilistId: Int, episodeUrl: String): DownloadTask? {
-        return queue.tasks.value.firstOrNull { it.key == "$anilistId:$episodeUrl" }
+    /**
+     * Find a task by content_id + episode number (source-independent).
+     *
+     * The key format is `"$contentId|$episodeNumber"` (3 decimal places).
+     */
+    private fun findTask(contentId: String, episodeNumber: Float): DownloadTask? {
+        val key = "$contentId|${"%.3f".format(episodeNumber)}"
+        return queue.tasks.value.firstOrNull { it.key == key }
     }
 
     /** Wi-Fi-only-aware connectivity check (best-effort; fails open on error). */

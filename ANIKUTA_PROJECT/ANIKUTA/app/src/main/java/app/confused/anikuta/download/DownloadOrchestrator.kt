@@ -369,7 +369,7 @@ class DownloadOrchestrator(
     }
 
     companion object {
-        private const val TAG = "AnikutaDownloadOrch"
+        private const val TAG = "AnikutaDownloadOrchestrator"
     }
 }
 

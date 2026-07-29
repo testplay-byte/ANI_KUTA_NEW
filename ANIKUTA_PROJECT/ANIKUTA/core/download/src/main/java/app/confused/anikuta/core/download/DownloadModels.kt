@@ -5,29 +5,47 @@ import kotlinx.serialization.Serializable
 /**
  * Lightweight anime identity for downloads.
  *
- * ANIKUTA is AniList-first (ADR-010), so downloads are keyed by [anilistId].
+ * **Phase 6 (ADR-050):** downloads are now keyed by [contentId] (the Tier 2
+ * per-content identity, e.g., `"al:154587"` for AniList-linked or
+ * `"aniyomi:123:url"` for unlinked extension anime). This replaces the old
+ * `anilistId: Int` field. The [contentId] is source-independent — it survives
+ * source switches, so downloads stay visible when the user switches extension.
+ *
  * The [title] + [coverUrl] are carried for the Downloads screen UI (cover +
- * name) and for the AniList-first folder name (`Anime Title [anilistId]`).
+ * name) and for the folder name (`Anime Title [contentId-safe]`).
  *
  * **Design decision (vs. the prompt's `Anime` type):** the implementation
  * prompt's `DownloadManager` interface used `anime: Anime`, but ANIKUTA has no
  * single shared `Anime` domain model used everywhere (the watch flow threads
- * `anilistId/title/coverUrl` directly via `WatchRequest`). Introducing a
+ * `contentId/title/coverUrl` directly via `WatchRequest`). Introducing a
  * dedicated, minimal DTO here keeps `:core:download` decoupled from any
  * specific data layer and makes the interface stable even if the anime model
  * changes upstream. This is more modular + future-proof (Rule §8).
  *
- * @param anilistId The AniList ID — the primary key for the folder structure.
- * @param title English/romaji title (from AniList) for the folder name + UI.
+ * @param contentId The Tier 2 per-content identity — the primary key for the
+ *   folder structure + the composite download key.
+ * @param title English/romaji title for the folder name + UI.
  * @param coverUrl Cover image URL for the Downloads screen thumbnail.
  * @param coverColor Optional dominant cover color (for theming); nullable.
  */
 @Serializable
 data class DownloadAnimeInfo(
-    val anilistId: Int,
+    /**
+     * The Tier 2 per-content identity. Default `""` so pre-Phase-6 JSON
+     * (which has `anilistId` instead) deserializes without throwing — the
+     * [DownloadMigration] populates this from [legacyAnilistId] on first launch.
+     */
+    val contentId: String = "",
     val title: String,
     val coverUrl: String? = null,
     val coverColor: Int? = null,
+    /**
+     * Legacy field from pre-Phase-6 JSON. The [DownloadMigration] reads this
+     * to derive [contentId] (`"al:$legacyAnilistId"`). Always `null` for new data.
+     * Kept as a serialized field (not `@Transient`) so old JSON deserializes.
+     */
+    @kotlinx.serialization.SerialName("anilistId")
+    val legacyAnilistId: Int? = null,
 )
 
 /**

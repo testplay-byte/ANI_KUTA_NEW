@@ -61,7 +61,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun DownloadedFilesScreen(
     onBack: () -> Unit,
-    onPlayEpisode: ((Int, String) -> Unit)? = null,
+    onPlayEpisode: ((String, String) -> Unit)? = null,
     viewModel: DownloadViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -98,15 +98,15 @@ fun DownloadedFilesScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 downloaded.forEach { (animeKey, episodes) ->
-                    item(key = "downloaded_${animeKey.anilistId}") {
+                    item(key = "downloaded_${animeKey.contentId}") {
                         DownloadedAnimeCard(
                             animeKey = animeKey,
                             episodes = episodes,
                             onPlay = { episodeUrl ->
-                                onPlayEpisode?.invoke(animeKey.anilistId, episodeUrl)
+                                onPlayEpisode?.invoke(animeKey.contentId, episodeUrl)
                             },
                             onDelete = { taskId -> viewModel.deleteEpisode(taskId) },
-                            onDeleteAll = { viewModel.deleteAnime(animeKey.anilistId) },
+                            onDeleteAll = { viewModel.deleteAnime(animeKey.contentId) },
                         )
                     }
                 }
