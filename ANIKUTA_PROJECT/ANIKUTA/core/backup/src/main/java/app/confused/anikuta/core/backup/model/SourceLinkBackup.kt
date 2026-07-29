@@ -7,11 +7,10 @@ import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.asJsonDecoder
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.isString
 
 /**
  * Serializable wrapper for the AniList↔extension link stores.
@@ -63,6 +62,8 @@ data class SourceLinkItem(
  * into the Phase-4 stores without a schema bump.
  *
  * On write, only `Map<String, String>` is emitted (the new format).
+ *
+ * Uses the public [JsonDecoder] interface (the backup is always JSON).
  */
 internal object TolerantContentIdMapSerializer : KSerializer<Map<String, String>> {
     private val delegate = MapSerializer(String.serializer(), String.serializer())
@@ -74,15 +75,19 @@ internal object TolerantContentIdMapSerializer : KSerializer<Map<String, String>
     }
 
     override fun deserialize(decoder: Decoder): Map<String, String> {
-        val jsonDecoder = decoder.asJsonDecoder()
+        // The backup is always JSON — cast to JsonDecoder to access the raw element.
+        val jsonDecoder = decoder as? JsonDecoder
+            ?: return delegate.deserialize(decoder)
         val element = jsonDecoder.decodeJsonElement()
         if (element !is JsonObject) return emptyMap()
+
         val out = mutableMapOf<String, String>()
         for ((key, value) in element) {
             when {
-                value is JsonPrimitive && value.isString -> out[key] = value.content
-                // Legacy pre-Phase-4 backups stored anilistId as a JSON Int.
-                // Convert to "al:$int" content_id form.
+                // New format: String value (content_id like "al:154587").
+                value is JsonPrimitive && value.isString ->
+                    out[key] = value.content
+                // Legacy format: Int value (anilistId) → convert to "al:$int".
                 value is JsonPrimitive && value.intOrNull != null ->
                     out[key] = "al:${value.intOrNull}"
                 else -> { /* skip malformed entry */ }
