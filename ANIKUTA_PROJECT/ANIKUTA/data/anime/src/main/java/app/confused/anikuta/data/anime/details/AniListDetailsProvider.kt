@@ -145,9 +145,16 @@ class AniListDetailsProvider(
             val dbEpisodes = episodeRepository.getByAnimeId(dbAnime.id)
             if (dbEpisodes.isNotEmpty()) {
                 Log.i(TAG, "AniList provider: loaded ${dbEpisodes.size} episodes from DB for anilistId=$anilistId")
+                // Fix: use the DB row's source_id as a fallback when SourceLinkStore
+                // doesn't have an entry. The DB row may have source_id set from
+                // ExtensionDetailsProvider.persistEpisodes even if SourceLinkStore
+                // wasn't written (e.g., when the anime was saved via the extension path).
                 val savedLink = sourceLinkStore.getLink(contentId)
-                val sourceName = savedLink?.let { sourceMatcher.getSourceById(it.sourceId)?.name }
-                return Triple(dbEpisodes, savedLink?.sourceId, sourceName)
+                val sourceId = savedLink?.sourceId ?: dbAnime.sourceId.takeIf { it > 0 }
+                val sourceName = sourceId?.let { sourceMatcher.getSourceById(it)?.name }
+                    ?: dbAnime.provenance?.sourceName
+                    ?: dbAnime.provenance?.extensionName
+                return Triple(dbEpisodes, sourceId, sourceName)
             }
         }
 
