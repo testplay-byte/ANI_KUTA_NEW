@@ -71,10 +71,21 @@ val extensionModule: Module = module {
     // :feature:search (linking sheet) and the future extension-only detail page.
     single { ExtensionLinkStore(get()) }
 
-    // ── SourceLinkStore (persists the source match for an AniList anime) ──
+    // ── SourceLinkStore (persists the source match for a content) ──
     // Stores sourceId + SAnime URL + title so the details page can directly
     // call getEpisodeList() without re-searching on every app open.
+    // Phase 4: keyed by content_id (was anilistId).
     single { SourceLinkStore(get()) }
+
+    // ── Phase 4: SourceLinkMigrator (anilistId → content_id keys) ──
+    single {
+        app.confused.anikuta.data.extension.migration.SourceLinkMigrator(
+            sourceLinkStore = get(),
+            extensionLinkStore = get(),
+            animeRepository = get(),
+            contentIdPreferences = get(),
+        )
+    }
 
     // ── DetailsViewPreferenceStore (remembers per-anime AniList vs Extension view choice) ──
     // When the user taps "View from Extension" / "View from AniList", the choice is

@@ -88,7 +88,8 @@ class ExtensionDetailsProvider(
         is DetailsRequest.ByAniListId -> {
             // Extension provider serving an AniList-keyed request: reverse-lookup the
             // preferred extension source + reconstruct the SAnime, then load by extension.
-            val savedLink = sourceLinkStore.getLink(request.anilistId) ?: return null
+            // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+            val savedLink = sourceLinkStore.getLink("al:${request.anilistId}") ?: return null
             loadByExtension(
                 sourceId = savedLink.sourceId,
                 animeUrl = savedLink.animeUrl,
@@ -200,7 +201,8 @@ class ExtensionDetailsProvider(
             fetchAndPersistEpisodes(source, sAnime, request.anilistId)
         }
         is DetailsRequest.ByAniListId -> {
-            val savedLink = sourceLinkStore.getLink(request.anilistId) ?: return null
+            // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+            val savedLink = sourceLinkStore.getLink("al:${request.anilistId}") ?: return null
             val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(savedLink.sourceId) }
                 ?: return null
             val sAnime = SAnimeImpl().apply {

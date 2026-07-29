@@ -26,7 +26,13 @@ data class EpisodeMetadata(
 /**
  * Request for episode metadata.
  *
- * @param animeId The AniList anime ID.
+ * @param animeId The AniList anime ID — passed to metadata sources (AniList
+ *   GraphQL, Anikage.cc endpoint) that query by AniList ID. Still required
+ *   for the source fetches (e.g. `https://anikage.cc/api/media/anime/{id}/episodes`).
+ * @param contentId The Tier 2 per-content identity (e.g., `"al:154587"`). Used
+ *   as the cache key for [EpisodeMetadataCache] (Phase 4, ADR-050). The caller
+ *   is responsible for computing this — typically `"al:$anilistId"` for
+ *   AniList-linked anime. Must NOT be blank.
  * @param animeTitle The anime's display title (for search).
  * @param episodeNumber The episode number.
  * @param malId The MyAnimeList ID (for Jikan + Kitsu sources). Null if unknown.
@@ -36,6 +42,7 @@ data class EpisodeMetadata(
  */
 data class EpisodeMetadataRequest(
     val animeId: Int,
+    val contentId: String,
     val animeTitle: String,
     val episodeNumber: Int,
     val malId: Int? = null,

@@ -120,7 +120,9 @@ class ExtensionLinkingViewModel(
                     // Auto-link the first result (AniList's SEARCH_MATCH sort
                     // already orders by relevance).
                     val best = results.first()
-                    linkStore.link(source.id, sAnime.url, best.id)
+                    // Phase 4: link() takes a content_id (String). Use linkByAnilistId
+                    // (backward-compat: converts anilistId to "al:$anilistId" content_id).
+                    linkStore.linkByAnilistId(source.id, sAnime.url, best.id)
                     Log.i(TAG, "Auto-linked: '${sAnime.title}' → AniList ${best.id} ('${best.displayTitle}')")
                     _state.value = ExtensionLinkingState.Linked(best.id)
                 } else {
@@ -159,7 +161,8 @@ class ExtensionLinkingViewModel(
 
     /** User tapped an AniList result → link it + open detail. */
     fun selectManual(anime: AniListAnime) {
-        linkStore.link(source.id, sAnime.url, anime.id)
+        // Phase 4: linkByAnilistId (backward-compat) — converts anilistId to content_id.
+        linkStore.linkByAnilistId(source.id, sAnime.url, anime.id)
         Log.i(TAG, "Manual-linked: '${sAnime.title}' → AniList ${anime.id} ('${anime.displayTitle}')")
         _state.value = ExtensionLinkingState.Linked(anime.id)
     }
