@@ -98,13 +98,14 @@ class AnimeRepositoryImpl(
             }
         }
         // Also check by anilistId if source_id is 0 (AniList-only anime).
-        if (anime.id == 0L && anime.anilistId != null) {
+        val aid = anime.anilistId
+        if (anime.id == 0L && aid != null) {
             val existingByAnilist = database.animesQueries.selectByAnilistId(
-                anime.anilistId.toLong(), AnimeMapper::map,
+                aid.toLong(), AnimeMapper::map,
             ).executeAsOneOrNull()
             if (existingByAnilist != null) {
                 Log.i(TAG, "upsert: found existing row id=${existingByAnilist.id} for " +
-                    "anilistId=${anime.anilistId} — UPDATE instead of INSERT")
+                    "anilistId=$aid — UPDATE instead of INSERT")
                 val updated = anime.copy(id = existingByAnilist.id)
                 return updateExisting(updated)
             }
