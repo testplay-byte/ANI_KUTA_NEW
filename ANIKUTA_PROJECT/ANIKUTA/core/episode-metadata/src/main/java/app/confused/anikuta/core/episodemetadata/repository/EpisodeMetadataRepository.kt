@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
  * val repository = EpisodeMetadataRepository(registry)
  * val metadata = repository.fetchAll(EpisodeMetadataRequest(
  *     animeId = 178789,
+ *     contentId = "al:178789",
  *     animeTitle = "Mushoku Tensei",
  *     episodeNumber = 1,
  *     malId = 45889,
@@ -46,7 +47,10 @@ class EpisodeMetadataRepository(
     private val preferences: EpisodeMetadataPreferences,
     private val localCache: EpisodeMetadataCache? = null,
 ) {
-    private val cache = mutableMapOf<Int, Map<Int, EpisodeMetadata>>()
+    // In-memory cache keyed by content_id (Phase 4, ADR-050).
+    // Was keyed by anilistId (Int) pre-Phase-4 — switched to content_id so unlinked
+    // extension anime can also have cached metadata.
+    private val cache = mutableMapOf<String, Map<Int, EpisodeMetadata>>()
 
     /**
      * Fetch ALL episode metadata from all registered sources in parallel,
@@ -64,19 +68,19 @@ class EpisodeMetadataRepository(
                 return@withContext emptyMap()
             }
 
-            // Check in-memory cache first
-            cache[request.animeId]?.let { cached ->
-                Log.d(TAG, "In-memory cache hit for animeId=${request.animeId} (${cached.size} episodes)")
+            // Check in-memory cache first (keyed by content_id)
+            cache[request.contentId]?.let { cached ->
+                Log.d(TAG, "In-memory cache hit for contentId=${request.contentId} (${cached.size} episodes)")
                 return@withContext cached
             }
 
-            // Check local persistent cache (survives app restart)
+            // Check local persistent cache (survives app restart, keyed by content_id)
             if (localCache != null) {
-                val local = localCache.get(request.animeId)
+                val local = localCache.get(request.contentId)
                 if (local != null && local.isNotEmpty()) {
-                    Log.d(TAG, "Local cache hit for animeId=${request.animeId} (${local.size} episodes)")
+                    Log.d(TAG, "Local cache hit for contentId=${request.contentId} (${local.size} episodes)")
                     // Populate in-memory cache too
-                    cache[request.animeId] = local
+                    cache[request.contentId] = local
                     return@withContext local
                 }
             }
@@ -87,7 +91,7 @@ class EpisodeMetadataRepository(
                 return@withContext emptyMap()
             }
 
-            Log.i(TAG, "Fetching from ${sources.size} sources for animeId=${request.animeId}: ${sources.map { it.id }}")
+            Log.i(TAG, "Fetching from ${sources.size} sources for contentId=${request.contentId} (anilistId=${request.animeId}): ${sources.map { it.id }}")
 
             // Fetch from all sources in parallel
             val results = coroutineScope {
@@ -150,11 +154,11 @@ class EpisodeMetadataRepository(
                 }
             }
 
-            Log.i(TAG, "Merged ${merged.size} episodes for animeId=${request.animeId}")
+            Log.i(TAG, "Merged ${merged.size} episodes for contentId=${request.contentId} (anilistId=${request.animeId})")
 
-            // Cache the result (both in-memory + local persistent)
-            cache[request.animeId] = merged
-            localCache?.save(request.animeId, merged)
+            // Cache the result (both in-memory + local persistent, keyed by content_id)
+            cache[request.contentId] = merged
+            localCache?.save(request.contentId, merged)
 
             merged
         }

@@ -279,14 +279,19 @@ class AppController(
             Log.i("AnikutaSearch", "switchAnilistAnime: same anime — no-op")
             return
         }
+        // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+        val oldContentId = "al:$currentAnilistId"
+        val newContentId = "al:$newAnilistId"
         // Move the source link from the old anilistId to the new one.
-        val link = sourceLinkStore.getLink(currentAnilistId)
+        val link = sourceLinkStore.getLink(oldContentId)
         if (link != null) {
-            sourceLinkStore.removeLink(currentAnilistId)
-            sourceLinkStore.saveLink(newAnilistId, link.sourceId, link.animeUrl, link.animeTitle)
-            // Update the extension→anilist mapping too.
-            extensionLinkStore.link(link.sourceId, link.animeUrl, newAnilistId)
-            Log.i("AnikutaSearch", "switchAnilistAnime: moved link $currentAnilistId → $newAnilistId (source=${link.sourceId})")
+            sourceLinkStore.removeLink(oldContentId)
+            sourceLinkStore.saveLink(newContentId, link.sourceId, link.animeUrl, link.animeTitle)
+            // Update the extension→anilist mapping too (backward-compat method converts anilistId → contentId).
+            extensionLinkStore.linkByAnilistId(link.sourceId, link.animeUrl, newAnilistId)
+            Log.i("AnikutaSearch", "switchAnilistAnime: moved link $oldContentId → $newContentId (source=${link.sourceId})")
+        } else {
+            Log.w("AnikutaSearch", "switchAnilistAnime: no saved link for $oldContentId — nothing to move")
         }
         // Navigate to the new anime (replace — no stacking).
         navigator?.replace(AnimeDetailDestination(newAnilistId))
@@ -306,7 +311,9 @@ class AppController(
      * wrong one).
      */
     fun startLinkingFromAnilist(anilistId: Int) {
-        val link = sourceLinkStore.getLink(anilistId) ?: run {
+        // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+        val contentId = "al:$anilistId"
+        val link = sourceLinkStore.getLink(contentId) ?: run {
             android.widget.Toast.makeText(
                 context,
                 "No extension source linked — open from search to link one",

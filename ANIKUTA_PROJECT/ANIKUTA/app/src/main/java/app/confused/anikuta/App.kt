@@ -172,6 +172,35 @@ class App : Application() {
                     }
                     progressMigrationDone.set(true)
                 }
+
+                // ── Phase 4: Migrate episode metadata + source links to content_id keys ──
+                // Runs AFTER Phase 3 (progress migration) + the identity backfill.
+                // Re-keys EpisodeMetadataCache (anilistId → content_id) +
+                // SourceLinkStore (anilistId → content_id) +
+                // ExtensionLinkStore (value: anilistId → content_id String).
+                val metadataMigrationDone = prefStore.getBoolean(KEY_METADATA_MIGRATION_DONE, false)
+                if (!metadataMigrationDone.get()) {
+                    Log.i(TAG, "Metadata + source links migration: starting")
+                    try {
+                        val epMetaMigrator = GlobalContext.get()
+                            .get<app.confused.anikuta.core.episodemetadata.migration.EpisodeMetadataMigrator>()
+                        val epMetaResult = epMetaMigrator.migrate()
+                        Log.i(TAG, "Episode metadata migration: complete — " +
+                            "migrated=${epMetaResult.migrated} dropped=${epMetaResult.dropped} " +
+                            "alreadyMigrated=${epMetaResult.alreadyMigrated}")
+
+                        val sourceLinkMigrator = GlobalContext.get()
+                            .get<app.confused.anikuta.data.extension.migration.SourceLinkMigrator>()
+                        val sourceResult = sourceLinkMigrator.migrate()
+                        Log.i(TAG, "Source links migration: complete — " +
+                            "sourceLinks migrated=${sourceResult.sourceLinksMigrated} " +
+                            "dropped=${sourceResult.sourceLinksDropped} " +
+                            "extensionLinks=${sourceResult.extensionLinksCount}")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Metadata + source links migration: failed (will retry next launch)", e)
+                    }
+                    metadataMigrationDone.set(true)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to run identity backfill", e)
@@ -184,5 +213,6 @@ class App : Application() {
         private const val TAG = "AnikutaApp"
         private const val KEY_IDENTITY_BACKFILL_DONE = "pref_identity_backfill_v1_done"
         private const val KEY_PROGRESS_MIGRATION_DONE = "pref_progress_migration_v1_done"
+        private const val KEY_METADATA_MIGRATION_DONE = "pref_metadata_migration_v1_done"
     }
 }

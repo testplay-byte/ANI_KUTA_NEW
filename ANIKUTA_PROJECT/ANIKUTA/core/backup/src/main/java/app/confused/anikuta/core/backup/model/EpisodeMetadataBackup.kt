@@ -5,8 +5,15 @@ import kotlinx.serialization.Serializable
 /**
  * Serializable wrapper for the per-anime episode metadata cache.
  *
- * Mirrors `EpisodeMetadataCache`'s internal structure: for each anime (keyed
- * by AniList ID as a string), a map of episode number → [EpisodeMetadataItem].
+ * Mirrors `EpisodeMetadataCache`'s internal structure: for each content
+ * (keyed by content_id — Phase 4, ADR-050), a map of episode number →
+ * [EpisodeMetadataItem].
+ *
+ * # Key format (Phase 4, ADR-050)
+ *
+ * Outer key = content_id (e.g., `"al:154587"`). Pre-Phase-4 backups used
+ * anilistId.toString() as the outer key — the import path detects + converts
+ * those to `"al:$anilistId"` content_ids.
  *
  * The [EpisodeMetadataItem] mirrors `app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata`
  * but is a standalone `@Serializable` class so the backup format doesn't
@@ -14,7 +21,11 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class EpisodeMetadataBackup(
-    /** Key: AniList anime ID (as string). Value: per-episode metadata. */
+    /**
+     * Key: content_id (e.g., `"al:154587"`). Pre-Phase-4 backups used
+     * anilistId.toString() — import path detects + converts.
+     * Value: per-episode metadata.
+     */
     val byAnime: Map<String, Map<String, EpisodeMetadataItem>> = emptyMap(),
 )
 

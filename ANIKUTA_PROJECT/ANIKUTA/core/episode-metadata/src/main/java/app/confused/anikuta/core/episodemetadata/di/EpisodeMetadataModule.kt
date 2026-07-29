@@ -1,12 +1,15 @@
 package app.confused.anikuta.core.episodemetadata.di
 
+import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.episodemetadata.EpisodeMetadataPreferences
+import app.confused.anikuta.core.episodemetadata.migration.EpisodeMetadataMigrator
 import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataCache
 import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository
 import app.confused.anikuta.core.episodemetadata.source.EpisodeMetadataSourceRegistry
 import app.confused.anikuta.core.episodemetadata.source.anikage.AnikageCcSource
 import app.confused.anikuta.core.episodemetadata.source.anilist.AniListStreamingSource
 import app.confused.anikuta.core.episodemetadata.source.jikan.JikanMalSource
+import app.confused.anikuta.core.preferences.ContentIdPreferences
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import org.koin.core.module.Module
@@ -50,5 +53,14 @@ val episodeMetadataModule: Module = module {
         registry.register(get<AnikageCcSource>())
         registry.register(get<AniListStreamingSource>())
         EpisodeMetadataRepository(registry, get(), get())
+    }
+
+    // Phase 4: metadata cache migrator (anilistId → content_id keys)
+    single {
+        EpisodeMetadataMigrator(
+            metadataCache = get(),
+            animeRepository = get<AnimeRepository>(),
+            contentIdPreferences = get<ContentIdPreferences>(),
+        )
     }
 }

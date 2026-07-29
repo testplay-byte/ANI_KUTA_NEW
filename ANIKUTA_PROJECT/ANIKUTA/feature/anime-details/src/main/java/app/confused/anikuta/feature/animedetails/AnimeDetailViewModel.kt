@@ -324,9 +324,12 @@ class AnimeDetailViewModel(
         Log.i(TAG, "Switching extension to '${source.name}' for '${sAnime.title}'")
         val anilistId = currentAnilistId()
         // Save the new source link (so re-open skips re-matching).
+        // Phase 4: SourceLinkStore + sourcePrefKey now keyed by content_id ("al:$anilistId").
         if (anilistId != null) {
-            sourceLinkStore.saveLink(anilistId, source.id, sAnime.url, sAnime.title)
-            sourcePrefs.edit().putLong(sourcePrefKey(anilistId), source.id).apply()
+            val contentId = "al:$anilistId"
+            sourceLinkStore.saveLink(contentId, source.id, sAnime.url, sAnime.title)
+            sourcePrefs.edit().putLong(sourcePrefKey(contentId), source.id).apply()
+            Log.d(TAG, "switchExtension: saved link contentId=$contentId sourceId=${source.id}")
         }
         // Update the active request to the new extension (for future "View from Extension").
         activeRequest = DetailsRequest.ByExtension(
@@ -392,7 +395,9 @@ class AnimeDetailViewModel(
     fun switchSource(match: SourceMatcher.SourceMatch) {
         val anilistId = currentAnilistId()
         if (anilistId != null) {
-            sourcePrefs.edit().putLong(sourcePrefKey(anilistId), match.source.id).apply()
+            val contentId = "al:$anilistId"
+            sourcePrefs.edit().putLong(sourcePrefKey(contentId), match.source.id).apply()
+            Log.d(TAG, "switchSource: saved pref contentId=$contentId sourceId=${match.source.id}")
         }
         _currentMatch.value = match
         Toast.makeText(appContext, "Switched to ${match.source.name}", Toast.LENGTH_SHORT).show()
@@ -552,16 +557,19 @@ class AnimeDetailViewModel(
             is DetailsRequest.ByExtension -> current.anilistId
                 ?: extensionLinkStore.getAniListId(current.sourceId, current.animeUrl)
         }
+        // Phase 4: SourceLinkStore keys by content_id. Compute once for the lookups.
+        val contentId = anilistId?.let { "al:$it" }
+        val savedLink = contentId?.let { sourceLinkStore.getLink(it) }
         val sourceId = when (current) {
-            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.sourceId
+            is DetailsRequest.ByAniListId -> savedLink?.sourceId
             is DetailsRequest.ByExtension -> current.sourceId
         }
         val animeUrl = when (current) {
-            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.animeUrl
+            is DetailsRequest.ByAniListId -> savedLink?.animeUrl
             is DetailsRequest.ByExtension -> current.animeUrl
         }
         val animeTitle = when (current) {
-            is DetailsRequest.ByAniListId -> sourceLinkStore.getLink(current.anilistId)?.animeTitle
+            is DetailsRequest.ByAniListId -> savedLink?.animeTitle
             is DetailsRequest.ByExtension -> current.animeTitle
         }
         return when (target) {
@@ -630,15 +638,20 @@ class AnimeDetailViewModel(
                 Log.i(TAG, "Skipping episode metadata — no anilistId (unlinked extension anime)")
                 return
             }
+            // Phase 4: EpisodeMetadataCache is keyed by content_id ("al:$anilistId").
+            // UnifiedAnime doesn't expose contentId yet — derive from anilistId for now.
+            // (Future: when UnifiedAnime carries contentId, prefer anime.contentId here.)
+            val contentId = "al:$anilistId"
             val request = EpisodeMetadataRequest(
                 animeId = anilistId,
+                contentId = contentId,
                 animeTitle = anime.title,
                 episodeNumber = 1,
                 malId = anime.malId,
                 bannerImage = anime.bannerUrl ?: anime.coverUrl,
                 episodeCount = episodeCount,
             )
-            Log.i(TAG, "Fetching episode metadata: anilistId=$anilistId, malId=${anime.malId}")
+            Log.i(TAG, "Fetching episode metadata: contentId=$contentId, anilistId=$anilistId, malId=${anime.malId}")
             val metadata = episodeMetadataRepository.fetchAll(request)
             _episodeMetadata.value = metadata
         } catch (e: Exception) {
@@ -728,7 +741,14 @@ class AnimeDetailViewModel(
         return id
     }
 
-    private fun sourcePrefKey(anilistId: Int) = "source_pref_$anilistId"
+    /**
+     * SharedPreferences key for the user's preferred extension source for a content.
+     * Phase 4 (ADR-050): now keyed by content_id (e.g., `"source_pref_al:154587"`)
+     * instead of anilistId. Legacy keys (`"source_pref_154587"`) are not migrated
+     * — the SourceLinkMigrator handles the SourceLinkStore migration; this prefs
+     * file is a separate concern (the user re-selects on first open post-Phase-4).
+     */
+    private fun sourcePrefKey(contentId: String) = "source_pref_$contentId"
 
     companion object {
         private const val TAG = "AnikutaDetailVM"

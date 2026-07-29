@@ -20,12 +20,23 @@ private const val TAG = "AnikutaBackup"
  * dates from Jikan/MAL/AniList sources).
  *
  * Export reads [EpisodeMetadataCache.getAll] — `Map<String, String>` where the
- * outer key is the animeId and the inner value is a JSON string of
- * `Map<Int, EpisodeMetadata>`. We parse each JSON string and convert to
- * `Map<String, EpisodeMetadataItem>` for serialization.
+ * outer key is the content_id (Phase 4, ADR-050) and the inner value is a JSON
+ * string of `Map<Int, EpisodeMetadata>`. We parse each JSON string and convert
+ * to `Map<String, EpisodeMetadataItem>` for serialization.
  *
- * Import overwrites the cache for each anime. This is optional (default off)
+ * Import overwrites the cache for each content. This is optional (default off)
  * because metadata can be re-fetched from sources.
+ *
+ * # Phase 4 — content_id keys
+ *
+ * Outer key on the backup map is now content_id (e.g., `"al:154587"`).
+ * Pre-Phase-4 backups used anilistId.toString() as the key — the import path
+ * detects + converts those to `"al:$anilistId"` content_ids.
+ *
+ * The `EpisodeMetadata.animeId` field is best-effort reconstructed from the
+ * `"al:$int"` content_id pattern; for non-AniList content_ids (e.g.,
+ * `"aniyomi:123:url"`), `animeId = 0` (the field is non-nullable in the domain
+ * model — kept for legacy callers; Phase 4+ code should prefer contentId).
  */
 class EpisodeMetadataBackupProvider(
     private val metadataCache: EpisodeMetadataCache,
@@ -43,7 +54,7 @@ class EpisodeMetadataBackupProvider(
         try {
             val rawCache = metadataCache.getAll()
             val byAnime = mutableMapOf<String, Map<String, EpisodeMetadataItem>>()
-            rawCache.forEach { (animeIdStr, jsonStr) ->
+            rawCache.forEach { (contentIdStr, jsonStr) ->
                 try {
                     val metadataMap = json.decodeFromString(metadataSerializer, jsonStr)
                     val items = metadataMap.map { (epNum, meta) ->
@@ -57,12 +68,12 @@ class EpisodeMetadataBackupProvider(
                             lastFetched = meta.lastFetched,
                         )
                     }.toMap()
-                    byAnime[animeIdStr] = items
+                    byAnime[contentIdStr] = items
                 } catch (e: Exception) {
-                    Log.w(TAG, "EpisodeMetadata export: failed to parse cache for animeId=$animeIdStr — ${e.message}")
+                    Log.w(TAG, "EpisodeMetadata export: failed to parse cache for contentId=$contentIdStr — ${e.message}")
                 }
             }
-            Log.i(TAG, "EpisodeMetadata export: ${byAnime.size} anime with metadata")
+            Log.i(TAG, "EpisodeMetadata export: ${byAnime.size} anime with metadata (Phase 4 content_id keys)")
             BackupEntry.EpisodeMetadata(byAnime = byAnime)
         } catch (e: Exception) {
             Log.e(TAG, "EpisodeMetadata export failed", e)
@@ -74,10 +85,17 @@ class EpisodeMetadataBackupProvider(
         require(entry is BackupEntry.EpisodeMetadata) { "Expected EpisodeMetadata entry, got ${entry.providerId}" }
         if (entry.byAnime.isEmpty()) return@withContext false
         var imported = 0
-        entry.byAnime.forEach { (animeIdStr, episodes) ->
+        entry.byAnime.forEach { (keyStr, episodes) ->
             try {
-                val animeId = animeIdStr.toIntOrNull() ?: return@forEach
+                // Phase 4: resolve the content_id from the backup key.
+                // New format: key IS the content_id (contains ':'). Legacy: anilistId-as-string.
+                val contentId = resolveContentId(keyStr) ?: run {
+                    Log.w(TAG, "EpisodeMetadata import: cannot resolve content_id from key='$keyStr' — skipping")
+                    return@forEach
+                }
                 if (episodes.isEmpty()) return@forEach
+                // Best-effort: extract anilistId from "al:$int" content_id for the EpisodeMetadata.animeId field.
+                val animeId = extractAnilistId(contentId) ?: 0
                 val metadataMap = mutableMapOf<Int, EpisodeMetadata>()
                 episodes.forEach { (epNumStr, item) ->
                     val epNum = epNumStr.toIntOrNull() ?: return@forEach
@@ -93,14 +111,34 @@ class EpisodeMetadataBackupProvider(
                     )
                 }
                 if (metadataMap.isNotEmpty()) {
-                    metadataCache.save(animeId, metadataMap)
+                    metadataCache.save(contentId, metadataMap)
                     imported++
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "EpisodeMetadata import: failed for animeId=$animeIdStr — ${e.message}")
+                Log.w(TAG, "EpisodeMetadata import: failed for key='$keyStr' — ${e.message}")
             }
         }
-        Log.i(TAG, "EpisodeMetadata import: $imported anime restored")
+        Log.i(TAG, "EpisodeMetadata import: $imported anime restored (Phase 4 content_id keys)")
         imported > 0
+    }
+
+    /**
+     * Resolves a backup key into a content_id.
+     *
+     * - New format (Phase 4+): key IS the content_id (contains `:`). Use as-is.
+     * - Legacy format (pre-Phase-4): key is anilistId.toString() (parses as
+     *   Int). Convert to `"al:$anilistId"`.
+     * - Else: return null (can't resolve — skip the entry).
+     */
+    private fun resolveContentId(keyStr: String): String? {
+        if (keyStr.contains(':')) return keyStr
+        val anilistId = keyStr.toIntOrNull() ?: return null
+        return "al:$anilistId"
+    }
+
+    /** Extracts the anilistId from an `"al:$int"` content_id, or null if not AniList-linked. */
+    private fun extractAnilistId(contentId: String): Int? {
+        if (!contentId.startsWith("al:")) return null
+        return contentId.removePrefix("al:").toIntOrNull()
     }
 }

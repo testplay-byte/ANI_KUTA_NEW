@@ -94,8 +94,11 @@ class AniListDetailsProvider(
     override suspend fun loadEpisodes(request: DetailsRequest): List<Episode>? = when (request) {
         is DetailsRequest.ByAniListId -> {
             // Use the saved source link (or match) to fetch fresh episodes.
-            val savedLink = sourceLinkStore.getLink(request.anilistId)
+            // Phase 4: SourceLinkStore keys by content_id ("al:$anilistId").
+            val contentId = "al:${request.anilistId}"
+            val savedLink = sourceLinkStore.getLink(contentId)
             if (savedLink != null) {
+                Log.d(TAG, "loadEpisodes(ByAniListId=$contentId): saved link sourceId=${savedLink.sourceId}")
                 val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(savedLink.sourceId) }
                 if (source != null) {
                     val sAnime = SAnimeImpl().apply {
@@ -133,21 +136,25 @@ class AniListDetailsProvider(
         anilistId: Int,
         title: String,
     ): Triple<List<Episode>, Long?, String?> {
+        // Phase 4: SourceLinkStore is keyed by content_id ("al:$anilistId") — compute once.
+        val contentId = "al:$anilistId"
+
         // ── DB-first: if we already have episodes saved, return them instantly ──
         val dbAnime = animeRepository.getByAnilistId(anilistId)
         if (dbAnime != null) {
             val dbEpisodes = episodeRepository.getByAnimeId(dbAnime.id)
             if (dbEpisodes.isNotEmpty()) {
                 Log.i(TAG, "AniList provider: loaded ${dbEpisodes.size} episodes from DB for anilistId=$anilistId")
-                val savedLink = sourceLinkStore.getLink(anilistId)
+                val savedLink = sourceLinkStore.getLink(contentId)
                 val sourceName = savedLink?.let { sourceMatcher.getSourceById(it.sourceId)?.name }
                 return Triple(dbEpisodes, savedLink?.sourceId, sourceName)
             }
         }
 
         // ── Saved source link: reconstruct the SAnime + fetch fresh episodes ──
-        val savedLink = sourceLinkStore.getLink(anilistId)
+        val savedLink = sourceLinkStore.getLink(contentId)
         if (savedLink != null) {
+            Log.d(TAG, "loadEpisodes: found saved source link for contentId=$contentId (sourceId=${savedLink.sourceId})")
             val source = withContext(Dispatchers.IO) { sourceMatcher.getSourceById(savedLink.sourceId) }
             if (source != null) {
                 val sAnime = SAnimeImpl().apply {
@@ -160,7 +167,7 @@ class AniListDetailsProvider(
                 }
             } else {
                 Log.w(TAG, "Saved source ${savedLink.sourceId} not installed — falling back to search")
-                sourceLinkStore.removeLink(anilistId)
+                sourceLinkStore.removeLink(contentId)
             }
         }
 
@@ -171,19 +178,20 @@ class AniListDetailsProvider(
                 Log.i(TAG, "AniList provider: no sources matched '$title'")
                 return Triple(emptyList(), null, null)
             }
-            val explicitPrefId = sourcePrefs.getLong(sourcePrefKey(anilistId), -1L)
+            val explicitPrefId = sourcePrefs.getLong(sourcePrefKey(contentId), -1L)
             val linkedPrefId = extensionLinkStore.getPreferredSourceForAnilist(anilistId)
             val preferredSourceId = when {
                 explicitPrefId != -1L -> explicitPrefId
                 linkedPrefId != null -> linkedPrefId
                 else -> -1L
             }
+            Log.d(TAG, "loadEpisodes: matched=${all.size} sources, explicitPref=$explicitPrefId, linkedPref=$linkedPrefId, chosen=$preferredSourceId")
             val selected = all.firstOrNull { it.source.id == preferredSourceId } ?: all.first()
             Log.i(TAG, "AniList provider: matched '${selected.source.name}' for '$title'")
 
-            // Save the link so we don't re-search next time
+            // Save the link so we don't re-search next time (keyed by content_id)
             sourceLinkStore.saveLink(
-                anilistId = anilistId,
+                contentId = contentId,
                 sourceId = selected.source.id,
                 animeUrl = selected.sAnime.url,
                 animeTitle = selected.sAnime.title,
@@ -278,7 +286,16 @@ class AniListDetailsProvider(
     }
 
     private val sourcePrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private fun sourcePrefKey(anilistId: Int) = "source_pref_$anilistId"
+
+    /**
+     * SharedPreferences key for the user's preferred extension source for a
+     * content. Phase 4: now keyed by content_id (e.g., `"source_pref_al:154587"`)
+     * instead of anilistId. Legacy keys (`"source_pref_154587"`) are NOT migrated
+     * automatically — the user re-selects on first open post-Phase-4. The
+     * [SourceLinkMigrator] handles the SourceLinkStore migration; this prefs file
+     * is a separate concern.
+     */
+    private fun sourcePrefKey(contentId: String) = "source_pref_$contentId"
 
     companion object {
         private const val TAG = "AnikutaAniListProvider"
