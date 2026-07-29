@@ -236,8 +236,12 @@ fun EpisodesSection(
                 // that opens the ManualSearchSheet.
                 episodeState is EpisodeState.Loaded && currentMatch == null -> {
                     val sourceName = episodeState.sourceName
+                    // Per user feedback: the pill should blend with the background
+                    // (surfaceVariant), and only the extension name should be
+                    // highlighted (primary). "— unavailable" uses onSurfaceVariant
+                    // (dimmed, blends with dark/light backgrounds).
                     Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         shape = RoundedCornerShape(50),
                         modifier = Modifier.clickable { showUnavailableInfo = true },
                     ) {
@@ -246,16 +250,23 @@ fun EpisodesSection(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "$sourceName — unavailable",
+                                text = sourceName,
                                 fontFamily = RobotoFamily,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = " — unavailable",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Icon(
                                 imageVector = Icons.Filled.ExpandMore,
                                 contentDescription = "Source unavailable info",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -310,10 +321,12 @@ fun EpisodesSection(
 
     // ── "Source unavailable" info dialog (Issue 5) ──
     // Opens when the user taps the "Source unavailable" chip. Explains which
-    // extension the anime was previously saved with + its ID, with two actions:
+    // extension the anime was previously saved with + its ID, with three actions:
+    // "Copy ID" (leftmost — copies the extension ID to clipboard) +
     // "Switch source" (opens ManualSearchSheet) + "Dismiss".
     if (showUnavailableInfo && episodeState is EpisodeState.Loaded) {
         val sourceName = episodeState.sourceName
+        val context = androidx.compose.ui.platform.LocalContext.current
         AlertDialog(
             onDismissRequest = { showUnavailableInfo = false },
             title = { Text("Extension Unavailable") },
@@ -331,7 +344,22 @@ fun EpisodesSection(
                 }) { Text("Switch source") }
             },
             dismissButton = {
-                TextButton(onClick = { showUnavailableInfo = false }) { Text("Dismiss") }
+                androidx.compose.foundation.layout.Row {
+                    // Copy ID button (leftmost) — copies the extension ID to clipboard.
+                    if (sourceId != null) {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                            val clip = android.content.ClipData.newPlainText("Extension ID", sourceId.toString())
+                            clipboard?.setPrimaryClip(clip)
+                            android.widget.Toast.makeText(
+                                context,
+                                "Extension ID copied: $sourceId",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }) { Text("Copy ID") }
+                    }
+                    TextButton(onClick = { showUnavailableInfo = false }) { Text("Dismiss") }
+                }
             },
         )
     }

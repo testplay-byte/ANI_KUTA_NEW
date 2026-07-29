@@ -334,13 +334,41 @@ class AnimeDetailViewModel(
     fun switchExtension(source: AnimeCatalogueSource, sAnime: SAnime) {
         Log.i(TAG, "Switching extension to '${source.name}' for '${sAnime.title}'")
         val anilistId = currentAnilistId()
+        val oldRequest = activeRequest
+
         // Save the new source link (so re-open skips re-matching).
-        // Phase 4: SourceLinkStore + sourcePrefKey now keyed by content_id ("al:$anilistId").
+        // Phase 4: SourceLinkStore + sourcePrefKey now keyed by content_id.
         if (anilistId != null) {
             val contentId = "al:$anilistId"
             sourceLinkStore.saveLink(contentId, source.id, sAnime.url, sAnime.title)
             sourcePrefs.edit().putLong(sourcePrefKey(contentId), source.id).apply()
             Log.d(TAG, "switchExtension: saved link contentId=$contentId sourceId=${source.id}")
+        } else {
+            // Extension-only anime: update the existing library row's source_id + url
+            // so the library entry follows the new source (preserves _id, favorite,
+            // category membership). Without this, the old library entry stays pointing
+            // at the uninstalled source + a NEW entry is created for the new source.
+            val oldExt = oldRequest as? DetailsRequest.ByExtension
+            if (oldExt != null) {
+                viewModelScope.launch {
+                    try {
+                        val oldEntry = animeRepository.getBySourceAndUrl(oldExt.sourceId, oldExt.animeUrl)
+                        if (oldEntry != null) {
+                            animeRepository.updateSourceAndUrl(oldEntry.id, source.id, sAnime.url)
+                            Log.i(TAG, "switchExtension: updated library row id=${oldEntry.id} " +
+                                "from sourceId=${oldExt.sourceId} url=${oldExt.animeUrl} " +
+                                "to sourceId=${source.id} url=${sAnime.url}")
+                            // Restart the library observer so it tracks the new source+url.
+                            observeLibraryState()
+                        } else {
+                            Log.w(TAG, "switchExtension: no existing library row found for " +
+                                "sourceId=${oldExt.sourceId} url=${oldExt.animeUrl} — new entry will be created")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "switchExtension: failed to update library row source (non-fatal)", e)
+                    }
+                }
+            }
         }
         // Update the active request to the new extension (for future "View from Extension").
         activeRequest = DetailsRequest.ByExtension(

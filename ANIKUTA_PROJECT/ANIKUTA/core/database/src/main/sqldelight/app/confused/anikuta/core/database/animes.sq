@@ -241,3 +241,11 @@ UPDATE animes SET
     content_id = :contentId,
     last_resolved_at = :lastResolvedAt
 WHERE _id = :id;
+
+-- Update source_id + url on an existing library row (used when switching
+-- extension sources — preserves _id, favorite, category membership, etc.).
+updateSourceAndUrl:
+UPDATE animes SET
+    source_id = :sourceId,
+    url = :url
+WHERE _id = :id;
