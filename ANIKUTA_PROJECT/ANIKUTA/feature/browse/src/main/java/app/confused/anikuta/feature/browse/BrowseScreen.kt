@@ -136,7 +136,7 @@ fun BrowseScreen(
             isRefreshing = true
             scope.launch {
                 val freshData = runCatching {
-                    provider?.fetchTrending(perPage = 30)
+                    provider?.fetchTrending(perPage = 30) ?: emptyList()
                 }.getOrDefault(emptyList())
                 if (freshData.isNotEmpty()) {
                     anime = freshData
