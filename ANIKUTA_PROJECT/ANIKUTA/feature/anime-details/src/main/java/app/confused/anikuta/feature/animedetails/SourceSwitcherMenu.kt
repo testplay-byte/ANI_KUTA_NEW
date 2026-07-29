@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Cached
 import androidx.compose.material.icons.outlined.FindInPage
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,6 +69,7 @@ fun SourceSwitcherMenu(
     onSwitchDataSource: (DataSource) -> Unit,
     onLinkToAniList: () -> Unit,
     onSwitchAnime: () -> Unit,
+    onUnlinkFromAniList: () -> Unit = {},
     onRefresh: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -147,6 +149,21 @@ fun SourceSwitcherMenu(
                     },
                 )
             }
+        }
+
+        // ── Unlink from AniList — only when the anime is linked ──
+        // Removes both directional links (SourceLinkStore + ExtensionLinkStore) +
+        // the view preference, then navigates to the extension-mode details page.
+        // The anime remains in the library with its extension data intact.
+        if (anime.anilistId != null) {
+            DropdownMenuItem(
+                text = { MenuText("Unlink from AniList", subtitle = "Remove the AniList association") },
+                leadingIcon = { MenuIcon(Icons.Outlined.LinkOff) },
+                onClick = {
+                    expanded = false
+                    onUnlinkFromAniList()
+                },
+            )
         }
 
         // ── Refresh (always) ──

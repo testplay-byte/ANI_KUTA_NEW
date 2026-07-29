@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1010,6 +1011,9 @@ private fun WatchScreenContent(
         // smoothly (slides up + fades). A magnetic snap threshold prevents
         // accidental triggering on small scrolls. When scrolled back to the
         // top, the header reappears.
+        val prefs = remember { org.koin.core.context.GlobalContext.get().get<app.confused.anikuta.core.preferences.ThemePreferences>() }
+        val headerBlurEnabled by prefs.headerBlurEffect.changes()
+            .collectAsState(initial = prefs.headerBlurEffect.get())
         val listState = rememberLazyListState()
 
         // Track whether the header should be collapsed.
@@ -1194,6 +1198,7 @@ private fun WatchScreenContent(
 
             // Scrollable content — description + episode list
             // Uses the listState declared above for collapsible header tracking.
+            Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -1293,6 +1298,22 @@ private fun WatchScreenContent(
                         }
                     }
                 }
+            }
+
+            // Scroll blur overlay — fades in when content scrolls under the header.
+            // The flicker-fix: when firstVisibleItemIndex > 0, return MAX_VALUE so the
+            // overlay stays at full opacity (firstVisibleItemScrollOffset resets to 0
+            // on every item boundary crossing — without this guard the overlay would
+            // flicker disappear → reappear).
+            app.confused.anikuta.core.designsystem.component.ScrollBlurOverlay(
+                scrollOffset = {
+                    if (listState.firstVisibleItemIndex > 0) Float.MAX_VALUE
+                    else listState.firstVisibleItemScrollOffset.toFloat()
+                },
+                backgroundColor = MaterialTheme.colorScheme.background,
+                enabled = headerBlurEnabled,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
             }
         }
     }

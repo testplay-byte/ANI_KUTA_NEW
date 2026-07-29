@@ -106,11 +106,16 @@ fun EpisodesSection(
     var showManualSearch by remember { mutableStateOf(false) }
 
     // ── Inject + read the episode-display preferences reactively ──
-    // This is the fix for the critical wiring bug: previously EpisodesSection
-    // never received displayPrefs, so EpisodeRow always fell back to the
-    // EpisodeDisplayPrefs data-class defaults — settings changes only affected
-    // the settings preview, NOT the actual rendered list.
+    // Note: the snapshot is now computed by DetailContent (hoisted to the parent
+    // composable level) so it can be passed to the flattened episode rows in the
+    // parent LazyColumn's items(). EpisodesSection itself no longer renders rows
+    // (just the header + loading/error states) — but we keep the koinInject +
+    // remember call here so the prefs are still read once per section render,
+    // which keeps the reactive subscription active while the section is visible.
+    // (Future cleanup: remove this entirely once EpisodesSection is purely a
+    // header + state machine.)
     val displayPrefs: EpisodeDisplayPreferences = koinInject()
+    @Suppress("UNUSED_VARIABLE")
     val snapshot = rememberEpisodeDisplaySnapshot(displayPrefs)
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -204,6 +209,39 @@ fun EpisodesSection(
                         }
                     }
                 }
+                // Episodes loaded from DB but the source extension is no longer
+                // installed (or no auto-match was ever made). Show the source name
+                // + "unavailable" with a dimmed accent color — still tappable to
+                // open the ManualSearchSheet so the user can switch to another
+                // extension. Uses `primary` (not `onSurfaceVariant`) so the chip
+                // is visibly themed but dimmed — clearly an action, not a dead end.
+                episodeState is EpisodeState.Loaded && currentMatch == null -> {
+                    val sourceName = episodeState.sourceName
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable { showManualSearch = true },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "$sourceName — unavailable",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.ExpandMore,
+                                contentDescription = "Switch source",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
                 else -> { /* searching / loading — source not yet known */ }
             }
         }
@@ -213,21 +251,12 @@ fun EpisodesSection(
             is EpisodeState.Idle -> {}
             is EpisodeState.Searching -> SearchingState()
             is EpisodeState.Loading -> EpisodesLoadingState(episodeState.sourceName)
-            is EpisodeState.Loaded -> EpisodeList(
-                episodes = episodeState.episodes,
-                watchedEpisodes = watchedEpisodes,
-                episodeMetadata = episodeMetadata,
-                displayPrefs = snapshot,
-                onOpenEpisode = onOpenEpisode,
-                currentSource = currentMatch?.source,
-                onToggleWatched = onToggleWatched,
-                onDownloadEpisode = onDownloadEpisode,
-                downloadStates = downloadStates,
-                onDownloadCancel = onDownloadCancel,
-                onDownloadResume = onDownloadResume,
-                onDownloadRetry = onDownloadRetry,
-                onDownloadDelete = onDownloadDelete,
-            )
+            // Episodes are rendered lazily by the parent LazyColumn's items() —
+            // see DetailContent.kt. Rendering them here would require nesting a
+            // non-lazy Column inside the parent LazyColumn (the old behavior,
+            // which composed ALL rows at once and caused severe jank on anime
+            // with 100+ episodes).
+            is EpisodeState.Loaded -> { /* episodes rendered as LazyColumn items by DetailContent */ }
             is EpisodeState.NoMatch -> NoSourcesState(
                 onSearchManually = { showManualSearch = true },
                 autoMatchErrors = autoMatchErrors,
@@ -262,69 +291,21 @@ fun EpisodesSection(
 }
 
 /**
- * The episode list with alternating backgrounds + watched effect.
+ * The episode list — DEPRECATED.
  *
- * **CRITICAL — Compose layout:**
- * This is a plain [Column] (NOT a [LazyColumn]) because it's rendered inside
- * the outer `DetailContent`'s `LazyColumn` (via `item { EpisodesSection(...) }`).
- * Nesting a `LazyColumn` inside another `LazyColumn` gives the inner one
- * infinite height constraints, which Compose disallows:
- * ```
- * IllegalStateException: Vertically scrollable component was measured with
- * an infinity maximum height constraints, which is disallowed.
- * ```
+ * Previously this was a plain [Column] (NOT a [LazyColumn]) rendered inside the
+ * outer `DetailContent`'s `LazyColumn` (via `item { EpisodesSection(...) }`).
+ * It used `forEachIndexed` to render ALL episode rows at once. For anime with
+ * 100+ episodes this caused severe jank (all rows composed eagerly).
  *
- * Anime episode lists are typically 4–25 items, so a non-lazy `Column` with
- * `forEach` is fine performance-wise. If episode counts ever grow to hundreds
- * (e.g. long-running shonen), the correct fix is to flatten the episode rows
- * into the parent `LazyColumn` using `items()` — NOT to nest another
- * `LazyColumn`.
+ * The flatten-the-list fix from the scroll-blur branch moved episode rows OUT
+ * of this function + INTO the parent LazyColumn via `items()`. Now
+ * [EpisodesSection] only renders the header + loading/error states; the actual
+ * rows are added by `DetailContent`'s `items(count = episodes.size)` block.
+ *
+ * Kept as a no-op for now (callers reference it via the Loaded → { /* noop */ }
+ * branch above). Safe to delete entirely in a follow-up cleanup pass.
  */
-@Composable
-private fun EpisodeList(
-    episodes: List<SEpisode>,
-    watchedEpisodes: Set<String>,
-    episodeMetadata: Map<Int, app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata>,
-    displayPrefs: EpisodeDisplayPrefs? = null,
-    onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>) -> Unit,
-    currentSource: AnimeSource?,
-    onToggleWatched: (String) -> Unit,
-    onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
-    downloadStates: Map<String, EpisodeDownloadState> = emptyMap(),
-    onDownloadCancel: (String) -> Unit = {},
-    onDownloadResume: (String) -> Unit = {},
-    onDownloadRetry: (String) -> Unit = {},
-    onDownloadDelete: (String) -> Unit = {},
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        episodes.forEachIndexed { index, episode ->
-            val epNum = episode.episode_number.toInt().coerceAtLeast(1)
-            val metadata = episodeMetadata[epNum]
-            EpisodeRow(
-                episode = episode,
-                index = index,
-                isWatched = watchedEpisodes.contains(episode.url),
-                metadata = metadata,
-                displayPrefs = displayPrefs,
-                onClick = {
-                    currentSource?.let { source ->
-                        onOpenEpisode(episode, source, episodes)
-                    }
-                },
-                onToggleWatched = { onToggleWatched(episode.url) },
-                onDownload = {
-                    currentSource?.let { source -> onDownloadEpisode(episode, source) }
-                },
-                downloadState = downloadStates[episode.url] ?: EpisodeDownloadState.NotDownloaded,
-                onDownloadCancel = { onDownloadCancel(episode.url) },
-                onDownloadResume = { onDownloadResume(episode.url) },
-                onDownloadRetry = { onDownloadRetry(episode.url) },
-                onDownloadDelete = { onDownloadDelete(episode.url) },
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
 
 /**
  * A single episode row — the PRIMARY two-section view (per user spec).
@@ -366,7 +347,7 @@ private fun EpisodeList(
  * The thumbnail SIZE pref is still active (small/medium/large).
  */
 @Composable
-private fun EpisodeRow(
+internal fun EpisodeRow(
     episode: SEpisode,
     index: Int,
     isWatched: Boolean,
@@ -400,12 +381,16 @@ private fun EpisodeRow(
     val showSynopsisBg = displayPrefs?.showSynopsisBackground ?: true
     val showDownloadBtn = displayPrefs?.showDownloadButton ?: true
 
-    // Use metadata title if available, otherwise parse the extension title
-    val displayTitle = metadata?.title
-        ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
-            episode.name, episode.episode_number,
-        )
-        ?: episode.name.ifBlank { "Episode ${formatEpisodeNumber(episode.episode_number)}" }
+    // Use metadata title if available, otherwise parse the extension title.
+    // Memoized — the title parsing (EpisodeTitleParser) is CPU-intensive and
+    // doesn't change between recompositions unless the episode or metadata changes.
+    val displayTitle = remember(episode, metadata) {
+        metadata?.title
+            ?: app.confused.anikuta.core.episodemetadata.util.EpisodeTitleParser.parseTitle(
+                episode.name, episode.episode_number,
+            )
+            ?: episode.name.ifBlank { "Episode ${formatEpisodeNumber(episode.episode_number)}" }
+    }
 
     val description = metadata?.description ?: episode.summary
     // Thumbnail fallback: prefer metadata, fall back to the extension's preview_url.
@@ -414,8 +399,9 @@ private fun EpisodeRow(
     } else {
         null
     }
-    val epNumText = "EP ${formatEpisodeNumber(episode.episode_number)}"
-    val bareEpNum = formatEpisodeNumber(episode.episode_number)
+    // Episode number text — memoized (formatEpisodeNumber is cheap but called often).
+    val epNumText = remember(episode) { "EP ${formatEpisodeNumber(episode.episode_number)}" }
+    val bareEpNum = remember(episode) { formatEpisodeNumber(episode.episode_number) }
 
     // Thumbnail sizes
     val (thumbWidth, thumbHeight) = when (thumbSize) {
@@ -424,22 +410,25 @@ private fun EpisodeRow(
         else -> 120.dp to 68.dp  // medium (default)
     }
 
-    // Audio availability — parse BOTH scanlator AND episode name.
-    val audio = parseAudioAvailability(episode.scanlator, episode.name)
+    // Audio availability — memoized (string parsing on every recomposition is wasteful).
+    val audio = remember(episode) { parseAudioAvailability(episode.scanlator, episode.name) }
     val hasSub = audio.hasSub
     val hasDub = audio.hasDub
     val hasHsub = audio.hasHsub
     val hasAnyAudioPills = showAudioPills && (hasSub || hasDub || hasHsub)
 
-    // Date — prefer metadata airDate (epoch seconds), fall back to episode.date_upload (epoch millis)
-    val dateText = if (showDate) {
-        val airDate = metadata?.airDate
-        when {
-            airDate != null && airDate > 0 -> formatDate(airDate * 1000L)
-            episode.date_upload > 0 -> formatDate(episode.date_upload)
-            else -> null
-        }
-    } else null
+    // Date — prefer metadata airDate (epoch seconds), fall back to episode.date_upload (epoch millis).
+    // Memoized — formatDate creates a SimpleDateFormat + Date each call.
+    val dateText = remember(episode, metadata, showDate) {
+        if (showDate) {
+            val airDate = metadata?.airDate
+            when {
+                airDate != null && airDate > 0 -> formatDate(airDate * 1000L)
+                episode.date_upload > 0 -> formatDate(episode.date_upload)
+                else -> null
+            }
+        } else null
+    }
 
     val hasMetaRow = dateText != null || hasAnyAudioPills
 
@@ -844,7 +833,7 @@ private fun parseAudioAvailability(scanlator: String?, episodeName: String): Aud
  * when a setting changes in the new `:feature:episode-settings` screens.
  */
 @Composable
-private fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): EpisodeDisplayPrefs {
+internal fun rememberEpisodeDisplaySnapshot(prefs: EpisodeDisplayPreferences): EpisodeDisplayPrefs {
     val showNumber by prefs.showEpisodeNumber().changes().collectAsState(initial = prefs.showEpisodeNumber().get())
     val showTitles by prefs.showEpisodeTitles().changes().collectAsState(initial = prefs.showEpisodeTitles().get())
     val showSummaries by prefs.showEpisodeSummaries().changes().collectAsState(initial = prefs.showEpisodeSummaries().get())
@@ -911,19 +900,32 @@ private fun formatEpisodeNumber(num: Float): String {
 }
 
 /**
+ * Cached grayscale RenderEffect — created once (file-level lazy val) instead of
+ * on every recomposition. The ColorMatrix + RenderEffect + Compose wrapper are
+ * all immutable, so caching is safe.
+ *
+ * Pre-API-31 (S) RenderEffect is unavailable — returns null + the watched effect
+ * falls back to alpha-only desaturation.
+ */
+private val CACHED_GRAYSCALE_EFFECT: androidx.compose.ui.graphics.RenderEffect? by lazy {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        RenderEffect.createColorFilterEffect(
+            ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) }),
+        ).asComposeRenderEffect()
+    } else null
+}
+
+/**
  * Watched episode visual effect: grayscale (RenderEffect, API 31+) + alpha 0.55f.
  * Per design language §3.3: MUST use RenderEffect (not ColorFilter on Paint)
  * so Compose's text rendering pipeline is also desaturated.
+ *
+ * Uses [CACHED_GRAYSCALE_EFFECT] — no per-recomposition allocation.
  */
 private fun Modifier.watchedEpisodeEffect(isWatched: Boolean): Modifier {
     if (!isWatched) return this
     return this.graphicsLayer {
         alpha = 0.55f
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val matrix = ColorMatrix().apply { setSaturation(0f) }
-            renderEffect = RenderEffect.createColorFilterEffect(
-                ColorMatrixColorFilter(matrix),
-            ).asComposeRenderEffect()
-        }
+        CACHED_GRAYSCALE_EFFECT?.let { this.renderEffect = it }
     }
 }

@@ -62,6 +62,16 @@ fun AnimeDetailScreen(
     extensionSource: AnimeCatalogueSource? = null,
     extensionSAnime: SAnime? = null,
     extensionAnilistId: Int? = null,
+    /** The source ID when the source extension is NOT installed (library anime with
+     *  a missing source). When non-null + extensionSAnime is non-null, the screen
+     *  constructs DetailsRequest.ByExtension using this ID instead of extensionSource.id.
+     *
+     *  This is the library-no-source fix from the scroll-blur branch: when the user
+     *  taps a library anime whose source extension was uninstalled, we still open
+     *  the details page using saved DB data (the provider's DB-first path). The
+     *  user can see saved episodes but can't play/download (toast: "Source not
+     *  installed"). They can use the "Source unavailable" chip to switch extensions. */
+    extensionSourceId: Long? = null,
     onBack: () -> Unit,
     onOpenEpisode: (SEpisode, AnimeSource, List<SEpisode>, WatchEpisodeContext) -> Unit = { _, _, _, _ -> },
     /** Agent 2 — Downloads: enqueues a download for an episode (from the episode row button). */
@@ -78,6 +88,9 @@ fun AnimeDetailScreen(
     /** Called when the user picks a new anime from the AniList search sheet ("Switch anime").
      *  The destination updates the link + navigates to the new anime. */
     onSwitchAnimePicked: (Int) -> Unit = {},
+    /** Called when the user picks "Unlink from AniList" (linked-anime only) —
+     *  removes both directional links + navigates to extension-mode details. */
+    onUnlinkFromAniList: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -93,7 +106,7 @@ fun AnimeDetailScreen(
     val api: AniListApi = remember { GlobalContext.get().get() }
 
     // ── Build the initial request from the entry mode ──
-    val initialRequest: DetailsRequest = remember(animeId, extensionSource, extensionSAnime) {
+    val initialRequest: DetailsRequest = remember(animeId, extensionSource, extensionSAnime, extensionSourceId) {
         when {
             animeId != null -> DetailsRequest.ByAniListId(animeId)
             extensionSource != null && extensionSAnime != null -> DetailsRequest.ByExtension(
@@ -102,7 +115,17 @@ fun AnimeDetailScreen(
                 animeTitle = extensionSAnime.title,
                 anilistId = extensionAnilistId,
             )
-            else -> error("AnimeDetailScreen requires either animeId or (extensionSource + extensionSAnime)")
+            // Library-no-source case: the source extension was uninstalled, but we
+            // still have the sourceId + sAnime (from the library row). The provider's
+            // DB-first path loads saved data. The user can't play/download (the source
+            // is gone) but can see saved episodes + use "Source unavailable" to switch.
+            extensionSourceId != null && extensionSAnime != null -> DetailsRequest.ByExtension(
+                sourceId = extensionSourceId,
+                animeUrl = extensionSAnime.url,
+                animeTitle = extensionSAnime.title,
+                anilistId = extensionAnilistId,
+            )
+            else -> error("AnimeDetailScreen requires either animeId or (extensionSource + extensionSAnime) or (extensionSourceId + extensionSAnime)")
         }
     }
 
@@ -230,6 +253,7 @@ fun AnimeDetailScreen(
                     onSwitchDataSource = vm::switchDataSource,
                     onLinkToAniList = onLinkToAniList,
                     onSwitchAnime = { showAniListSearch = true },
+                    onUnlinkFromAniList = onUnlinkFromAniList,
                     onRefresh = vm::refresh,
                     onOpenEpisode = onOpenEpisode,
                     onToggleWatched = vm::toggleWatched,

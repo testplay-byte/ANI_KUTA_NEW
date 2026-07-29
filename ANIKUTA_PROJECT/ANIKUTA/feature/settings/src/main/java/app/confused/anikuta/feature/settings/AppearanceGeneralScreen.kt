@@ -93,6 +93,8 @@ fun AppearanceGeneralScreen(
         .collectAsStateWithLifecycle(initialValue = prefs.adaptiveColorsDetails.get())
     val adaptiveColorsPlayer by prefs.adaptiveColorsPlayer.changes()
         .collectAsStateWithLifecycle(initialValue = prefs.adaptiveColorsPlayer.get())
+    val headerBlurEffect by prefs.headerBlurEffect.changes()
+        .collectAsStateWithLifecycle(initialValue = prefs.headerBlurEffect.get())
 
     var showCustomSheet by remember { mutableStateOf(false) }
 
@@ -196,6 +198,19 @@ fun AppearanceGeneralScreen(
                     subtitle = "Theme video player with cover art colors",
                     checked = adaptiveColorsPlayer,
                     onCheckedChange = { prefs.adaptiveColorsPlayer.set(it) },
+                )
+            }
+            // ── Effects ──
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                SettingsSectionLabel("Effects")
+            }
+            item {
+                AdaptiveColorsCard(
+                    title = "Header blur effect",
+                    subtitle = "Blur content scrolling under pinned headers",
+                    checked = headerBlurEffect,
+                    onCheckedChange = { prefs.headerBlurEffect.set(it) },
                 )
             }
         }

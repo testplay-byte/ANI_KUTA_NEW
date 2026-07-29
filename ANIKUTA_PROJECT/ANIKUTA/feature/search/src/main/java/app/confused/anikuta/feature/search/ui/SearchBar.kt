@@ -80,13 +80,28 @@ fun SearchBar(
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(if (compact) 18.dp else 20.dp),
-            )
-            Spacer(Modifier.width(12.dp))
+            // Search icon — tappable (triggers onSubmit). Acts as a visible
+            // search button so the user has a clear "fire the search now" target
+            // in addition to the IME Search action. Themed primary color (was
+            // onSurfaceVariant) to make it visibly actionable.
+            // This is the search-button-click fix from the scroll-blur branch:
+            // onQueryChange no longer auto-fires a search, so the user needs a
+            // discoverable way to explicitly submit.
+            Box(
+                modifier = Modifier
+                    .size(if (compact) 36.dp else 40.dp)
+                    .clip(CircleShape)
+                    .clickable { onSubmit() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "Search",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(if (compact) 18.dp else 20.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
             BasicTextField(
                 value = value,
                 onValueChange = onChange,

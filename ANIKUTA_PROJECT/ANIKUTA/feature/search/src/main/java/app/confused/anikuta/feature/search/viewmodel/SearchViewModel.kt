@@ -197,32 +197,82 @@ class SearchViewModel(
     /**
      * The PENDING filters — what the FilterSheet is editing. Only synced to the
      * applied filters ([SearchUiState.filters]) when the user taps "Apply".
+     *
+     * Exposed as a reactive [StateFlow] (was a private var) so the FilterSheet
+     * can `collectAsState()` it + show genre-chip selection updates in real time
+     * as the user toggles them. Previously the selection was invisible until the
+     * user tapped "Apply".
      */
-    private var pendingFilters: SearchFilters = SearchFilters()
+    private val _pendingFilters = MutableStateFlow(SearchFilters())
+    val pendingFilters: StateFlow<SearchFilters> = _pendingFilters.asStateFlow()
 
     init {
-        val initialSource = SearchSource.ANILIST
+        // Read persisted search source + selected extension (survive navigation + app restart).
+        // The persisted extension ID is validated against still-installed sources.
+        val initialSource = uiPreferences.getSearchSource()
+        val availableSources = sourceMatcher.getAvailableSources()
+        val persistedExtId = uiPreferences.getSelectedExtensionSourceId()
+        // Validate that the persisted extension ID is still installed.
+        val selectedExtId = persistedExtId
+            ?.takeIf { id -> availableSources.any { it.id == id } }
+            ?: availableSources.firstOrNull()?.id
+
+        Log.d(TAG, "init: source=$initialSource, persistedExtId=$persistedExtId, " +
+            "selectedExtId=$selectedExtId, availableSources=${availableSources.size}")
+
         _uiState.update {
             it.copy(
+                source = initialSource,
                 recents = recentsStore.get(initialSource),
                 recentsCollapsed = uiPreferences.isRecentsCollapsed(),
-                availableExtensionSources = sourceMatcher.getAvailableSources(),
-                selectedExtensionSourceId = sourceMatcher.getAvailableSources().firstOrNull()?.id,
+                availableExtensionSources = availableSources,
+                selectedExtensionSourceId = selectedExtId,
             )
         }
-        pendingFilters = _uiState.value.filters
-        loadAniListDefault()
+        _pendingFilters.value = _uiState.value.filters
+        // Initial fetch: AniList defaults to popular; Extension runs the default
+        // view (Popular + Latest rows). Don't auto-fire a search for EXTENSION —
+        // the blank-query default view handles it.
+        if (initialSource == SearchSource.ANILIST) {
+            loadAniListDefault()
+        } else {
+            scheduleSearch()
+        }
     }
 
     // ── Public state setters (called by the UI) ──────────────────────────────
 
+    /**
+     * Updates the query text WITHOUT triggering a search.
+     *
+     * Search only fires when the user explicitly submits (taps the search button
+     * in the SearchBar or presses the IME Search/Enter action) via [onSubmit].
+     * This is the search-button-click fix from the scroll-blur branch — the
+     * previous behavior fired a debounced search on every keystroke, which was
+     * wasteful + didn't match the user's mental model of a search button.
+     *
+     * (The FilterSheet's pending-filters changes also DON'T trigger a search —
+     * only [applyFilters] does. So this leaves the only auto-trigger paths as:
+     * sort change, source change, extension-source change, recent-search pick,
+     * filter apply, filter clear, manual submit.)
+     */
     fun onQueryChange(q: String) {
         _uiState.update { it.copy(query = q, currentPage = 1, canLoadMore = true) }
+    }
+
+    /**
+     * Called when the user explicitly submits the search (search button tap or
+     * IME Search action). Triggers the actual search.
+     */
+    fun onSubmit() {
         scheduleSearch()
     }
 
     fun onSourceChange(newSource: SearchSource) {
         if (newSource == _uiState.value.source) return // re-tap handled by UI (opens picker)
+        // Persist the source change so it survives navigation + app restart.
+        uiPreferences.setSearchSource(newSource)
+        Log.d(TAG, "onSourceChange: $newSource (persisted)")
         val newSort = if (newSource == SearchSource.EXTENSION) "TRENDING_DESC" else "POPULARITY_DESC"
         _uiState.update {
             it.copy(
@@ -242,6 +292,9 @@ class SearchViewModel(
     /** The user re-tapped the Extension toggle → UI opens the source picker. */
     fun onPickExtensionSource(sourceId: Long) {
         if (sourceId == _uiState.value.selectedExtensionSourceId) return
+        // Persist the selected extension so it survives navigation + app restart.
+        uiPreferences.setSelectedExtensionSourceId(sourceId)
+        Log.d(TAG, "onPickExtensionSource: $sourceId (persisted)")
         _uiState.update {
             it.copy(selectedExtensionSourceId = sourceId, results = emptyList(), extensionRows = emptyList())
         }
@@ -260,24 +313,25 @@ class SearchViewModel(
     // until [applyFilters] is called. This fixes the owner's report: "it was
     // processing the results even before I clicked the apply button."
 
-    /** The pending filters the FilterSheet is currently editing. */
-    fun getPendingFilters(): SearchFilters = pendingFilters
+    /** The pending filters the FilterSheet is currently editing (reactive — drives live chip selection). */
+    fun getPendingFilters(): SearchFilters = _pendingFilters.value
 
     /** Update the pending filters (no re-fetch). Called live as the user toggles chips. */
     fun onPendingFiltersChange(filters: SearchFilters) {
-        pendingFilters = filters
+        _pendingFilters.value = filters
     }
 
     /** Sync pending → applied + trigger a re-search. Called when "Apply filters" is tapped. */
     fun applyFilters() {
-        _uiState.update { it.copy(filters = pendingFilters, currentPage = 1, canLoadMore = true) }
-        Log.i(TAG, "Filters applied: ${pendingFilters.activeCount} active")
+        val pf = _pendingFilters.value
+        _uiState.update { it.copy(filters = pf, currentPage = 1, canLoadMore = true) }
+        Log.i(TAG, "Filters applied: ${pf.activeCount} active")
         scheduleSearch()
     }
 
     /** Clear the pending + applied filters + re-fetch. Called by "Clear all" in the sheet. */
     fun onClearFilters() {
-        pendingFilters = SearchFilters()
+        _pendingFilters.value = SearchFilters()
         _uiState.update { it.copy(filters = SearchFilters(), currentPage = 1, canLoadMore = true) }
         Log.i(TAG, "Filters cleared")
         scheduleSearch()
@@ -362,7 +416,13 @@ class SearchViewModel(
         searchJob?.cancel()
         val state = _uiState.value
         if (state.source == SearchSource.ANILIST) {
-            searchJob = viewModelScope.launch { runAniListSearch(state) }
+            // AniList: debounce the same as Extension to avoid firing on every
+            // keystroke (now that onQueryChange no longer auto-fires). Blank/
+            // space-only queries are valid for AniList (they return popular anime).
+            searchJob = viewModelScope.launch {
+                delay(DEBOUNCE_MS)
+                runAniListSearch(state)
+            }
         } else {
             searchJob = viewModelScope.launch {
                 if (state.query.isBlank()) {
