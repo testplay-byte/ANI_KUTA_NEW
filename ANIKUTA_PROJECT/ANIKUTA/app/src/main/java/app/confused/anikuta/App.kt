@@ -113,6 +113,8 @@ class App : Application() {
                 // AniListMetadataProvider → MetadataProviderRegistry. Adding MAL/TMDB
                 // = one module + one entry in the List<MetadataProvider> binding.
                 app.confused.anikuta.di.providerApiModule,
+                // ── Phase 5: ContentIdMigrator (re-keys stores on link/unlink/switch) ──
+                app.confused.anikuta.di.contentIdMigratorModule,
             )
         }
 
