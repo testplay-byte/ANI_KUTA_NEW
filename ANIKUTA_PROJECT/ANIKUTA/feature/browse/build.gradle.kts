@@ -18,6 +18,11 @@ dependencies {
     // to enable/disable the frosted-glass overlay under the collapsing header.
     implementation(projects.core.preferences)
 
+    // Koin — BrowseScreen uses GlobalContext.get().get<ThemePreferences>()
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.core)
+    implementation(libs.koin.android)
+
     // Coil for image loading
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
