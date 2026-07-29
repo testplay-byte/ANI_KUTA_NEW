@@ -293,6 +293,18 @@ class AppController(
         } else {
             Log.w("AnikutaSearch", "switchAnilistAnime: no saved link for $oldContentId — nothing to move")
         }
+
+        // Phase 5: re-key all cross-cutting stores (watch progress, playback state,
+        // episode metadata) from the old content_id to the new one. This ensures
+        // the anime's history follows it when the user corrects a wrong auto-match.
+        try {
+            val migrator = org.koin.core.context.GlobalContext.get()
+                .get<app.confused.anikuta.migration.ContentIdMigrator>()
+            migrator.migrate(oldContentId, newContentId)
+        } catch (e: Exception) {
+            Log.w("AnikutaSearch", "switchAnilistAnime: ContentIdMigrator failed (non-fatal)", e)
+        }
+
         // Navigate to the new anime (replace — no stacking).
         navigator?.replace(AnimeDetailDestination(newAnilistId))
     }
