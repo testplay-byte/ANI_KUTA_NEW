@@ -183,20 +183,37 @@ fun SourceSwitcherMenu(
         // Per owner feedback: this item should look non-interactive (faded colors)
         // to signal it's not a clickable feature. The two lines are wrapped in a
         // Column with proper spacing to prevent overlap.
+        //
+        // Fix 6 (SOURCE-SWITCH-FIXES): when `anime.sourceId == null` (no extension
+        // source matched the anime), show "unknown" instead of the (often-fallback)
+        // `sourceName`. AniListAnimeMapper defaults `sourceName` to "AniList" when
+        // no extension matched — but that's misleading because AniList provides
+        // metadata only (no episodes). "unknown" honestly reflects that no real
+        // episode data source is bound to this anime.
+        val currentSourceLabel = when {
+            anime.sourceId != null && !anime.sourceName.isNullOrBlank() -> anime.sourceName
+            else -> "unknown"
+        }
+        val dataSourceLabel = when {
+            // If we're in AniList mode but no extension matched, the "real" data source
+            // is unknown (AniList provides metadata but no episodes). Show "unknown".
+            currentDataSource == DataSource.ANILIST && anime.sourceId == null -> "unknown"
+            else -> currentDataSource.name.lowercase()
+        }
         DropdownMenuItem(
             text = {
                 androidx.compose.foundation.layout.Column(
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = "Current: ${anime.sourceName}",
+                        text = "Current: $currentSourceLabel",
                         fontFamily = RobotoFamily,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     )
                     Text(
-                        text = "Data source: ${currentDataSource.name.lowercase()}",
+                        text = "Data source: $dataSourceLabel",
                         fontFamily = RobotoFamily,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Normal,

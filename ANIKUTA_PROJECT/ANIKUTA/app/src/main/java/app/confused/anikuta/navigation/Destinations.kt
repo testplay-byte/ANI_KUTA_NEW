@@ -172,11 +172,19 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
  * Renders the SAME `AnimeDetailScreen` in extension mode — the unified page
  * handles both data sources. The optional [anilistId] enables the AniList-merge
  * path in `ExtensionDetailsProvider` (linked extension anime get the best of both).
+ *
+ * @param forceInitialRefresh Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the
+ *   `AnimeDetailViewModel.init { loadInternal(forceRefresh = forceInitialRefresh) }`
+ *   bypasses the DB-first short-circuit + forces a fresh fetch from the extension
+ *   (calling `updateMetadataFromExtension` in `ExtensionDetailsProvider.persistEpisodes`
+ *   so stale AniList metadata is overwritten). Used by `AppController.unlinkFromAniList`
+ *   so the post-unlink page shows fresh extension data instead of stale AniList data.
  */
 data class ExtensionAnimeDetailDestination(
     val source: AnimeCatalogueSource,
     val sAnime: SAnime,
     val anilistId: Int? = null,
+    val forceInitialRefresh: Boolean = false,
 ) : Screen {
     /** Unique key per source+url — prevents Voyager SaveableStateHolder collision. */
     override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url})"
@@ -203,6 +211,7 @@ data class ExtensionAnimeDetailDestination(
             extensionSource = source,
             extensionSAnime = sAnime,
             extensionAnilistId = anilistId,
+            forceInitialRefresh = forceInitialRefresh,
             onBack = { navigator.pop() },
             onOpenEpisode = { episode, src, episodeList, watchCtx ->
                 appController.resolveEpisode(
@@ -247,11 +256,18 @@ data class ExtensionAnimeDetailDestination(
  * This is the library-no-source destination from the scroll-blur branch. Pushed
  * by `AppController.openLibraryAnime` when the user taps a library anime whose
  * source extension was uninstalled (instead of bailing with a toast).
+ *
+ * @param forceInitialRefresh Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the
+ *   `AnimeDetailViewModel.init { loadInternal(forceRefresh = forceInitialRefresh) }`
+ *   bypasses the DB-first short-circuit + forces a fresh fetch. Used by
+ *   `AppController.unlinkFromAniList` (when the source is no longer installed)
+ *   so the post-unlink page shows fresh data.
  */
 data class LibraryExtensionDetailDestination(
     val sourceId: Long,
     val animeUrl: String,
     val animeTitle: String,
+    val forceInitialRefresh: Boolean = false,
 ) : Screen {
     override val key: ScreenKey = "LibraryExtDetail($sourceId:$animeUrl)"
 
@@ -273,6 +289,7 @@ data class LibraryExtensionDetailDestination(
             extensionSAnime = sAnime,
             extensionAnilistId = null,
             extensionSourceId = sourceId,
+            forceInitialRefresh = forceInitialRefresh,
             onBack = { navigator.pop() },
             onOpenEpisode = { _, _, _, _ ->
                 // Source not installed — no live source to resolve against. The

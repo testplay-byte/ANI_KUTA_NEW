@@ -249,3 +249,28 @@ UPDATE animes SET
     source_id = :sourceId,
     url = :url
 WHERE _id = :id;
+
+-- ═══ Fix 3 (SOURCE-SWITCH-FIXES) ═══
+-- Overwrites title/description/genre/cover_url/cover_color/status/artist/author
+-- on an existing anime row from the extension's (enriched) SAnime data.
+--
+-- Used by ExtensionDetailsProvider.persistEpisodes to overwrite stale AniList
+-- metadata when the extension re-fetches (e.g. after unlink, after
+-- switchExtension, after pull-to-refresh). Called for BOTH newly-inserted AND
+-- existing rows so the row always reflects the extension's view of the anime.
+--
+-- NOTE: only called when sAnime.initialized == true (i.e. getAnimeDetails was
+-- called and the SAnime has full metadata). The loadEpisodes() path (used by
+-- reloadEpisodesOnly in AniList mode) builds a partial SAnime with just
+-- url+title — calling this query there would null out description/genre/etc.
+updateMetadataFromExtension:
+UPDATE animes SET
+    title = :title,
+    description = :description,
+    genre = :genre,
+    cover_url = :coverUrl,
+    cover_color = :coverColor,
+    status = :status,
+    artist = :artist,
+    author = :author
+WHERE _id = :id;

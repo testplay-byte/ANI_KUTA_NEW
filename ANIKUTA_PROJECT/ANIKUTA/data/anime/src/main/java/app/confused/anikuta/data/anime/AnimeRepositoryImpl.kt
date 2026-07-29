@@ -246,6 +246,36 @@ class AnimeRepositoryImpl(
         }
     }
 
+    // ═══ Fix 3 (SOURCE-SWITCH-FIXES) ═══
+    override suspend fun updateMetadataFromExtension(
+        id: Long,
+        title: String,
+        description: String?,
+        genre: String?,
+        coverUrl: String?,
+        coverColor: String?,
+        status: Int,
+        artist: String?,
+        author: String?,
+    ) {
+        Log.d(TAG, "updateMetadataFromExtension: id=$id, title='$title', coverUrl=$coverUrl, " +
+            "coverColor=$coverColor, status=$status, hasDesc=${description != null}, " +
+            "hasGenre=${!genre.isNullOrBlank()}")
+        withContext(dispatchers.io) {
+            database.animesQueries.updateMetadataFromExtension(
+                id = id,
+                title = title,
+                description = description,
+                genre = genre,
+                coverUrl = coverUrl,
+                coverColor = coverColor,
+                status = status.toLong(),
+                artist = artist,
+                author = author,
+            )
+        }
+    }
+
     override suspend fun delete(id: Long) {
         Log.d(TAG, "delete: id=$id")
         database.animesQueries.delete(id)
