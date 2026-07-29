@@ -1,5 +1,6 @@
 package app.confused.anikuta.feature.browse
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,37 +39,85 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.core.anilist.api.AniListApi
-import app.confused.anikuta.core.anilist.model.AniListAnime
-import app.confused.anikuta.core.anilist.model.coverUrl
-import app.confused.anikuta.core.anilist.model.displayTitle
+import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.providerapi.HomeFeedProvider
+import app.confused.anikuta.core.providerapi.MetadataCapability
+import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
+private const val TAG = "AnikutaBrowseScreen"
+
 /**
- * Browse screen — shows trending anime from AniList in a grid.
+ * Browse screen — shows trending anime in a grid.
  *
- * Phase 4: fetches trending anime from AniList (ADR-010, ADR-030).
+ * Phase 7 (ADR-041): the screen no longer calls `AniListApi` directly. Instead
+ * it resolves the active [HomeFeedProvider] via [MetadataProviderRegistry] and
+ * talks to it through the capability interface. Today AniList is the only
+ * registered provider; adding MAL/TMDB later is one module + one Koin line and
+ * this screen stays unchanged.
+ *
  * Uses the CollapsingHeader from the design system — collapses when the grid scrolls.
  * Grid of AnimeCard composables (cover + title).
  * Loading/error/empty states.
  *
  * The screen content scrolls behind the floating bottom nav (per design language).
+ *
+ * # Provider resolution
+ *
+ * `MetadataProviderRegistry.forCapability` is `suspend` (it pings `isAvailable()`
+ * on each candidate), but [HomeFeedProvider.getCachedTrending] is a non-suspend
+ * method we want to call synchronously for the stale-while-revalidate pattern
+ * (show cached data instantly, refresh in the background). To support both, we
+ * resolve the provider via [MetadataProviderRegistry.allForCapability] (NOT
+ * suspend — returns all candidates that implement the capability without
+ * checking availability) and use the first one. AniList is currently the only
+ * HomeFeedProvider, so this is always it; when a second provider is added the
+ * user's active-provider preference will be respected via `forCapability` for
+ * the network refresh (the cache lookup falls back to whatever the first
+ * provider returns).
+ *
+ * @param registry the app-wide [MetadataProviderRegistry] (injected via Koin in
+ *   `BrowseTabDestination` — matches the existing parameter-passing pattern).
+ * @param onOpenAnime open the anime detail page by AniList ID. The provider
+ *   abstraction returns [UnifiedAnime] whose `anilistId` is nullable (non-null
+ *   for AniList-sourced items; null for hypothetical future providers that
+ *   don't expose an AniList ID). For AniList-sourced browse items this is
+ *   always non-null; we null-check defensively before navigating.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun BrowseScreen(
-    api: AniListApi,
+    registry: MetadataProviderRegistry,
     onOpenAnime: (Int) -> Unit = {},
 ) {
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
 
+    // Resolve the active HomeFeedProvider synchronously via allForCapability
+    // (NOT suspend — we need a provider handle for the non-suspend cache lookup
+    // before the first composition commits). AniList is currently the only
+    // HomeFeedProvider, so firstOrNull() always picks it up. When a second
+    // provider is registered, the user's active-provider preference is still
+    // consulted via `forCapability` for the network refresh path inside the
+    // LaunchedEffect (suspend) below.
+    val provider: HomeFeedProvider? = remember(registry) {
+        val candidates = registry.allForCapability<HomeFeedProvider>(MetadataCapability.HOME_FEED)
+        if (candidates.isEmpty()) {
+            Log.w(TAG, "No HomeFeedProvider registered — browse will be empty. " +
+                "Register one (e.g., AniListMetadataProvider in providerApiModule).")
+        } else {
+            Log.d(TAG, "Resolved HomeFeedProvider: ${candidates.first().displayName} " +
+                "(${candidates.size} candidate(s))")
+        }
+        candidates.firstOrNull()
+    }
+
     // Stale-while-revalidate: show cached data instantly if available
-    val cached = api.getCachedTrending()
-    var anime by remember { mutableStateOf<List<AniListAnime>>(cached ?: emptyList()) }
+    val cached: List<UnifiedAnime>? = provider?.getCachedTrending()
+    var anime by remember { mutableStateOf<List<UnifiedAnime>>(cached ?: emptyList()) }
     var loading by remember { mutableStateOf(cached == null) } // Only show loading if no cache
     var error by remember { mutableStateOf<String?>(null) }
     var isRefreshing by remember { mutableStateOf(false) } // Background refresh indicator
@@ -86,8 +135,9 @@ fun BrowseScreen(
         if (!isRefreshing) {
             isRefreshing = true
             scope.launch {
-                val result = runCatching { api.fetchTrending(perPage = 30) }
-                val freshData = result.getOrDefault(emptyList())
+                val freshData = runCatching {
+                    provider?.fetchTrending(perPage = 30) ?: emptyList()
+                }.getOrDefault(emptyList())
                 if (freshData.isNotEmpty()) {
                     anime = freshData
                     error = null
@@ -105,12 +155,18 @@ fun BrowseScreen(
     // local cache if it's < 24h old — so this LaunchedEffect won't make a
     // network call unless the cache is stale. This implements the "refresh
     // once a day" behavior the user requested.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(provider) {
+        if (provider == null) {
+            Log.w(TAG, "No HomeFeedProvider — skipping fetch")
+            loading = false
+            error = "No metadata provider available"
+            return@LaunchedEffect
+        }
         if (cached != null) {
             // Cache exists — refresh in background, keep showing old data
             isRefreshing = true
         }
-        val result = runCatching { api.fetchTrending(perPage = 30) }
+        val result = runCatching { provider.fetchTrending(perPage = 30) }
         val freshData = result.getOrDefault(emptyList())
         if (freshData.isNotEmpty()) {
             anime = freshData
@@ -148,7 +204,7 @@ fun BrowseScreen(
 
 @Composable
 private fun AnimeGrid(
-    anime: List<AniListAnime>,
+    anime: List<UnifiedAnime>,
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     onOpenAnime: (Int) -> Unit,
 ) {
@@ -161,7 +217,13 @@ private fun AnimeGrid(
         modifier = Modifier.fillMaxSize(),
     ) {
         items(anime) { item ->
-            AnimeCard(anime = item, onClick = { onOpenAnime(item.id) })
+            // UnifiedAnime.anilistId is nullable in the abstract contract, but
+            // for AniList-sourced browse items it is always non-null. Skip the
+            // card click defensively if a future provider returns null.
+            AnimeCard(
+                anime = item,
+                onClick = { item.anilistId?.let { onOpenAnime(it) } },
+            )
         }
         // Bottom padding for the floating nav
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -172,7 +234,7 @@ private fun AnimeGrid(
 
 @Composable
 private fun AnimeCard(
-    anime: AniListAnime,
+    anime: UnifiedAnime,
     onClick: () -> Unit,
 ) {
     Column(
@@ -190,7 +252,7 @@ private fun AnimeCard(
         ) {
             AsyncImage(
                 model = anime.coverUrl,
-                contentDescription = anime.displayTitle,
+                contentDescription = anime.title,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
@@ -217,7 +279,7 @@ private fun AnimeCard(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = anime.displayTitle,
+            text = anime.title,
             fontFamily = RobotoFamily,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,

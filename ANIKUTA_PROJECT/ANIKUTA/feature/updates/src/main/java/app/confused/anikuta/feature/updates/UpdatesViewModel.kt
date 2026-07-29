@@ -4,8 +4,11 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.confused.anikuta.core.anilist.api.AniListApi
-import app.confused.anikuta.core.anilist.model.AiringScheduleInfo
+import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.repository.AnimeRepository
+import app.confused.anikuta.core.providerapi.AiringScheduleProvider
+import app.confused.anikuta.core.providerapi.MetadataCapability
+import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import app.confused.anikuta.core.updatechecker.UpdateCheckProgress
 import app.confused.anikuta.core.updatechecker.UpdateChecker
 import kotlinx.coroutines.delay
@@ -28,21 +31,34 @@ import kotlinx.coroutines.launch
  *
  * ── Schedule tab ──
  *  - `fetchSchedule()` reads the library favorites (`AnimeRepository.observeFavorites`),
- *    collects their AniList IDs, and calls `AniListApi.fetchAiringSchedule(ids)`.
- *    The result is flattened into a sorted [ScheduleEntry] list (one entry per
- *    upcoming episode, across all library anime).
- *  - The schedule is cached in `AniListApi` for 5 min, so switching tabs back
- *    and forth doesn't re-fetch. A manual refresh re-runs `fetchSchedule()`.
- *  - We chunk the ID list into batches of 50 (AniList's `id_in` practical max)
- *    and concatenate the results.
+ *    collects their AniList IDs, and asks the active [AiringScheduleProvider]
+ *    (resolved via [MetadataProviderRegistry]) for each chunk's upcoming
+ *    episodes. The result is flattened into a sorted [ScheduleEntry] list
+ *    (one entry per upcoming episode, across all library anime).
+ *  - The provider returns a flat `List<AiringScheduleInfo>` keyed by anime ID
+ *    + episode number (the rich per-anime AniList payload with title/cover is
+ *    collapsed in the AniList adapter — see `AniListMetadataProvider`).
+ *    Because the provider contract is provider-agnostic, title / cover URL /
+ *    cover color come from the local library entry (we already have them —
+ *    the user favorited the anime, so its `Anime` row in the DB has them).
+ *  - A manual refresh re-runs `fetchSchedule()`. We chunk the ID list into
+ *    batches of 50 (AniList's `id_in` practical max) and concatenate the
+ *    results.
  *
  * The ViewModel is UI-agnostic — all state is in [UpdatesState], mutations go
  * through small `fun`s. Koin-registered via `updatesModule`.
+ *
+ * Phase 7 (ADR-041): the schedule fetch now routes through the registry
+ * instead of calling `anilistApi.fetchAiringSchedule` directly. `anilistApi`
+ * is retained as a constructor dep for now (still used as a fallback if no
+ * provider is available — see `fetchSchedule` — and as a future-proofing hook
+ * for schedule-by-id lookups that aren't in the provider contract yet).
  */
 class UpdatesViewModel(
     private val updateChecker: UpdateChecker,
     private val anilistApi: AniListApi,
     private val animeRepository: AnimeRepository,
+    private val registry: MetadataProviderRegistry,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(UpdatesState())
@@ -124,9 +140,24 @@ class UpdatesViewModel(
      * Fetches upcoming airing schedules for all library anime.
      *
      * Reads the library once (`observeFavorites().first()`), collects AniList
-     * IDs, chunks them into batches of 50, and concatenates the per-batch
-     * `fetchAiringSchedule` results. The flattened [ScheduleEntry] list is
-     * sorted by airing time ascending.
+     * IDs, chunks them into batches of 50, and asks the active
+     * [AiringScheduleProvider] for each chunk's schedule. The provider returns
+     * a flat `List<AiringScheduleInfo>` (one entry per upcoming episode,
+     * provider-agnostic — see `AniListMetadataProvider.fetchSchedule` for the
+     * AniList-side flattening). We then look up the per-anime display fields
+     * (title / coverUrl / coverColor) from the local library entry — those are
+     * NOT in the provider contract because future providers (MAL, TMDB) may
+     * not have them at all, and we already have them locally (the user
+     * favorited the anime).
+     *
+     * If the registry has no available [AiringScheduleProvider], we fall back
+     * to calling `anilistApi.fetchAiringSchedule` directly — this preserves
+     * the pre-Phase-7 behavior so the schedule tab still works if the
+     * registry is somehow misconfigured. (Today AniList is always registered,
+     * so this fallback path is essentially dead code — kept as a safety net
+     * for the Phase 7 rollout.)
+     *
+     * The flattened [ScheduleEntry] list is sorted by airing time ascending.
      */
     fun fetchSchedule() {
         viewModelScope.launch {
@@ -144,54 +175,99 @@ class UpdatesViewModel(
                     return@launch
                 }
 
+                // Build a lookup map: anilistId -> Anime. Used to attach the
+                // local title/cover/color to each provider-schedule entry
+                // (the provider contract returns only {animeId, episode, airingAt}).
+                val libraryByAnilistId: Map<Int, Anime> = library
+                    .mapNotNull { anime -> anime.anilistId?.let { it to anime } }
+                    .toMap()
+
+                // Resolve the active provider ONCE (the registry's fallback
+                // chain may ping isAvailable() on each candidate — don't repeat
+                // per chunk). If null, fall back to the legacy AniList path.
+                val provider: AiringScheduleProvider? =
+                    registry.forCapability<AiringScheduleProvider>(MetadataCapability.AIRING_SCHEDULE)
+                if (provider != null) {
+                    Log.d(TAG, "fetchSchedule: using AiringScheduleProvider=${provider.displayName}")
+                } else {
+                    Log.w(TAG, "fetchSchedule: no AiringScheduleProvider available — " +
+                        "falling back to anilistApi.fetchAiringSchedule (legacy path)")
+                }
+
                 val entries = mutableListOf<ScheduleEntry>()
+                // Dedup by (anilistId, episode) — the AniList adapter emits
+                // nextAiringEpisode + all upcomingEpisodes (which overlap on
+                // the immediate next). The first occurrence wins (next's airingAt).
+                val seen = HashSet<Pair<Int, Int>>()
+
                 // Chunk to respect AniList's practical per-request limit.
                 for (chunk in ids.chunked(50)) {
-                    val info: List<AiringScheduleInfo> = try {
-                        anilistApi.fetchAiringSchedule(chunk)
+                    val info: List<app.confused.anikuta.core.providerapi.AiringScheduleInfo> = try {
+                        if (provider != null) {
+                            provider.fetchSchedule(chunk)
+                        } else {
+                            // Legacy fallback: call anilistApi directly + map
+                            // the rich AniList-side payload to the provider's
+                            // flat contract so the rendering loop below is
+                            // shared. (This path is dead-code in practice —
+                            // kept as a safety net for the Phase 7 rollout.)
+                            anilistApi.fetchAiringSchedule(chunk).flatMap { animeInfo ->
+                                buildList {
+                                    animeInfo.nextAiringEpisode?.let { na ->
+                                        if (na.episode != null && na.airingAt != null) {
+                                            add(app.confused.anikuta.core.providerapi.AiringScheduleInfo(
+                                                animeId = animeInfo.anilistId,
+                                                episode = na.episode!!,
+                                                airingAt = na.airingAt!!.toLong(),
+                                                timeUntilAiring = na.timeUntilAiring?.toLong() ?: 0L,
+                                            ))
+                                        }
+                                    }
+                                    for (sch in animeInfo.upcomingEpisodes) {
+                                        if (sch.episode != null && sch.airingAt != null) {
+                                            add(app.confused.anikuta.core.providerapi.AiringScheduleInfo(
+                                                animeId = animeInfo.anilistId,
+                                                episode = sch.episode!!,
+                                                airingAt = sch.airingAt!!.toLong(),
+                                                timeUntilAiring = sch.timeUntilAiring?.toLong() ?: 0L,
+                                            ))
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } catch (e: Exception) {
-                        Log.w(TAG, "fetchAiringSchedule failed for chunk $chunk (non-fatal)", e)
+                        Log.w(TAG, "fetchSchedule failed for chunk $chunk (non-fatal)", e)
                         emptyList()
                     }
-                    for (anime in info) {
-                        // nextAiringEpisode (single) — include if present.
-                        anime.nextAiringEpisode?.let { na ->
-                            val airingAt = na.airingAt
-                            val ep = na.episode
-                            if (airingAt != null && ep != null) {
-                                entries.add(
-                                    ScheduleEntry(
-                                        anilistId = anime.anilistId,
-                                        animeTitle = anime.title,
-                                        coverUrl = anime.coverUrl,
-                                        coverColor = anime.coverColor,
-                                        episodeNumber = ep,
-                                        airingAtMillis = airingAt.toLong() * 1000L,
-                                    ),
-                                )
-                            }
-                        }
-                        // Full upcoming list — include each (dedup against
-                        // nextAiringEpisode by episode number to avoid listing
-                        // the immediate next episode twice).
-                        val nextEpNum = anime.nextAiringEpisode?.episode
-                        for (sch in anime.upcomingEpisodes) {
-                            if (sch.episode == nextEpNum) continue
-                            val airingAt = sch.airingAt
-                            val ep = sch.episode
-                            if (airingAt != null && ep != null) {
-                                entries.add(
-                                    ScheduleEntry(
-                                        anilistId = anime.anilistId,
-                                        animeTitle = anime.title,
-                                        coverUrl = anime.coverUrl,
-                                        coverColor = anime.coverColor,
-                                        episodeNumber = ep,
-                                        airingAtMillis = airingAt.toLong() * 1000L,
-                                    ),
-                                )
-                            }
-                        }
+
+                    for (entry in info) {
+                        // Look up the local library entry for the display fields.
+                        // If the anime isn't in our library (shouldn't happen —
+                        // we filtered ids from the library above), skip.
+                        val anime = libraryByAnilistId[entry.animeId] ?: continue
+
+                        // Skip degenerate entries (the AniList adapter emits
+                        // episode=0 / airingAt=0 when AniList's nullable fields
+                        // are null — preserves the original VM's null-checks).
+                        val ep = entry.episode
+                        val airingAt = entry.airingAt
+                        if (ep <= 0 || airingAt <= 0L) continue
+
+                        // Dedup next + upcoming overlap.
+                        val key = entry.animeId to ep
+                        if (!seen.add(key)) continue
+
+                        entries.add(
+                            ScheduleEntry(
+                                anilistId = entry.animeId,
+                                animeTitle = anime.title,
+                                coverUrl = anime.coverUrl,
+                                coverColor = anime.coverColor,
+                                episodeNumber = ep,
+                                airingAtMillis = airingAt * 1000L,
+                            ),
+                        )
                     }
                 }
 

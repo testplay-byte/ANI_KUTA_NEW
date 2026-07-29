@@ -13,6 +13,10 @@ dependencies {
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
     implementation(projects.core.updateChecker)   // UpdateChecker + UpdateResult
+    // Phase 7: UpdatesViewModel resolves the active AiringScheduleProvider
+    // through the MetadataProviderRegistry instead of calling AniListApi
+    // directly. Adding MAL/TMDB later = one module + one Koin line (ADR-041).
+    implementation(projects.core.providerApi)
 
     // Data modules (for AnimeRepository — library favorites — + UpdateChecker's
     // gateway is wired via :data:extension at runtime through Koin)

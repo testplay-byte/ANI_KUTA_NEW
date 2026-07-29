@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.anilist.api.AniListApi
+import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import app.confused.anikuta.data.extension.matcher.SourceMatcher
 import app.confused.anikuta.data.extension.repo.ExtensionRepoApi
@@ -49,8 +50,11 @@ object BrowseTabDestination : Screen {
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
+        // Phase 7 (ADR-041): BrowseScreen resolves the active HomeFeedProvider
+        // through the registry instead of calling AniListApi directly.
+        val registry = koinInject<MetadataProviderRegistry>()
         BrowseScreen(
-            api = appController.anilistApi,
+            registry = registry,
             onOpenAnime = { id -> appController.pushDetail(id) },
         )
     }
@@ -72,12 +76,18 @@ object SearchTabDestination : Screen {
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
+        // Phase 7 (ADR-041): the AniList tab routes through the registry →
+        // SearchProvider / HomeFeedProvider. anilistApi is still passed because
+        // the ExtensionLinkingViewModel (separate VM, opened from this screen's
+        // extension result tap) uses it directly for the linking-flow search.
+        val registry = koinInject<MetadataProviderRegistry>()
         SearchScreen(
             anilistApi = appController.anilistApi,
             extensionManager = appController.extensionManager,
             sourceMatcher = appController.sourceMatcher,
             recentsStore = appController.recentsStore,
             uiPreferences = appController.searchUiPreferences,
+            registry = registry,
             onOpenAnime = { id -> appController.pushDetail(id) },
             onOpenExtensionResult = { result ->
                 // Start the extension→AniList linking flow.

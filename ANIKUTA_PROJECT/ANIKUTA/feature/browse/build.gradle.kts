@@ -10,6 +10,10 @@ dependencies {
     implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(projects.core.anilist)
+    // Phase 7: BrowseScreen resolves the active HomeFeedProvider through the
+    // MetadataProviderRegistry instead of calling AniListApi directly. Adding
+    // MAL/TMDB later = one module + one Koin line (ADR-041).
+    implementation(projects.core.providerApi)
 
     // Coil for image loading
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")

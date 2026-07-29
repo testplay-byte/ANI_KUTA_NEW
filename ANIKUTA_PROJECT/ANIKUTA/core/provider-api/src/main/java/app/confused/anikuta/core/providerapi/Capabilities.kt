@@ -36,6 +36,25 @@ interface HomeFeedProvider : MetadataProvider {
      * @throws Throwable on transient errors.
      */
     suspend fun fetchPopular(page: Int = 1, perPage: Int = 20): List<UnifiedAnime>
+
+    /**
+     * Synchronously return cached trending anime, or null if no cache available.
+     *
+     * Used for stale-while-revalidate: the BrowseScreen shows cached data
+     * instantly while fetching fresh data in the background. Providers that
+     * don't have a local cache return null (the default) — the screen shows
+     * a loading spinner instead.
+     *
+     * Default: `null` (no cache). AniList overrides this to read from
+     * `LocalAniListCache`.
+     */
+    fun getCachedTrending(): List<UnifiedAnime>? = null
+
+    /**
+     * Synchronously return cached popular anime, or null if no cache available.
+     * Same pattern as [getCachedTrending]. Default: `null`.
+     */
+    fun getCachedPopular(): List<UnifiedAnime>? = null
 }
 
 /**
