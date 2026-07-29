@@ -107,6 +107,8 @@ fun ExtensionLinkingSheet(
     onGoWithoutLinking: (AnimeCatalogueSource, SAnime) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val linkingPreferences = org.koin.compose.koinInject<app.confused.anikuta.core.preferences.LinkingPreferences>()
+
     @Suppress("UNCHECKED_CAST")
     val vm: ExtensionLinkingViewModel = viewModel(
         key = "ext_linking_${source.id}_${sAnime.url}",
@@ -116,6 +118,7 @@ fun ExtensionLinkingSheet(
                 sAnime = sAnime,
                 anilistApi = anilistApi,
                 linkStore = linkStore,
+                linkingPreferences = linkingPreferences,
             ) as T
         },
     )

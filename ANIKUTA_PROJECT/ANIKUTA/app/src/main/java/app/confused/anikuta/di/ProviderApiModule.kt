@@ -6,6 +6,7 @@ import app.confused.anikuta.core.providerapi.MetadataProvider
 import app.confused.anikuta.core.providerapi.MetadataProviderRegistry
 import app.confused.anikuta.core.providerapi.ProviderPreferences
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -43,13 +44,13 @@ import org.koin.dsl.module
 val providerApiModule: Module = module {
     single { AniListMetadataProvider(get<AniListApi>()) }
 
-    single<List<MetadataProvider>> {
+    single<List<MetadataProvider>>(named("metadataProviders")) {
         listOf(get<AniListMetadataProvider>())
     }
 
     single {
         MetadataProviderRegistry(
-            providers = get<List<MetadataProvider>>(),
+            providers = get<List<MetadataProvider>>(named("metadataProviders")),
             preferences = get<ProviderPreferences>(),
         )
     }

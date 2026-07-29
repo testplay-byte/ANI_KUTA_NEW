@@ -24,6 +24,7 @@ import app.confused.anikuta.core.preferences.PreferenceStore
 import app.confused.anikuta.core.tracker.TrackerBackupProvider
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
@@ -49,7 +50,7 @@ val backupModule: Module = module {
     // CRITICAL: Do NOT use multiple `single<BackupProvider> { ... }` — they share
     // the same Koin key (BackupProvider, null) and overwrite each other.
     // Using a single List binding preserves all 10 providers.
-    single<List<BackupProvider>> {
+    single<List<BackupProvider>>(named("backupProviders")) {
         listOf(
             LibraryBackupProvider(get<AnikutaDatabase>()),
             AnimeDetailsBackupProvider(get<AnikutaDatabase>()),
@@ -70,7 +71,7 @@ val backupModule: Module = module {
     // ── Orchestrator (receives the full provider list) ──
     single {
         BackupManager(
-            providers = get<List<BackupProvider>>(),
+            providers = get<List<BackupProvider>>(named("backupProviders")),
             coverDownloader = get<CoverDownloader>(),
         )
     }
