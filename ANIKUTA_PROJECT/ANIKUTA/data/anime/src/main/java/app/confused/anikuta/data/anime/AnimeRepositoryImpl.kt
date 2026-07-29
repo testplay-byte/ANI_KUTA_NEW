@@ -81,10 +81,75 @@ class AnimeRepositoryImpl(
             .executeAsList()
 
     override suspend fun upsert(anime: Anime): Long {
-        Log.d(TAG, "upsert: anime=${anime.title}, id=${anime.id}, anilistId=${anime.anilistId}")
+        Log.d(TAG, "upsert: anime=${anime.title}, id=${anime.id}, anilistId=${anime.anilistId}, sourceId=${anime.sourceId}")
+        // Fix: before INSERT, check if a row with the same (source_id, url) already exists.
+        // This happens when ExtensionDetailsProvider.persistEpisodes already saved the row,
+        // and then saveAnimeToLibrary tries to INSERT a new one with id=0.
+        // Without this check, the INSERT fails with UNIQUE constraint on (source_id, url).
+        if (anime.id == 0L && anime.sourceId > 0L) {
+            val existing = database.animesQueries.selectBySourceAndUrl(
+                anime.sourceId, anime.url, AnimeMapper::map,
+            ).executeAsOneOrNull()
+            if (existing != null) {
+                Log.i(TAG, "upsert: found existing row id=${existing.id} for " +
+                    "(sourceId=${anime.sourceId}, url=${anime.url}) — UPDATE instead of INSERT")
+                val updated = anime.copy(id = existing.id)
+                return updateExisting(updated)
+            }
+        }
+        // Also check by anilistId if source_id is 0 (AniList-only anime).
+        if (anime.id == 0L && anime.anilistId != null) {
+            val existingByAnilist = database.animesQueries.selectByAnilistId(
+                anime.anilistId.toLong(), AnimeMapper::map,
+            ).executeAsOneOrNull()
+            if (existingByAnilist != null) {
+                Log.i(TAG, "upsert: found existing row id=${existingByAnilist.id} for " +
+                    "anilistId=${anime.anilistId} — UPDATE instead of INSERT")
+                val updated = anime.copy(id = existingByAnilist.id)
+                return updateExisting(updated)
+            }
+        }
         return if (anime.id > 0) {
-            database.animesQueries.update(
-                id = anime.id,
+            updateExisting(anime)
+        } else {
+            insertNew(anime)
+        }
+    }
+
+    private fun updateExisting(anime: Anime): Long {
+        database.animesQueries.update(
+            id = anime.id,
+            url = anime.url,
+            title = anime.title,
+            artist = anime.artist,
+            author = anime.author,
+            description = anime.description,
+            genre = anime.genre.takeIf { it.isNotEmpty() }?.joinToString(","),
+            coverUrl = anime.coverUrl,
+            status = anime.status.toLong(),
+            thumbnailUrl = anime.thumbnailUrl,
+            favorite = if (anime.favorite) 1L else 0L,
+            viewerFlags = anime.viewerFlags.toLong(),
+            nextUpdate = anime.nextUpdate,
+            updateStrategy = anime.updateStrategy.toLong(),
+            coverLastModified = anime.coverLastModified,
+            releaseDate = anime.releaseDate,
+            lastRefresh = anime.lastRefresh,
+            lastMetadataFetch = anime.lastMetadataFetch,
+            nextEpisodeCheck = anime.nextEpisodeCheck,
+            anilistId = anime.anilistId?.toLong(),
+            coverColor = anime.coverColor,
+            score = anime.score,
+            totalEpisodes = anime.totalEpisodes?.toLong(),
+            lastWatched = anime.lastWatched,
+            nextAiringEpisode = anime.nextAiringEpisode?.toLong(),
+        )
+        return anime.id
+    }
+
+    private fun insertNew(anime: Anime): Long {
+        return database.transactionWithResult {
+            database.animesQueries.insert(
                 url = anime.url,
                 title = anime.title,
                 artist = anime.artist,
@@ -95,6 +160,8 @@ class AnimeRepositoryImpl(
                 status = anime.status.toLong(),
                 thumbnailUrl = anime.thumbnailUrl,
                 favorite = if (anime.favorite) 1L else 0L,
+                sourceId = anime.sourceId,
+                dateAdded = anime.dateAdded,
                 viewerFlags = anime.viewerFlags.toLong(),
                 nextUpdate = anime.nextUpdate,
                 updateStrategy = anime.updateStrategy.toLong(),
@@ -110,39 +177,7 @@ class AnimeRepositoryImpl(
                 lastWatched = anime.lastWatched,
                 nextAiringEpisode = anime.nextAiringEpisode?.toLong(),
             )
-            anime.id
-        } else {
-            database.transactionWithResult {
-                database.animesQueries.insert(
-                    url = anime.url,
-                    title = anime.title,
-                    artist = anime.artist,
-                    author = anime.author,
-                    description = anime.description,
-                    genre = anime.genre.takeIf { it.isNotEmpty() }?.joinToString(","),
-                    coverUrl = anime.coverUrl,
-                    status = anime.status.toLong(),
-                    thumbnailUrl = anime.thumbnailUrl,
-                    favorite = if (anime.favorite) 1L else 0L,
-                    sourceId = anime.sourceId,
-                    dateAdded = anime.dateAdded,
-                    viewerFlags = anime.viewerFlags.toLong(),
-                    nextUpdate = anime.nextUpdate,
-                    updateStrategy = anime.updateStrategy.toLong(),
-                    coverLastModified = anime.coverLastModified,
-                    releaseDate = anime.releaseDate,
-                    lastRefresh = anime.lastRefresh,
-                    lastMetadataFetch = anime.lastMetadataFetch,
-                    nextEpisodeCheck = anime.nextEpisodeCheck,
-                    anilistId = anime.anilistId?.toLong(),
-                    coverColor = anime.coverColor,
-                    score = anime.score,
-                    totalEpisodes = anime.totalEpisodes?.toLong(),
-                    lastWatched = anime.lastWatched,
-                    nextAiringEpisode = anime.nextAiringEpisode?.toLong(),
-                )
-                database.animesQueries.lastInsertedRowId().executeAsOne()
-            }
+            database.animesQueries.lastInsertedRowId().executeAsOne()
         }
     }
 
