@@ -30,6 +30,16 @@ interface AnimeRepository {
 
     fun observeByAnilistId(anilistId: Int): Flow<Anime?>
 
+    /**
+     * Reactive lookup of an unlinked extension anime by its (sourceId, url) key.
+     *
+     * Used by [app.confused.anikuta.feature.animedetails.AnimeDetailViewModel] for
+     * extension-only anime (anilistId == null) so the library save flag updates
+     * reactively when the user toggles save — instead of being polled after each
+     * load.
+     */
+    fun observeBySourceAndUrl(sourceId: Long, url: String): Flow<Anime?>
+
     suspend fun getById(id: Long): Anime?
 
     suspend fun getByAnilistId(anilistId: Int): Anime?
@@ -53,6 +63,18 @@ interface AnimeRepository {
     suspend fun updateLastWatched(id: Long, lastWatched: Long)
 
     suspend fun updateLastWatchedByAnilistId(anilistId: Int, lastWatched: Long)
+
+    /**
+     * Clears the `anilist_id` column on the row with the given id (sets it to NULL).
+     *
+     * Used by [app.confused.anikuta.navigation.AppController.unlinkFromAniList] to
+     * transition a linked library entry to extension-only — the row keeps its
+     * `source_id` + `url` + `favorite` (so it stays saved in the library) but
+     * severs the AniList association. Re-linking to the same AniList ID later
+     * would re-attach to this row; re-linking to a different one would create a
+     * new row (the old one is now extension-only, no orphan anilist_id lingering).
+     */
+    suspend fun clearAnilistId(id: Long)
 
     suspend fun updateAnilistMetadata(
         anilistId: Int,

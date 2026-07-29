@@ -23,12 +23,14 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -94,6 +96,14 @@ fun EpisodesSection(
     onLinkManual: (AnimeCatalogueSource, SAnime) -> Unit,
     onClearManualSearch: () -> Unit,
     showMetadataLoading: Boolean = true,
+    /** Whether the episode-metadata fetch has completed (success / skipped / error).
+     *  When false + the metadata map is empty, the spinner next to "Episodes" shows.
+     *  When true + the map is empty, the spinner hides (the fetch finished — the
+     *  map is just empty for this anime). */
+    metadataFetchComplete: Boolean = false,
+    /** The extension source ID (for the "Source unavailable" info dialog).
+     *  Null in pure-AniList mode. From `UnifiedAnime.sourceId`. */
+    sourceId: Long? = null,
     /** Agent 2 — Downloads: invoked when the user taps the download button on an episode row. */
     onDownloadEpisode: (SEpisode, AnimeSource) -> Unit = { _, _ -> },
     /** Per-episode download states, keyed by episode URL (for the row UI). */
@@ -104,6 +114,11 @@ fun EpisodesSection(
     onDownloadDelete: (String) -> Unit = {},
 ) {
     var showManualSearch by remember { mutableStateOf(false) }
+    // ── "Source unavailable" info dialog state (Issue 5) ──
+    // When the user taps the "Source unavailable" chip, this dialog opens FIRST
+    // (explaining which extension the anime was previously saved with + its ID).
+    // The user can then dismiss OR tap "Switch source" to open the ManualSearchSheet.
+    var showUnavailableInfo by remember { mutableStateOf(false) }
 
     // ── Inject + read the episode-display preferences reactively ──
     // Note: the snapshot is now computed by DetailContent (hoisted to the parent
@@ -139,7 +154,11 @@ fun EpisodesSection(
                 // "Episodes" while metadata is being fetched in the background.
                 // When episodes are loaded but metadata map is still empty,
                 // the fetch is in progress.
-                if (showMetadataLoading && episodeState is EpisodeState.Loaded && episodeMetadata.isEmpty()) {
+                // Issue 1 fix: gated on `!metadataFetchComplete` so the spinner
+                // hides once the fetch finishes (success OR skipped OR error) —
+                // for unlinked extension anime the fetch is skipped entirely, and
+                // without this flag the spinner would spin forever.
+                if (showMetadataLoading && episodeState is EpisodeState.Loaded && episodeMetadata.isEmpty() && !metadataFetchComplete) {
                     Spacer(modifier = Modifier.size(8.dp))
                     CircularProgressIndicator(
                         modifier = Modifier.size(14.dp),
@@ -211,16 +230,16 @@ fun EpisodesSection(
                 }
                 // Episodes loaded from DB but the source extension is no longer
                 // installed (or no auto-match was ever made). Show the source name
-                // + "unavailable" with a dimmed accent color — still tappable to
-                // open the ManualSearchSheet so the user can switch to another
-                // extension. Uses `primary` (not `onSurfaceVariant`) so the chip
-                // is visibly themed but dimmed — clearly an action, not a dead end.
+                // + "unavailable" with a dimmed accent color — tapping it opens an
+                // info dialog (Issue 5 fix) explaining which extension the anime
+                // was previously saved with + its ID, with a "Switch source" CTA
+                // that opens the ManualSearchSheet.
                 episodeState is EpisodeState.Loaded && currentMatch == null -> {
                     val sourceName = episodeState.sourceName
                     Surface(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(50),
-                        modifier = Modifier.clickable { showManualSearch = true },
+                        modifier = Modifier.clickable { showUnavailableInfo = true },
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -235,7 +254,7 @@ fun EpisodesSection(
                             )
                             Icon(
                                 imageVector = Icons.Filled.ExpandMore,
-                                contentDescription = "Switch source",
+                                contentDescription = "Source unavailable info",
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                                 modifier = Modifier.size(16.dp),
                             )
@@ -285,6 +304,34 @@ fun EpisodesSection(
             onDismiss = {
                 showManualSearch = false
                 onClearManualSearch()
+            },
+        )
+    }
+
+    // ── "Source unavailable" info dialog (Issue 5) ──
+    // Opens when the user taps the "Source unavailable" chip. Explains which
+    // extension the anime was previously saved with + its ID, with two actions:
+    // "Switch source" (opens ManualSearchSheet) + "Dismiss".
+    if (showUnavailableInfo && episodeState is EpisodeState.Loaded) {
+        val sourceName = episodeState.sourceName
+        AlertDialog(
+            onDismissRequest = { showUnavailableInfo = false },
+            title = { Text("Extension Unavailable") },
+            text = {
+                Text(
+                    "Previously saved with $sourceName " +
+                        "(Extension ID: ${sourceId ?: "unknown"}). " +
+                        "Currently not installed or available.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnavailableInfo = false
+                    showManualSearch = true
+                }) { Text("Switch source") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnavailableInfo = false }) { Text("Dismiss") }
             },
         )
     }

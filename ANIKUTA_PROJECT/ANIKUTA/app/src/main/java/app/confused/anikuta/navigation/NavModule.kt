@@ -57,6 +57,7 @@ val navModule: Module = module {
             serverDiscoveryStore = get(),
             themePrefs = get<ThemePreferences>(),
             linkingPreferences = get(),
+            animeRepository = get(),
             context = get(),
         )
     }

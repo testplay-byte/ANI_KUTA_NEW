@@ -6,6 +6,8 @@ import app.confused.anikuta.core.anilist.api.AniListApi
 import app.confused.anikuta.core.anilist.details.toUnifiedAnime
 import app.confused.anikuta.core.common.model.Anime
 import app.confused.anikuta.core.common.model.Episode
+import app.confused.anikuta.core.common.model.ExtensionSystem
+import app.confused.anikuta.core.common.model.SourceProvenance
 import app.confused.anikuta.core.common.model.details.AnimeDetailsProvider
 import app.confused.anikuta.core.common.model.details.DataSource
 import app.confused.anikuta.core.common.model.details.DetailsRequest
@@ -121,7 +123,10 @@ class ExtensionDetailsProvider(
                 val dbEpisodes = episodeRepository.getByAnimeId(dbAnime.id)
                 if (dbEpisodes.isNotEmpty()) {
                     Log.i(TAG, "DB-first short-circuit: loaded ${dbEpisodes.size} episodes from DB for '${dbAnime.title}' (anilistId=$anilistId)")
-                    val sourceName = sourceMatcher.getSourceById(sourceId)?.name ?: dbAnime.title
+                    val sourceName = sourceMatcher.getSourceById(sourceId)?.name
+                        ?: dbAnime.provenance?.sourceName
+                        ?: dbAnime.provenance?.extensionName
+                        ?: dbAnime.title
                     val unified = dbAnime.toUnifiedAnimeFromDb(
                         sourceId = sourceId,
                         sourceName = sourceName,
@@ -285,7 +290,7 @@ class ExtensionDetailsProvider(
         return try {
             val sEpisodes = withContext(Dispatchers.IO) { source.getEpisodeList(sAnime) }
             if (sEpisodes.isEmpty()) return emptyList()
-            persistEpisodes(sEpisodes, source.id, sAnime.url, sAnime.title, anilistId, sAnime)
+            persistEpisodes(sEpisodes, source.id, sAnime.url, sAnime.title, anilistId, sAnime, source)
             sEpisodes.mapIndexed { index, ep -> ep.toDomainEpisode(index) }
         } catch (e: Throwable) {
             Log.e(TAG, "getEpisodeList failed on '${source.name}'", e)
@@ -301,6 +306,7 @@ class ExtensionDetailsProvider(
         animeTitle: String,
         anilistId: Int?,
         sAnime: SAnime,
+        source: AnimeCatalogueSource,
     ) {
         try {
             // Find or create the anime row. Linked → by anilistId; unlinked → by sourceId+url.
@@ -344,6 +350,14 @@ class ExtensionDetailsProvider(
                 dbAnime = animeRepository.getById(newId)
             }
             if (dbAnime != null) {
+                // ── Populate source provenance (Issue 4 fix) ──
+                // Always refresh provenance from the LIVE extension (the extension may
+                // have been updated since the row was last touched). When the extension
+                // is later uninstalled, the details page falls back to this provenance
+                // to display the source name + extension name + version — instead of
+                // the wrong fallback (`dbAnime.title`).
+                persistProvenance(dbAnime.id, source)
+
                 episodeRepository.deleteByAnimeId(dbAnime.id)
                 sEpisodes.forEachIndexed { index, ep ->
                     episodeRepository.upsert(ep.toDomainEpisode(index).copy(animeId = dbAnime.id))
@@ -352,6 +366,52 @@ class ExtensionDetailsProvider(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist episodes (non-fatal)", e)
+        }
+    }
+
+    /**
+     * Builds + writes a [SourceProvenance] for the anime row, using data from the
+     * live extension (resolved via [sourceMatcher.getExtensionForSource]) + the
+     * live [AnimeCatalogueSource] (always available when persisting).
+     *
+     * Fields populated:
+     * - [SourceProvenance.system] = `ANIYOMI` (all current extensions are Aniyomi-system).
+     * - [SourceProvenance.sourceName] = `source.name` (the source's display name).
+     * - [SourceProvenance.extensionName] / `extensionPkgName` / `versionName` / `versionCode` /
+     *   `lang` / `isNsfw` / `repoUrl` — from the installed extension (if still installed).
+     *
+     * When the extension is later uninstalled, the [ExtensionDetailsProvider.loadByExtension]
+     * fallback chain uses `dbAnime.provenance?.sourceName ?: provenance?.extensionName` to
+     * render the correct "Source unavailable" chip text.
+     */
+    private suspend fun persistProvenance(
+        animeId: Long,
+        source: AnimeCatalogueSource,
+    ) {
+        try {
+            val ext = sourceMatcher.getExtensionForSource(source.id)
+            val now = System.currentTimeMillis()
+            val provenance = SourceProvenance(
+                system = ExtensionSystem.ANIYOMI,
+                repoUrl = ext?.repoUrl,
+                repoName = null, // resolved from the repo list if needed in a follow-up
+                extensionPkgName = ext?.pkgName,
+                extensionName = ext?.name,
+                extensionVersionName = ext?.versionName,
+                extensionVersionCode = ext?.versionCode,
+                extensionLang = ext?.lang,
+                isNsfw = ext?.isNsfw ?: false,
+                sourceName = source.name,
+                discoveredAt = now,
+                lastResolvedAt = now,
+                linkConfidence = 0,
+            )
+            animeRepository.updateProvenance(animeId, provenance)
+            Log.d(TAG, "persistProvenance: id=$animeId sourceName='${source.name}' " +
+                "extName='${ext?.name}' pkg='${ext?.pkgName}'")
+        } catch (e: Exception) {
+            Log.w(TAG, "persistProvenance: failed (non-fatal) — id=$animeId, " +
+                "sourceName='${source.name}'", e)
         }
     }
 

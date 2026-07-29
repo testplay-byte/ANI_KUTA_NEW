@@ -1,6 +1,7 @@
 package app.confused.anikuta.data.extension.matcher
 
 import android.util.Log
+import app.confused.anikuta.data.extension.AnimeExtension
 import app.confused.anikuta.data.extension.AnimeExtensionManager
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -340,6 +341,19 @@ class SourceMatcher(
     fun getSourceById(sourceId: Long): AnimeCatalogueSource? {
         return getCatalogueSources().firstOrNull { it.id == sourceId }
     }
+
+    /**
+     * Returns the [AnimeExtension.Installed] that owns the source with [sourceId],
+     * or null if no installed extension provides it.
+     *
+     * Used by [app.confused.anikuta.data.extension.details.ExtensionDetailsProvider]
+     * to populate `SourceProvenance` (extension name, version, repo URL, etc.) at
+     * save time so the details page can still show the extension name when the
+     * extension is later uninstalled.
+     */
+    fun getExtensionForSource(sourceId: Long): AnimeExtension.Installed? =
+        extensionManager.getInstalledExtensions()
+            .firstOrNull { ext -> ext.sources.any { it.id == sourceId } }
 
     // ── Title matching helpers ──
 

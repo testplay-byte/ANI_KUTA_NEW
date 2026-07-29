@@ -151,11 +151,13 @@ fun SourceSwitcherMenu(
             }
         }
 
-        // ── Unlink from AniList — only when the anime is linked ──
+        // ── Unlink from AniList — only when the anime is linked to BOTH AniList AND an extension ──
         // Removes both directional links (SourceLinkStore + ExtensionLinkStore) +
         // the view preference, then navigates to the extension-mode details page.
         // The anime remains in the library with its extension data intact.
-        if (anime.anilistId != null) {
+        // Gated on `sourceId != null && sourceId > 0` because unlinking makes no
+        // sense for a pure-AniList entry (no extension to "shift to").
+        if (anime.anilistId != null && anime.sourceId != null && anime.sourceId > 0) {
             DropdownMenuItem(
                 text = { MenuText("Unlink from AniList", subtitle = "Remove the AniList association") },
                 leadingIcon = { MenuIcon(Icons.Outlined.LinkOff) },

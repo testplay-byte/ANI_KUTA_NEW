@@ -157,6 +157,11 @@ UPDATE animes SET last_watched = :lastWatched WHERE _id = :id;
 updateLastWatchedByAnilistId:
 UPDATE animes SET last_watched = :lastWatched WHERE anilist_id = :anilistId;
 
+-- Clears the AniList association on a row (used by AppController.unlinkFromAniList).
+-- The row stays in the library (favorite flag untouched) but becomes extension-only.
+clearAnilistId:
+UPDATE animes SET anilist_id = NULL WHERE _id = :id;
+
 updateAnilistMetadataByAnilistId:
 UPDATE animes SET
     title = :title,
