@@ -238,7 +238,10 @@ object HistoryDestination : Screen {
         val navigator = LocalNavigator.currentOrThrow
         HistoryScreen(
             onBack = { navigator.pop() },
-            onOpenAnime = { anilistId -> appController.pushDetail(anilistId) },
+            // Phase 3: openLibraryAnime handles BOTH linked (anilistId != null → AniList
+            // details) and unlinked (anilistId == null → extension details) anime.
+            // This is the bug fix for the previously-unopenable unlinked history rows.
+            onOpenAnime = { anime -> appController.openLibraryAnime(anime) },
         )
     }
 }

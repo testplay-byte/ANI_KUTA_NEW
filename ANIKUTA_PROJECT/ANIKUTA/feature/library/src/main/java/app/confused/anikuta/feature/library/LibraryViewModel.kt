@@ -186,9 +186,13 @@ class LibraryViewModel(
         }.toMap()
 
         // Group by anilistId, pick the most-recently-watched episode per anime.
+        // Phase 3: keys are now "$contentId|$episodeNumber" — parse with parseKey,
+        // extract anilistId from contentId (only "al:<id>" keys have one; unlinked
+        // anime are skipped from Continue Watching since the item requires anilistId).
         val byAnime = mutableMapOf<Int, MutableList<Map.Entry<String, WatchProgressStore.Progress>>>()
         for (entry in progressMap.entries) {
-            val anilistId = entry.key.substringBefore(':').toIntOrNull() ?: continue
+            val (contentId, _) = watchProgressStore.parseKey(entry.key) ?: continue
+            val anilistId = contentId.removePrefix("al:").toIntOrNull() ?: continue
             byAnime.getOrPut(anilistId) { mutableListOf() }.add(entry)
         }
         return byAnime.map { (anilistId, entries) ->

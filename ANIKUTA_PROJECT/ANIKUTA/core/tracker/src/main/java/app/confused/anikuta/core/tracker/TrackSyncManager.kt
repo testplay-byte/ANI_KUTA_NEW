@@ -52,10 +52,25 @@ class TrackSyncManager(
     private suspend fun syncPendingProgress(progressMap: Map<String, WatchProgressStore.Progress>) {
         if (progressMap.isEmpty()) return
         syncMutex.withLock {
-            // Group progress entries by anilistId to find the latest episode per anime.
-            val latestByAnime = progressMap.values
-                .filter { it.episodeNumber >= 0 }
-                .groupBy { extractAnilistId(progressMap, it) }
+            // Group progress entries by anilistId (extracted from the content_id key)
+            // to find the latest episode per anime. Unlinked anime (content_id has no
+            // "al:" prefix) are skipped — they can't sync to trackers anyway.
+            //
+            // Phase 3 (ADR-050): keys are now `"$contentId|$episodeNumber"`. We parse
+            // them via [WatchProgressStore.parseKey] + extract the anilistId from the
+            // `"al:<anilistId>"` content_id.
+            val latestByAnime = progressMap.entries
+                .mapNotNull { (key, progress) ->
+                    if (progress.episodeNumber < 0) return@mapNotNull null
+                    val (contentId, _) = watchProgressStore.parseKey(key) ?: return@mapNotNull null
+                    val anilistId = contentId
+                        .takeIf { it.startsWith("al:") }
+                        ?.removePrefix("al:")
+                        ?.toIntOrNull()
+                        ?: return@mapNotNull null
+                    anilistId to progress
+                }
+                .groupBy({ it.first }, { it.second })
                 .mapValues { (_, entries) -> entries.maxByOrNull { it.updatedAt } }
 
             for ((anilistId, progress) in latestByAnime) {
@@ -68,17 +83,6 @@ class TrackSyncManager(
                 }
             }
         }
-    }
-
-    /** Extract the AniList ID from a progress key (format: "$anilistId:$episodeUrl"). */
-    private fun extractAnilistId(
-        progressMap: Map<String, WatchProgressStore.Progress>,
-        progress: WatchProgressStore.Progress,
-    ): Int {
-        // Find the key that maps to this progress object.
-        val key = progressMap.entries.find { it.value === progress }?.key ?: return -1
-        val anilistIdStr = key.substringBefore(":")
-        return anilistIdStr.toIntOrNull() ?: -1
     }
 
     /** Sync a single anime's progress to all its linked trackers. */

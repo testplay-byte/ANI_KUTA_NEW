@@ -16,12 +16,16 @@ import kotlinx.serialization.decodeFromString
  * audio track + subtitle track + resolution that was used last time.
  * If that URL is dead, the player falls back to re-resolving via the source.
  *
- * Keyed by AniList ID + episode URL (same as WatchProgressStore).
+ * # Key format (Phase 3, ADR-050)
+ *
+ * Keyed by **content_id + episode number**: `"$contentId|$episodeNumber"`.
+ * Same format as [WatchProgressStore] — see its docs for details.
+ *
  * Reactive via [changes] Flow.
  *
  * Related files:
- *   - PlayerActivity.kt — writes here on pause/stop, reads on resume
- *   - HistoryViewModel.kt — passes the state to the player via Intent extras
+ *   - WatchScreen.kt — writes here on pause/stop, reads on resume
+ *   - HistoryViewModel.kt — passes the state to the player
  *   - WatchProgressStore.kt — the companion store (position/duration)
  */
 class PlaybackStateStore(
@@ -56,13 +60,34 @@ class PlaybackStateStore(
     /** Reactive stream of all playback states. */
     val changes: Flow<Map<String, PlaybackState>> = statePref.changes().map { it }
 
-    /** Key = "$anilistId:$episodeUrl" — same as WatchProgressStore. */
-    private fun key(anilistId: Int, episodeUrl: String) = "$anilistId:$episodeUrl"
+    /**
+     * Build the key for a content_id + episode number pair.
+     * Format: `"$contentId|$episodeNumberKey"` (same as WatchProgressStore).
+     */
+    fun key(contentId: String, episodeNumber: Float): String =
+        "$contentId|${episodeNumberKey(episodeNumber)}"
+
+    /** Format an episode number as a stable key component (3 decimal places). */
+    private fun episodeNumberKey(n: Float): String = "%.3f".format(n)
+
+    /**
+     * Parse a key back into (content_id, episode_number).
+     * Returns null if the key is malformed.
+     */
+    fun parseKey(key: String): Pair<String, Float>? {
+        val idx = key.lastIndexOf('|')
+        if (idx < 0) return null
+        val contentId = key.substring(0, idx)
+        val epNumStr = key.substring(idx + 1)
+        val epNum = epNumStr.toFloatOrNull() ?: return null
+        if (contentId.isBlank()) return null
+        return contentId to epNum
+    }
 
     /** Save the playback state for an episode. */
     fun save(
-        anilistId: Int,
-        episodeUrl: String,
+        contentId: String,
+        episodeNumber: Float,
         videoUrl: String,
         videoServer: String = "",
         videoAudio: String = "",
@@ -73,7 +98,7 @@ class PlaybackStateStore(
         sourceId: Long = -1L,
     ) {
         val map = statePref.get().toMutableMap()
-        map[key(anilistId, episodeUrl)] = PlaybackState(
+        map[key(contentId, episodeNumber)] = PlaybackState(
             videoUrl = videoUrl,
             videoServer = videoServer,
             videoAudio = videoAudio,
@@ -88,17 +113,36 @@ class PlaybackStateStore(
     }
 
     /** Get the saved playback state for an episode, or null if none. */
-    fun get(anilistId: Int, episodeUrl: String): PlaybackState? {
-        return statePref.get()[key(anilistId, episodeUrl)]
+    fun get(contentId: String, episodeNumber: Float): PlaybackState? {
+        return statePref.get()[key(contentId, episodeNumber)]
     }
 
     /** Get all playback states (for backup). */
     fun getAll(): Map<String, PlaybackState> = statePref.get()
 
     /** Clear the playback state for an episode. */
-    fun clear(anilistId: Int, episodeUrl: String) {
+    fun clear(contentId: String, episodeNumber: Float) {
         val map = statePref.get().toMutableMap()
-        map.remove(key(anilistId, episodeUrl))
+        map.remove(key(contentId, episodeNumber))
         statePref.set(map)
+    }
+
+    /**
+     * Re-key an entry from [oldKey] to [newKey] (used by the migrator +
+     * the future ContentIdMigrator).
+     */
+    fun rekey(oldKey: String, newKey: String) {
+        val map = statePref.get().toMutableMap()
+        val state = map.remove(oldKey) ?: return
+        map[newKey] = state
+        statePref.set(map)
+    }
+
+    /**
+     * Replace the entire state map (used by the migrator for bulk re-keying +
+     * by backup restore).
+     */
+    fun replaceAll(newMap: Map<String, PlaybackState>) {
+        statePref.set(newMap)
     }
 }

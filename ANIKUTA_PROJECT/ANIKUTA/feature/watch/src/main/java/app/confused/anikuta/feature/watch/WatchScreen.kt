@@ -508,13 +508,12 @@ fun WatchScreen(
                             }
 
                             // ── Resume position ──
-                            // Use the CURRENT episode URL (not the original watch request)
-                            // so progress is looked up for the right episode after switching.
-                            val currentEpUrl = stateHolder.currentEpisodeUrl.value
-                            val progress = watchProgressStore.get(
-                                watchRequest.anilistId,
-                                currentEpUrl,
-                            )
+                            // Look up by content_id + episode number (Phase 3, ADR-050).
+                            // Skips for unlinked (anilistId == 0) — the old "al:0" key
+                            // was degenerate (Doc 01 §6.3).
+                            val currentEpNum = stateHolder.currentEpisodeNumber.value
+                            val contentId = if (watchRequest.anilistId != 0) "al:${watchRequest.anilistId}" else null
+                            val progress = contentId?.let { watchProgressStore.get(it, currentEpNum) }
                             if (progress != null && progress.positionSeconds > 5) {
                                 // If the user watched >90% of the video, start from the
                                 // beginning instead of resuming at the end. This prevents
@@ -640,17 +639,21 @@ fun WatchScreen(
                 val currentEpUrl = stateHolder.currentEpisodeUrl.value
                 val currentEpNum = stateHolder.currentEpisodeNumber.value
                 if (dur > 0 && pos > 0 && currentEpUrl.isNotEmpty()) {
-                    watchProgressStore.save(
-                        anilistId = watchRequest.anilistId,
-                        episodeUrl = currentEpUrl,
-                        positionSeconds = pos,
-                        durationSeconds = dur,
-                        title = stateHolder.currentVideoTitle.value,
-                        coverUrl = watchRequest.coverUrl,
-                        animeTitle = watchRequest.animeTitle,
-                        episodeNumber = currentEpNum,
-                    )
-                    Log.i(TAG, "Progress saved on dispose: ${pos}s / ${dur}s for ep $currentEpNum")
+                    // content_id key for linked anime (Phase 3, ADR-050).
+                    // Skip unlinked (anilistId == 0) — "al:0" is a degenerate key.
+                    val contentId = if (watchRequest.anilistId != 0) "al:${watchRequest.anilistId}" else null
+                    if (contentId != null) {
+                        watchProgressStore.save(
+                            contentId = contentId,
+                            episodeNumber = currentEpNum,
+                            positionSeconds = pos,
+                            durationSeconds = dur,
+                            title = stateHolder.currentVideoTitle.value,
+                            coverUrl = watchRequest.coverUrl,
+                            animeTitle = watchRequest.animeTitle,
+                        )
+                        Log.i(TAG, "Progress saved on dispose: ${pos}s / ${dur}s for ep $currentEpNum")
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to save progress on dispose", e)
@@ -678,17 +681,21 @@ fun WatchScreen(
                 val currentEpUrl = stateHolder.currentEpisodeUrl.value
                 val currentEpNum = stateHolder.currentEpisodeNumber.value
                 if (dur > 0 && pos > 0 && currentEpUrl.isNotEmpty()) {
-                    watchProgressStore.save(
-                        anilistId = watchRequest.anilistId,
-                        episodeUrl = currentEpUrl,
-                        positionSeconds = pos,
-                        durationSeconds = dur,
-                        title = stateHolder.currentVideoTitle.value,
-                        coverUrl = watchRequest.coverUrl,
-                        animeTitle = watchRequest.animeTitle,
-                        episodeNumber = currentEpNum,
-                    )
-                    Log.d(TAG, "Progress saved: ${pos}s / ${dur}s for ep $currentEpNum")
+                    // content_id key for linked anime (Phase 3, ADR-050).
+                    // Skip unlinked (anilistId == 0) — "al:0" is a degenerate key.
+                    val contentId = if (watchRequest.anilistId != 0) "al:${watchRequest.anilistId}" else null
+                    if (contentId != null) {
+                        watchProgressStore.save(
+                            contentId = contentId,
+                            episodeNumber = currentEpNum,
+                            positionSeconds = pos,
+                            durationSeconds = dur,
+                            title = stateHolder.currentVideoTitle.value,
+                            coverUrl = watchRequest.coverUrl,
+                            animeTitle = watchRequest.animeTitle,
+                        )
+                        Log.d(TAG, "Progress saved: ${pos}s / ${dur}s for ep $currentEpNum")
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Periodic progress save failed", e)
