@@ -415,7 +415,7 @@ class AppController(
         // until the user re-links). This is a pre-existing edge case (the old
         // "Transfer" path also couldn't handle it); logged as a warning.
         val newContentId = if (sid != null && url != null) "aniyomi:$sid:$url" else null
-        if (newContentId != null) {
+        if (newContentId != null && sid != null && url != null) {
             try {
                 val newIdentity = DownloadIdentity(
                     contentId = newContentId,
