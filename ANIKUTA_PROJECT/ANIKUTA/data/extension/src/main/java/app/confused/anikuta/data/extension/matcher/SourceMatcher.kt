@@ -1,8 +1,8 @@
 package app.confused.anikuta.data.extension.matcher
 
 import android.util.Log
-import app.confused.anikuta.data.extension.AnimeExtension
 import app.confused.anikuta.data.extension.AnimeExtensionManager
+import app.confused.anikuta.data.extension.model.AnimeExtension
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
