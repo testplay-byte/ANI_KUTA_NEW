@@ -217,8 +217,8 @@ class UpdatesViewModel(
                                         if (na.episode != null && na.airingAt != null) {
                                             add(app.confused.anikuta.core.providerapi.AiringScheduleInfo(
                                                 animeId = animeInfo.anilistId,
-                                                episode = na.episode,
-                                                airingAt = na.airingAt.toLong(),
+                                                episode = na.episode!!,
+                                                airingAt = na.airingAt!!.toLong(),
                                                 timeUntilAiring = na.timeUntilAiring?.toLong() ?: 0L,
                                             ))
                                         }
@@ -227,8 +227,8 @@ class UpdatesViewModel(
                                         if (sch.episode != null && sch.airingAt != null) {
                                             add(app.confused.anikuta.core.providerapi.AiringScheduleInfo(
                                                 animeId = animeInfo.anilistId,
-                                                episode = sch.episode,
-                                                airingAt = sch.airingAt.toLong(),
+                                                episode = sch.episode!!,
+                                                airingAt = sch.airingAt!!.toLong(),
                                                 timeUntilAiring = sch.timeUntilAiring?.toLong() ?: 0L,
                                             ))
                                         }
