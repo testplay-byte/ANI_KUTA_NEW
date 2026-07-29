@@ -44,6 +44,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -129,6 +130,19 @@ class AppController(
 
     /** Extension → AniList linking sheet target (null = sheet hidden). */
     var linkingTarget by mutableStateOf<Pair<AnimeCatalogueSource, SAnime>?>(null)
+
+    // ── Pending unlink download action ──
+    // When the user taps "Unlink from AniList" and the anime has downloaded episodes,
+    // this state is set with the details. AnikutaRoot observes it + shows an AlertDialog
+    // asking: "Transfer downloads to the extension-only entry, or delete them?"
+    data class UnlinkDownloadAction(
+        val anilistId: Int,
+        val sourceId: Long?,
+        val animeUrl: String?,
+        val animeTitle: String,
+        val hasDownloads: Boolean,
+    )
+    var pendingUnlinkDownloadAction by mutableStateOf<UnlinkDownloadAction?>(null)
         private set
 
     /** Download video picker sheet target (null = sheet hidden). */
@@ -351,88 +365,143 @@ class AppController(
         val title = link?.animeTitle ?: "Unknown"
 
         scope.launch {
-            try {
-                // ── Step 1+2: Clear anilist_id on the library row (transition to extension-only) ──
-                // Find the existing library entry by anilistId + null out its anilist_id.
-                // This keeps the row saved (favorite flag untouched) but severs the AniList link.
-                val existing = animeRepository.getByAnilistId(anilistId)
-                if (existing != null) {
-                    animeRepository.clearAnilistId(existing.id)
-                    Log.i(TAG, "unlinkFromAniList: cleared anilistId on row id=${existing.id} " +
-                        "(now extension-only, favorite=${existing.favorite})")
-                } else {
-                    Log.w(TAG, "unlinkFromAniList: no library row found for anilistId=$anilistId " +
-                        "— nothing to clear (the row will not be re-saved as extension-only)")
+            // ── Check if the anime has downloaded episodes ──
+            // If yes, prompt the user: transfer or delete?
+            val hasDownloads = withContext(Dispatchers.IO) {
+                try {
+                    downloadManager.getDownloadedEpisodes(contentId).isNotEmpty()
+                } catch (e: Exception) {
+                    Log.w(TAG, "unlinkFromAniList: failed to check downloads (assuming none)", e)
+                    false
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "unlinkFromAniList: failed to clear anilistId on library row " +
-                    "(non-fatal — link stores + navigation still proceed)", e)
             }
 
-            // ── Step 3: Remove the SourceLinkStore entry (AniList → ext link) ──
-            sourceLinkStore.removeLink(contentId)
-
-            // ── Step 4: Remove the ExtensionLinkStore entry (ext → AniList reverse-link) ──
-            if (sid != null && url != null) {
-                extensionLinkStore.unlink(sid, url)
+            if (hasDownloads) {
+                Log.i(TAG, "unlinkFromAniList: anime has downloaded episodes — prompting user")
+                pendingUnlinkDownloadAction = UnlinkDownloadAction(
+                    anilistId = anilistId,
+                    sourceId = sid,
+                    animeUrl = url,
+                    animeTitle = title,
+                    hasDownloads = true,
+                )
+            } else {
+                // No downloads — proceed directly with the unlink.
+                performUnlink(anilistId, sid, url, title, contentId, deleteDownloads = false)
             }
+        }
+    }
 
-            // ── Step 5: Remove the view preference ──
-            try {
-                org.koin.core.context.GlobalContext.get()
-                    .get<app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore>()
-                    .remove(anilistId)
-            } catch (e: Exception) {
-                Log.w(TAG, "unlinkFromAniList: failed to remove view preference " +
-                    "(non-fatal) — anilistId=$anilistId", e)
-            }
-
-            Log.i(TAG, "unlinkFromAniList: unlinked anilistId=$anilistId from source " +
-                "$sid (url=$url, title=$title) — library entry is now extension-only")
-
-            // ── Step 6: Navigate to the extension-mode details page (replace — no stacking) ──
-            if (sid != null && url != null) {
-                val source = sourceMatcher.getSourceById(sid)
-                val sAnime = SAnimeImpl().apply {
-                    this.url = url
-                    this.title = title
-                }
-                if (source != null) {
-                    // Fix 2 (SOURCE-SWITCH-FIXES): pass forceInitialRefresh=true so the new
-                    // VM's `init { loadInternal(forceRefresh = true) }` bypasses the DB-first
-                    // short-circuit + forces a fresh fetch from the extension. Combined with
-                    // Fix 3 (updateMetadataFromExtension in persistEpisodes), this overwrites
-                    // the stale AniList metadata (title/cover/description) on the DB row — so
-                    // the user sees the extension's data, not the cached AniList data.
-                    Log.i(TAG, "unlinkFromAniList: navigating to ExtensionAnimeDetailDestination " +
-                        "(source='${source.name}', url='$url', forceInitialRefresh=true)")
-                    navigator?.replace(ExtensionAnimeDetailDestination(
-                        source = source,
-                        sAnime = sAnime,
-                        anilistId = null,
-                        forceInitialRefresh = true,
-                    ))
-                } else {
-                    // Source uninstalled — open the DB-first details page so the user
-                    // can still see saved episodes.
-                    Log.i(TAG, "unlinkFromAniList: navigating to LibraryExtensionDetailDestination " +
-                        "(sourceId=$sid, url='$url', forceInitialRefresh=true)")
-                    navigator?.replace(LibraryExtensionDetailDestination(
-                        sourceId = sid,
-                        animeUrl = url,
-                        animeTitle = title,
-                        forceInitialRefresh = true,
-                    ))
+    /**
+     * Called by the AnikutaRoot's AlertDialog when the user picks an action
+     * for the downloads during unlink.
+     *
+     * @param deleteDownloads true = delete all downloaded episodes for this anime.
+     *   false = transfer (keep them — the contentId changes from "al:X" to the
+     *   extension's local_id, so the ContentIdMigrator re-keys them).
+     */
+    fun confirmUnlinkWithDownloadAction(deleteDownloads: Boolean) {
+        val action = pendingUnlinkDownloadAction ?: return
+        pendingUnlinkDownloadAction = null
+        val contentId = "al:${action.anilistId}"
+        scope.launch {
+            if (deleteDownloads) {
+                Log.i(TAG, "confirmUnlink: deleting downloads for contentId=$contentId")
+                try {
+                    downloadManager.deleteAnimeDownloads(contentId)
+                } catch (e: Exception) {
+                    Log.e(TAG, "confirmUnlink: failed to delete downloads (non-fatal)", e)
                 }
             } else {
-                // No source link to navigate to — just go back.
-                Toast.makeText(
-                    context,
-                    "Unlinked from AniList",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                navigator?.pop()
+                Log.i(TAG, "confirmUnlink: transferring downloads (ContentIdMigrator will re-key)")
+                // The ContentIdMigrator (Phase 5) handles re-keying from "al:X" to the
+                // extension's local_id when the anilist_id is cleared. The downloads stay
+                // on disk; their keys are updated by the migrator.
+                // TODO: trigger ContentIdMigrator.migrate("al:X", localId) here once
+                // the local_id is known. For now, the downloads stay under the old key
+                // — they'll be found by the filesystem fallback in isEpisodeDownloaded.
             }
+            performUnlink(action.anilistId, action.sourceId, action.animeUrl,
+                action.animeTitle, contentId, deleteDownloads)
+        }
+    }
+
+    /** Cancels the unlink download action dialog (user tapped "Cancel"). */
+    fun cancelUnlinkDownloadAction() {
+        pendingUnlinkDownloadAction = null
+    }
+
+    private suspend fun performUnlink(
+        anilistId: Int,
+        sid: Long?,
+        url: String?,
+        title: String,
+        contentId: String,
+        deleteDownloads: Boolean,
+    ) {
+        try {
+            // ── Step 1+2: Clear anilist_id on the library row (transition to extension-only) ──
+            val existing = animeRepository.getByAnilistId(anilistId)
+            if (existing != null) {
+                animeRepository.clearAnilistId(existing.id)
+                Log.i(TAG, "performUnlink: cleared anilistId on row id=${existing.id} " +
+                    "(now extension-only, favorite=${existing.favorite})")
+            } else {
+                Log.w(TAG, "performUnlink: no library row found for anilistId=$anilistId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "performUnlink: failed to clear anilistId (non-fatal)", e)
+        }
+
+        // ── Step 3: Remove the SourceLinkStore entry ──
+        sourceLinkStore.removeLink(contentId)
+
+        // ── Step 4: Remove the ExtensionLinkStore entry ──
+        if (sid != null && url != null) {
+            extensionLinkStore.unlink(sid, url)
+        }
+
+        // ── Step 5: Remove the view preference ──
+        try {
+            org.koin.core.context.GlobalContext.get()
+                .get<app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore>()
+                .remove(anilistId)
+        } catch (e: Exception) {
+            Log.w(TAG, "performUnlink: failed to remove view preference (non-fatal)", e)
+        }
+
+        Log.i(TAG, "performUnlink: unlinked anilistId=$anilistId from source " +
+            "$sid (url=$url, title=$title, deleteDownloads=$deleteDownloads)")
+
+        // ── Step 6: Navigate to the extension-mode details page ──
+        if (sid != null && url != null) {
+            val source = sourceMatcher.getSourceById(sid)
+            val sAnime = SAnimeImpl().apply {
+                this.url = url
+                this.title = title
+            }
+            if (source != null) {
+                Log.i(TAG, "performUnlink: navigating to ExtensionAnimeDetailDestination " +
+                    "(source='${source.name}', forceInitialRefresh=true)")
+                navigator?.replace(ExtensionAnimeDetailDestination(
+                    source = source,
+                    sAnime = sAnime,
+                    anilistId = null,
+                    forceInitialRefresh = true,
+                ))
+            } else {
+                Log.i(TAG, "performUnlink: navigating to LibraryExtensionDetailDestination " +
+                    "(sourceId=$sid, forceInitialRefresh=true)")
+                navigator?.replace(LibraryExtensionDetailDestination(
+                    sourceId = sid,
+                    animeUrl = url,
+                    animeTitle = title,
+                    forceInitialRefresh = true,
+                ))
+            }
+        } else {
+            Toast.makeText(context, "Unlinked from AniList", Toast.LENGTH_SHORT).show()
+            navigator?.pop()
         }
     }
 

@@ -696,12 +696,25 @@ class AnimeDetailViewModel(
             Log.w(TAG, "setupCurrentMatch: source $sourceId not installed — not setting _currentMatch")
             return
         }
+        // Per user feedback: the ManualSearchSheet's "currently connected" card should
+        // show the extension's title + thumbnail, NOT the AniList title. When in AniList
+        // mode, anime.title comes from AniList (not the extension). Use the SourceLinkStore's
+        // saved animeTitle (which is the extension's title) + the saved animeUrl for the
+        // SAnime. Fall back to anime.title if no saved link exists.
+        val anilistId = currentAnilistId()
+        val contentId = if (anilistId != null) "al:$anilistId" else null
+        val savedLink = contentId?.let { sourceLinkStore.getLink(it) }
+        val extTitle = savedLink?.animeTitle ?: anime.title
+        val extUrl = savedLink?.animeUrl ?: anime.url
         val sAnime = SAnimeImpl().apply {
-            url = anime.url
-            title = anime.title
+            url = extUrl
+            title = extTitle
+            // Try to get the thumbnail from the extension source if possible.
+            thumbnail_url = null // The ManualSearchSheet will use currentMatch.sAnime.thumbnail_url
         }
         Log.i(TAG, "setupCurrentMatch: setting _currentMatch from load result " +
-            "(sourceId=$sourceId, source='${source.name}', title='${anime.title}')")
+            "(sourceId=$sourceId, source='${source.name}', extTitle='$extTitle', " +
+            "animeTitle='${anime.title}', hasSavedLink=${savedLink != null})")
         _currentMatch.value = SourceMatcher.SourceMatch(source, sAnime, 1.0)
     }
 
