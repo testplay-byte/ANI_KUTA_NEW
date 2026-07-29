@@ -157,7 +157,8 @@ fun SourceSwitcherMenu(
         // The anime remains in the library with its extension data intact.
         // Gated on `sourceId != null && sourceId > 0` because unlinking makes no
         // sense for a pure-AniList entry (no extension to "shift to").
-        if (anime.anilistId != null && anime.sourceId != null && anime.sourceId > 0) {
+        val sid = anime.sourceId
+        if (anime.anilistId != null && sid != null && sid > 0) {
             DropdownMenuItem(
                 text = { MenuText("Unlink from AniList", subtitle = "Remove the AniList association") },
                 leadingIcon = { MenuIcon(Icons.Outlined.LinkOff) },
