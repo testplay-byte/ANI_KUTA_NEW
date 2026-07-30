@@ -42,6 +42,24 @@ class DownloadIdentityManager(
         val sanitizedContentId = contentId.replace(":", "-").replace("/", "-")
         val legacySuffix = "[$sanitizedContentId]"
 
+        // Extract the sourceId from the contentId for fallback matching.
+        // For "al:X" there's no sourceId in the contentId. For "aniyomi:sid:url"
+        // the sourceId is the second segment.
+        val sourceIdFromContentId = if (contentId.startsWith("aniyomi:")) {
+            contentId.split(":").getOrNull(1)?.toLongOrNull()
+        } else null
+
+        // Also extract anilistId for fallback matching.
+        val anilistIdFromContentId = if (contentId.startsWith("al:")) {
+            contentId.removePrefix("al:").toIntOrNull()
+        } else null
+
+        // First pass: exact contentId match via identity.json
+        // Also collect folders that match by sourceId or anilistId (fallback)
+        var fallbackBySourceId: DocumentFile? = null
+        var fallbackByAnilistId: DocumentFile? = null
+        var legacyMatch: DocumentFile? = null
+
         for (folder in baseDir.listFiles()) {
             if (!folder.isDirectory) continue
 
@@ -49,19 +67,48 @@ class DownloadIdentityManager(
             val identity = DownloadIdentityStore.read(folder)
             if (identity != null) {
                 if (identity.contentId == contentId) {
-                    Log.d(TAG, "findAnimeDir: found by identity.json (contentId=$contentId, " +
-                        "folder='${folder.name}')")
+                    Log.d(TAG, "findAnimeDir: found by exact contentId match " +
+                        "(contentId=$contentId, folder='${folder.name}')")
                     return folder
+                }
+                // Fallback: match by sourceId (survives link/unlink — the sourceId
+                // stays the same even when contentId changes from al:X to aniyomi:sid:url)
+                if (sourceIdFromContentId != null && identity.sourceId == sourceIdFromContentId) {
+                    fallbackBySourceId = folder
+                }
+                // Fallback: match by anilistId (survives source switch — the anilistId
+                // stays the same even when sourceId changes)
+                if (anilistIdFromContentId != null && identity.anilistId == anilistIdFromContentId) {
+                    fallbackByAnilistId = folder
                 }
                 continue
             }
 
             // Legacy fallback: parse [contentId] from folder name
             if (folder.name?.endsWith(legacySuffix) == true) {
-                Log.d(TAG, "findAnimeDir: found by legacy suffix (contentId=$contentId, " +
-                    "folder='${folder.name}') — no identity.json (will create on next write)")
-                return folder
+                legacyMatch = folder
             }
+        }
+
+        // Return fallbacks in priority order: sourceId > anilistId > legacy suffix
+        fallbackBySourceId?.let {
+            Log.d(TAG, "findAnimeDir: found by sourceId fallback " +
+                "(contentId=$contentId, sourceId=$sourceIdFromContentId, " +
+                "folder='${it.name}') — identity.json contentId mismatch, " +
+                "will be updated on next ensureIdentity/updateIdentity call")
+            return it
+        }
+        fallbackByAnilistId?.let {
+            Log.d(TAG, "findAnimeDir: found by anilistId fallback " +
+                "(contentId=$contentId, anilistId=$anilistIdFromContentId, " +
+                "folder='${it.name}') — identity.json contentId mismatch, " +
+                "will be updated on next ensureIdentity/updateIdentity call")
+            return it
+        }
+        legacyMatch?.let {
+            Log.d(TAG, "findAnimeDir: found by legacy suffix (contentId=$contentId, " +
+                "folder='${it.name}') — no identity.json (will create on next write)")
+            return it
         }
 
         Log.d(TAG, "findAnimeDir: not found (contentId=$contentId)")

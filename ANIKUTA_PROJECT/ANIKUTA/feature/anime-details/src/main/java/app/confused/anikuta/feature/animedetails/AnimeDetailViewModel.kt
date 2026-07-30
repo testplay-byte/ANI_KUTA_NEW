@@ -253,6 +253,10 @@ class AnimeDetailViewModel(
         if (_isRefreshing.value) return
         _isRefreshing.value = true
         loadInternal(forceRefresh = true)
+        // Re-scan downloads on refresh — the user may have downloaded/deleted
+        // episodes from another screen, or the identity.json was just updated
+        // by a link/unlink/switch operation.
+        scanDownloads()
     }
 
     private fun loadInternal(forceRefresh: Boolean) {
@@ -526,6 +530,9 @@ class AnimeDetailViewModel(
                 "to fetch fresh metadata from new source '${source.name}'")
             loadInternal(forceRefresh = true)
         }
+        // Re-scan downloads after switching sources — the contentId may have
+        // changed (for unlinked anime), and the identity.json was just updated.
+        scanDownloads()
     }
 
     /**
