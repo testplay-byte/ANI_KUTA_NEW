@@ -657,8 +657,10 @@ class AppController(
                 Log.i(TAG, "performUnlink: navigating to ExtensionAnimeDetailDestination " +
                     "(source='${source.name}', forceInitialRefresh=true)")
                 navigator?.replace(ExtensionAnimeDetailDestination(
-                    source = source,
-                    sAnime = sAnime,
+                    sourceId = source.id,
+                    animeUrl = sAnime.url,
+                    animeTitle = sAnime.title,
+                    thumbnailUrl = sAnime.thumbnail_url,
                     anilistId = null,
                     forceInitialRefresh = true,
                 ))
