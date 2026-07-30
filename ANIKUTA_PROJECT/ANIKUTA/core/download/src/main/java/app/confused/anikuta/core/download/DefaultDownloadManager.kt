@@ -147,21 +147,37 @@ class DefaultDownloadManager(
     override fun isFolderReady(): Boolean = storage.isFolderReady()
 
     override suspend fun deleteDownload(taskId: Long) {
-        val task = queue.tasks.value.firstOrNull { it.id == taskId } ?: return
-        if (task.status == DownloadStatus.COMPLETED) {
-            storage.deleteEpisode(task.request.anime, task.request.episode)
+        val task = queue.tasks.value.firstOrNull { it.id == taskId }
+        if (task != null) {
+            // Task is in memory — delete from disk if completed.
+            if (task.status == DownloadStatus.COMPLETED) {
+                storage.deleteEpisode(task.request.anime, task.request.episode)
+            }
+            queue.removeCompleted(taskId)
         }
-        queue.removeCompleted(taskId)
+        // If the task is NOT in memory (e.g., after app restart), there's
+        // nothing we can do here — the caller should use deleteAnimeDownloads
+        // to delete ALL episodes for the anime by contentId.
     }
 
     override suspend fun deleteAnimeDownloads(contentId: String) {
+        // Remove all in-memory COMPLETED tasks for this contentId.
         val tasks = queue.tasks.value.filter {
             it.request.anime.contentId == contentId && it.status == DownloadStatus.COMPLETED
         }
-        val first = tasks.firstOrNull()
         tasks.forEach { queue.removeCompleted(it.id) }
-        if (first != null) {
-            storage.deleteAnime(contentId, first.request.anime.title)
+
+        // ALWAYS delete the on-disk folder — even if there are no in-memory tasks
+        // (e.g., after app restart when the queue was purged). The filesystem
+        // has the actual files; the in-memory queue is just a cache.
+        // The title parameter is used only for logging in the storage provider.
+        val title = tasks.firstOrNull()?.request?.anime?.title ?: "Unknown"
+        val deleted = storage.deleteAnime(contentId, title)
+        if (!deleted) {
+            // The folder might exist on disk even if findAnimeDir failed (e.g.,
+            // identity.json contentId mismatch). Try a broader scan.
+            Log.w("AnikutaDownload", "deleteAnimeDownloads: storage.deleteAnime returned false " +
+                "for contentId=$contentId — the folder may still exist on disk")
         }
     }
 

@@ -431,6 +431,39 @@ class DownloadStorageProvider(
     }
 
     /**
+     * Delete a single episode by contentId + episode number.
+     *
+     * Used when the in-memory task queue doesn't have the task (e.g., after
+     * app restart) but the file exists on disk. Finds the anime folder via
+     * [findAnimeDir] (identity.json scan with fallbacks), then finds the
+     * `Episode NNN/` folder by number.
+     */
+    fun deleteEpisodeByNumber(contentId: String, episodeNumber: Float): Boolean {
+        val epDir = findEpisodeDirByNumber(contentId, episodeNumber) ?: run {
+            DownloadLogger.w("deleteEpisodeByNumber: episode folder not found " +
+                "(contentId=$contentId, epNum=$episodeNumber)")
+            return false
+        }
+        val ok = epDir.delete()
+        DownloadLogger.i("Deleted episode $episodeNumber for contentId=$contentId: $ok")
+
+        // Auto-delete the anime folder if it's now empty.
+        if (ok) {
+            val animeDir = findAnimeDir(contentId)
+            if (animeDir != null) {
+                val hasEpisodes = animeDir.listFiles().any {
+                    it.isDirectory && it.name?.startsWith("Episode ") == true
+                }
+                if (!hasEpisodes) {
+                    animeDir.delete()
+                    DownloadLogger.i("Auto-deleted empty anime folder for contentId=$contentId")
+                }
+            }
+        }
+        return ok
+    }
+
+    /**
      * Checks if the anime folder has no remaining episode folders. If empty,
      * deletes it. Called after [deleteEpisode] + after [deleteAnimeDownloads].
      *
@@ -744,6 +777,12 @@ data class EpisodeMetadataCache(
     val videoUrl: String,
     val downloadedAt: Long,
     val sourceId: Long,
+    /** The server name the episode was downloaded from (e.g. "GogoAnime - Server 1"). */
+    val videoServer: String = "",
+    /** The audio version label (e.g. "SUB", "DUB"). */
+    val videoAudio: String = "",
+    /** The quality/resolution label (e.g. "1080p", "720p"). */
+    val videoQuality: String = "",
 )
 
 /**

@@ -504,6 +504,9 @@ class HttpDownloader(
                 videoUrl = task.request.videoUrl,
                 downloadedAt = System.currentTimeMillis(),
                 sourceId = task.request.sourceId,
+                videoServer = task.request.videoServer,
+                videoAudio = task.request.videoAudio,
+                videoQuality = task.request.videoQuality,
             )
             metaFile.writeText(json.encodeToString(EpisodeMetadataCache.serializer(), cache))
             DownloadLogger.d("Wrote metadata.json: contentId=${cache.contentId} " +

@@ -63,6 +63,18 @@ private val navItems = listOf(
 fun AnikutaRoot() {
     val appController = koinInject<AppController>()
 
+    // Clear stale overlay state on recomposition (e.g., after Activity recreate).
+    // If the app was killed + reopened while a linking sheet or resolver was
+    // visible, the state would be stale (the Voyager back stack is lost on
+    // Activity recreation). Clearing these prevents crashes from stale state.
+    LaunchedEffect(Unit) {
+        appController.linkingTarget = null
+        appController.downloadPickerTarget = null
+        if (appController.resolverState !is VideoResolverState.Hidden) {
+            appController.hideResolver()
+        }
+    }
+
     // TODO(owner): Voyager 1.0.1 doesn't have rememberNavigator(). The app
     // loses the back stack when the Activity is recreated (e.g. switching apps).
     // This will be addressed in a future session with a custom Saver or by
