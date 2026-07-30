@@ -363,10 +363,6 @@ private fun DownloadProgressButton(
     }
 }
 
-/** Helper: fills a fraction of the max width. */
-private fun Modifier.fillMaxWidth(fraction: Float): Modifier =
-    this.then(androidx.compose.foundation.layout.fillMaxWidth(fraction))
-
 /** Formats a byte count into a human-readable string (e.g., "12.3 MB"). */
 private fun formatBytes(bytes: Long): String {
     val kb = bytes / 1024.0
