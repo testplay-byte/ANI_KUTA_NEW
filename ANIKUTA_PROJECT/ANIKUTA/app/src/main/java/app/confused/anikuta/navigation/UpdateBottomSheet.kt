@@ -319,8 +319,15 @@ private fun DownloadButtonWithProgress(
  * A button that shows download progress with a left-to-right fill animation.
  *
  * The button background fills proportionally to [percent]. Inside, it shows
- * "Downloading X%" centered. The fill color is a lighter shade of primary,
- * giving a smooth visual progress indicator.
+ * "Downloading X%" centered. The text color adapts to the background:
+ * - Over the filled (primary) area → white (onPrimary)
+ * - Over the unfilled (light) area → dark (onSurface)
+ *
+ * Since the text is centered and may span both areas, we compute the luminance
+ * of the primary color and pick the text color that has the best contrast
+ * against the **dominant** background at the text's position. For simplicity,
+ * we use `onPrimary` (white) when the fill is > 50%, and `onSurface` (dark)
+ * when the fill is < 50%. This gives good readability in both states.
  */
 @Composable
 private fun DownloadProgressButton(
@@ -328,6 +335,27 @@ private fun DownloadProgressButton(
     speedText: String,
     modifier: Modifier = Modifier,
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+
+    // Compute the luminance of the primary color to determine if it's dark or light.
+    // Uses the standard relative luminance formula: 0.299*R + 0.587*G + 0.114*B
+    // (Rec. 601 luma — simple + fast, good enough for contrast decisions).
+    val primaryLuminance = 0.299f * primaryColor.red + 0.587f * primaryColor.green + 0.114f * primaryColor.blue
+
+    // Text color: when the fill covers the center of the button (>50%), use the
+    // color that contrasts with primary. Otherwise use the color that contrasts
+    // with the light background (primary@15%).
+    val textColor = if (percent >= 50) {
+        // Center of button is over the fill — contrast with primary
+        if (primaryLuminance < 0.5f) onPrimaryColor else onSurfaceColor
+    } else {
+        // Center of button is over the light background — contrast with it
+        // The light background (primary@15%) is always light, so use dark text.
+        onSurfaceColor
+    }
+
     Box(
         modifier = modifier
             .height(52.dp)
@@ -340,7 +368,7 @@ private fun DownloadProgressButton(
                 .fillMaxWidth(percent / 100f)
                 .height(52.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.primary),
+                .background(primaryColor),
         )
         // Text overlay (centered, on top of fill)
         Row(
@@ -356,7 +384,7 @@ private fun DownloadProgressButton(
                 fontFamily = RobotoFamily,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onPrimary,
+                color = textColor,
                 textAlign = TextAlign.Center,
             )
         }

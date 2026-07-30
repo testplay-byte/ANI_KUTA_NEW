@@ -1,0 +1,8 @@
+{
+  "tag_name": "v0.3.0",
+  "target_commitish": "main",
+  "name": "v0.3.0 — Update Detection Test Target",
+  "body": "## Update Detection Test Target\n\nThis release exists so the v0.2.3 update checker can detect it as an update.\n\nThe APK is the v0.2.3 build (VERSION_CODE=5). The GitHub release tag is v0.3.0, which the update checker parses as version code 300. Since 300 > 5, the update is always detected.\n\n## Features (same as v0.2.3)\n- Redesigned UpdateBottomSheet (bold heading + changelog card + Download/Cancel same row + in-button progress)\n- AboutScreen: no inline update card, delete button on downloaded versions\n- Downloaded-state tracking (Install instead of Download when already downloaded)\n- Auto-cleanup of old downloaded APKs\n- Immediate update check on startup (no 6h cooldown during testing)",
+  "draft": false,
+  "prerelease": false
+}

@@ -306,28 +306,62 @@ class AppUpdateManager(
      *
      * Called on app startup to prevent storage bloat. After a successful
      * update install, the old APK files are no longer needed.
+     *
+     * # The "just installed" case
+     *
+     * After the user installs an update, the app restarts with the new version.
+     * The downloaded APK file is still on disk. This method detects it by
+     * checking if the APK's actual version code (read from the APK's manifest
+     * via PackageManager) matches the installed version code — if so, the APK
+     * was just installed and should be deleted.
+     *
+     * However, reading the APK's version code requires `PackageParser` (deprecated)
+     * or `PackageInstaller` which is complex. Instead, we use a simpler heuristic:
+     * if the APK file's version name (from the GitHub release tag) does NOT match
+     * any known future update, AND the installed version code is >= the APK's
+     * parsed version code, delete it.
+     *
+     * For the testing loop (where the release tag v0.3.0 has versionCode 300 but
+     * the actual APK has versionCode 5), we ALSO delete the APK if its version
+     * name matches the installed version name — this handles the "just installed"
+     * case correctly.
      */
     fun cleanupOldDownloads() {
         val currentCode = getInstalledVersionCode()
+        val currentName = getInstalledVersionName()
         val downloaded = preferences.getDownloadedApks()
         if (downloaded.isEmpty()) return
 
-        Log.i(TAG, "cleanupOldDownloads: checking ${downloaded.size} downloaded APKs against current versionCode=$currentCode")
+        Log.i(TAG, "cleanupOldDownloads: checking ${downloaded.size} downloaded APKs against current=$currentName/$currentCode")
         var cleaned = 0
         downloaded.forEach { apk ->
-            // Parse the version code from the APK's version name
             val apkCode = parseVersionCode(apk.versionName)
-            if (apkCode <= currentCode) {
-                // This APK is for the current or older version — delete it
+            // Delete if:
+            // 1. The APK's version code <= current (it's an old version), OR
+            // 2. The APK's version name matches the installed version name
+            //    (the user just installed it — the file is no longer needed).
+            val shouldDelete = apkCode <= currentCode || apk.versionName == currentName
+            if (shouldDelete) {
                 if (preferences.deleteDownloadedApk(apk.filePath)) {
                     cleaned++
-                    Log.d(TAG, "cleanupOldDownloads: deleted ${apk.versionName} (code=$apkCode <= $currentCode)")
+                    Log.d(TAG, "cleanupOldDownloads: deleted ${apk.versionName} (code=$apkCode, current=$currentCode)")
                 }
             }
         }
         if (cleaned > 0) {
             Log.i(TAG, "cleanupOldDownloads: cleaned up $cleaned old APK(s)")
         }
+    }
+
+    /**
+     * Clears the download progress + latest update state.
+     *
+     * Called after the user successfully installs an update (the app restarts,
+     * so this is called on the next startup to reset the UI state).
+     */
+    fun clearUpdateState() {
+        _downloadProgress.value = null
+        _latestUpdate.value = null
     }
 
     /**

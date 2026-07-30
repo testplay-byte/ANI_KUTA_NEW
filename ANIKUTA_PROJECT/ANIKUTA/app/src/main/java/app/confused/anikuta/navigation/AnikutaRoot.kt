@@ -118,8 +118,9 @@ fun AnikutaRoot() {
         // Also cleans up old downloaded APKs (versions <= current) to free storage.
         LaunchedEffect(Unit) {
             try {
-                android.util.Log.d("AnikutaUpdate", "Startup: cleaning up old downloads...")
+                android.util.Log.d("AnikutaUpdate", "Startup: cleaning up old downloads + state...")
                 appController.updateManager.cleanupOldDownloads()
+                appController.updateManager.clearUpdateState()
 
                 android.util.Log.d("AnikutaUpdate", "Startup: beginning update check...")
                 val update = appController.updateManager.checkForUpdate()

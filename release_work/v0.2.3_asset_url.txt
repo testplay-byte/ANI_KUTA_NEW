@@ -1,0 +1,1 @@
+https://github.com/testplay-byte/ANI_KUTA_NEW/releases/download/v0.2.3/anikuta-v0.2.3-arm64-v8a.apk
