@@ -268,8 +268,9 @@ class AnikutaMPVView(
         // uses 64 MB). 256 MB allows ~2-3 min of 1080p buffering (user
         // requested 2-10 min buffer range). Does NOT affect subtitles.
         val cacheMegs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) 256 else 128
+        val backCacheMegs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) 64 else 32
         MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
-        MPVLib.setOptionString("demuxer-max-back-bytes", "${cacheMegs * 1024 * 1024}")
+        MPVLib.setOptionString("demuxer-max-back-bytes", "${backCacheMegs * 1024 * 1024}")
 
         MPVLib.setOptionString("speed", playerPreferences.playerSpeed().get().toString())
         MPVLib.setOptionString("alang", playerPreferences.preferredAudioLanguages().get())

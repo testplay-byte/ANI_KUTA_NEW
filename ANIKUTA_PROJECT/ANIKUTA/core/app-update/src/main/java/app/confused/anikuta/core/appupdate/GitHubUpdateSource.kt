@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -169,10 +170,10 @@ class GitHubUpdateSource(
 
     @Serializable
     private data class GitHubRelease(
-        val tagName: String,
+        @SerialName("tag_name") val tagName: String,
         val name: String? = null,
         val body: String? = null,
-        val publishedAt: String? = null,
+        @SerialName("published_at") val publishedAt: String? = null,
         val assets: List<GitHubAsset>? = null,
     )
 
@@ -180,7 +181,7 @@ class GitHubUpdateSource(
     private data class GitHubAsset(
         val name: String,
         val size: Long,
-        val browserDownloadUrl: String,
+        @SerialName("browser_download_url") val browserDownloadUrl: String,
     )
 
     private companion object {
