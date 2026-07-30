@@ -419,3 +419,15 @@ private fun formatBytes(bytes: Long): String {
     return if (mb >= 1) String.format(Locale.US, "%.1f MB", mb)
     else "${bytes / 1024} KB"
 }
+
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text = text,
+        fontFamily = RobotoFamily,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.ExtraBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
+    )
+}
