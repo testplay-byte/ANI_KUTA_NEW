@@ -1,4 +1,11 @@
 // buildSrc settings — used to build the convention plugins
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 dependencyResolutionManagement {
     repositories {
         google()

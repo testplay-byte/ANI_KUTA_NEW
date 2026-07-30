@@ -98,6 +98,15 @@ fun DetailContent(
     onDownloadResume: (String) -> Unit = {},
     onDownloadRetry: (String) -> Unit = {},
     onDownloadDelete: (String) -> Unit = {},
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: episode numbers downloaded on disk (from
+     * the VM's one-time filesystem scan). Merged with [downloadStates] in the
+     * EpisodeRow lookup so episodes that exist on disk but are NOT in the
+     * in-memory queue (e.g. after an app restart) still render as
+     * "Downloaded". The in-memory queue takes priority (it has progress /
+     * paused / error states that the filesystem scan can't infer).
+     */
+    scannedDownloadEpisodes: Set<Float> = emptySet(),
 ) {
     // Parse cover color for dynamic theming (hex → Compose Color).
     // UnifiedAnime.coverColorHex comes from AniList's coverImage.color (AniList mode)
@@ -221,6 +230,7 @@ fun DetailContent(
                         onDownloadResume = onDownloadResume,
                         onDownloadRetry = onDownloadRetry,
                         onDownloadDelete = onDownloadDelete,
+                        scannedDownloadEpisodes = scannedDownloadEpisodes,
                     )
                 }
 
@@ -235,6 +245,19 @@ fun DetailContent(
                         val episode = episodes[index]
                         val epNum = episode.episode_number.toInt().coerceAtLeast(1)
                         val metadata = episodeMetadata[epNum]
+                        // DOWNLOAD-STATUS-FILESYSTEM-FIX: merge the in-memory
+                        // `downloadStates` (keyed by episode URL) with the
+                        // `scannedDownloadEpisodes` set (keyed by episode
+                        // number). The in-memory queue takes priority — it has
+                        // progress / paused / error states the FS scan can't
+                        // infer. The FS scan covers episodes that exist on disk
+                        // but are NOT in the queue (e.g. after app restart).
+                        val rowDownloadState = downloadStates[episode.url]
+                            ?: if (episode.episode_number in scannedDownloadEpisodes) {
+                                EpisodeDownloadState.Downloaded
+                            } else {
+                                EpisodeDownloadState.NotDownloaded
+                            }
                         EpisodeRow(
                             episode = episode,
                             index = index,
@@ -252,7 +275,7 @@ fun DetailContent(
                                     onDownloadEpisode(episode, source, watchCtx)
                                 }
                             },
-                            downloadState = downloadStates[episode.url] ?: EpisodeDownloadState.NotDownloaded,
+                            downloadState = rowDownloadState,
                             onDownloadCancel = { onDownloadCancel(episode.url) },
                             onDownloadResume = { onDownloadResume(episode.url) },
                             onDownloadRetry = { onDownloadRetry(episode.url) },

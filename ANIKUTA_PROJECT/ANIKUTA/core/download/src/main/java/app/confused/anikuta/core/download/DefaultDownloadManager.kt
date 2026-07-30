@@ -221,7 +221,9 @@ class DefaultDownloadManager(
     }
 
     override suspend fun getDownloadedEpisodes(contentId: String): List<DownloadedEpisode> {
-        return queue.tasks.value
+        // 1. In-memory COMPLETED tasks (fast path — has full metadata: videoUri,
+        //    subtitleUris, sizeBytes, completedAt).
+        val inMemory = queue.tasks.value
             .filter { it.request.anime.contentId == contentId && it.status == DownloadStatus.COMPLETED }
             .map { task ->
                 DownloadedEpisode(
@@ -233,6 +235,55 @@ class DefaultDownloadManager(
                     completedAt = task.updatedAt,
                 )
             }
+
+        // 2. Filesystem scan — covers episodes that exist on disk but are NOT in
+        //    the in-memory DownloadStore queue. This happens after:
+        //    - an app restart where the queue was purged (DownloadStore drift),
+        //    - a content_id migration that re-keyed the cross-cutting stores but
+        //      left the on-disk folder untouched,
+        //    - manual file deletion / restoration from backup.
+        //
+        //    DOWNLOAD-STATUS-FILESYSTEM-FIX: without this scan, the details page
+        //    would show such episodes as "not downloaded" even though the files
+        //    are still on disk — silently breaking offline playback + the
+        //    "Delete downloaded episodes?" prompt in toggleSave.
+        val scanned = storage.scanDownloadedEpisodes(contentId)
+
+        // 3. Merge: prefer in-memory (has full metadata). Add filesystem-only
+        //    episodes — those whose episodeNumber is NOT already covered by an
+        //    in-memory task — with best-effort metadata (unknown episodeUrl,
+        //    sizeBytes, completedAt).
+        val inMemoryEpNums = inMemory.map { it.episode.episodeNumber }.toSet()
+        val filesystemOnly = scanned
+            .filter { it.episodeNumber !in inMemoryEpNums }
+            .map { s ->
+                DownloadedEpisode(
+                    episode = DownloadEpisodeInfo(
+                        // The episodeUrl is not recoverable from the filesystem
+                        // (we don't store it in metadata.json). An empty string
+                        // signals "unknown" — callers that need the URL should
+                        // fall back to the in-memory task or re-resolve from the
+                        // extension.
+                        episodeUrl = "",
+                        episodeNumber = s.episodeNumber,
+                        name = "Episode ${s.episodeNumber.toInt()}",
+                    ),
+                    videoUri = s.videoUri,
+                    subtitleUris = s.subtitleUris,
+                    // Unknown from filesystem (would require reading metadata.json
+                    // + summing file lengths — not worth the I/O for the UI's
+                    // "X episodes downloaded" count + the delete prompt).
+                    sizeBytes = 0L,
+                    completedAt = 0L,
+                )
+            }
+
+        if (filesystemOnly.isNotEmpty()) {
+            DownloadLogger.i("getDownloadedEpisodes: contentId=$contentId → " +
+                "${inMemory.size} in-memory + ${filesystemOnly.size} filesystem-only " +
+                "(${scanned.size - filesystemOnly.size} overlapping)")
+        }
+        return inMemory + filesystemOnly
     }
 
     /**

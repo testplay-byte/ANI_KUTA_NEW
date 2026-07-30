@@ -112,6 +112,16 @@ fun EpisodesSection(
     onDownloadResume: (String) -> Unit = {},
     onDownloadRetry: (String) -> Unit = {},
     onDownloadDelete: (String) -> Unit = {},
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: episode numbers downloaded on disk (from
+     * the VM's one-time filesystem scan). Currently NOT used by EpisodesSection
+     * itself (it renders only the header + state-machine — the actual episode
+     * rows are rendered lazily by the parent DetailContent's `items()` block,
+     * which DOES merge this set with [downloadStates]). Passed through here
+     * for API symmetry + so a future header "X episodes downloaded" indicator
+     * can read it without further plumbing.
+     */
+    scannedDownloadEpisodes: Set<Float> = emptySet(),
 ) {
     var showManualSearch by remember { mutableStateOf(false) }
     // ── "Source unavailable" info dialog state (Issue 5) ──

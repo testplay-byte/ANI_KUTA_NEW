@@ -534,6 +534,64 @@ class DownloadStorageProvider(
     }
 
     /**
+     * Scan all downloaded episodes for an anime by scanning the filesystem.
+     *
+     * Walks the on-disk `<root>/ANIKUTA/downloads/anime/<Title>/Episode NNN/`
+     * tree for the given [contentId] + returns a [ScannedEpisode] for every
+     * `Episode NNN/` folder that contains a `video.<ext>` file.
+     *
+     * Used by [DefaultDownloadManager.getDownloadedEpisodes] to cover episodes
+     * that exist on disk but are NOT in the in-memory [DownloadStore] queue
+     * (e.g. after an app restart where the queue was purged, or after a
+     * content_id migration that re-keyed the cross-cutting stores but NOT
+     * the DownloadStore).
+     *
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: this is the filesystem scan that makes
+     * `getDownloadedEpisodes` robust against in-memory queue drift — previously
+     * `getDownloadedEpisodes` returned only the in-memory COMPLETED tasks, so
+     * the details page would show episodes as "not downloaded" after a restart
+     * even though the files were still on disk.
+     *
+     * @return a list of [ScannedEpisode] (episodeNumber + videoUri + subtitleUris).
+     *   Empty if no folder exists for [contentId] or no episode has a video file.
+     */
+    fun scanDownloadedEpisodes(contentId: String): List<ScannedEpisode> {
+        val animeDir = findAnimeDir(contentId) ?: run {
+            DownloadLogger.d("scanDownloadedEpisodes: no folder for contentId=$contentId")
+            return emptyList()
+        }
+        val result = mutableListOf<ScannedEpisode>()
+        for (epDir in animeDir.listFiles()) {
+            if (!epDir.isDirectory) continue
+            val name = epDir.name ?: continue
+            // Parse "Episode NNN" → episode number.
+            if (!name.startsWith("Episode ")) continue
+            val epNumStr = name.removePrefix("Episode ").trim()
+            // Allow fractional episode numbers (e.g. "Episode 005.5" for specials)
+            // by parsing as Float. The folder-name formatter zero-pads the floor
+            // (see [episodeFolderName]), so this only matches whole-number folders
+            // in practice — the Float parse is forward-compatible if a future
+            // change adds fractional folder names.
+            val epNum = epNumStr.toFloatOrNull() ?: continue
+            // Find the video file — match by prefix "video." (same convention as
+            // [getVideoUri] / [isEpisodeDownloaded]).
+            val videoFile = epDir.listFiles().firstOrNull {
+                it.isFile && it.name?.startsWith("video.") == true
+            }
+            if (videoFile != null) {
+                val subtitles = epDir.findFile("data")?.findFile("subtitles")?.listFiles()
+                    ?.filter { it.isFile }
+                    ?.map { it.uri.toString() }
+                    ?: emptyList()
+                result.add(ScannedEpisode(epNum, videoFile.uri.toString(), subtitles))
+            }
+        }
+        DownloadLogger.i("scanDownloadedEpisodes: contentId=$contentId → " +
+            "${result.size} episode(s) on disk")
+        return result
+    }
+
+    /**
      * Find a legacy anime directory (pre-Phase-6 format: `<Title [anilistId]>`).
      *
      * Used by [app.confused.anikuta.migration.DownloadMigration] to find old
@@ -686,4 +744,26 @@ data class EpisodeMetadataCache(
     val videoUrl: String,
     val downloadedAt: Long,
     val sourceId: Long,
+)
+
+/**
+ * A downloaded episode found by a filesystem scan (no in-memory task required).
+ *
+ * Returned by [DownloadStorageProvider.scanDownloadedEpisodes] + merged into
+ * the [DownloadedEpisode] list by [DefaultDownloadManager.getDownloadedEpisodes]
+ * so episodes that exist on disk but are no longer in the in-memory
+ * [DownloadStore] queue (e.g. after an app restart) are still surfaced to the
+ * UI.
+ *
+ * DOWNLOAD-STATUS-FILESYSTEM-FIX.
+ *
+ * @property episodeNumber Parsed from the `Episode NNN` folder name.
+ * @property videoUri The SAF content:// URI of the `video.<ext>` file.
+ * @property subtitleUris SAF content:// URIs of any subtitle files in
+ *   `Episode NNN/data/subtitles/`. Empty if there are no subtitles.
+ */
+data class ScannedEpisode(
+    val episodeNumber: Float,
+    val videoUri: String,
+    val subtitleUris: List<String>,
 )

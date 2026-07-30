@@ -23,6 +23,11 @@ dependencies {
     // pattern) to avoid threading it through the VM constructor — the VM
     // has too many deps already + the identity update is best-effort.
     implementation(projects.core.downloadIdentity)
+    // DOWNLOAD-STATUS-FILESYSTEM-FIX: needed by AnimeDetailViewModel to scan
+    // the on-disk downloaded episodes (covers the app-restart / queue-purge
+    // case where the in-memory DownloadStore no longer lists COMPLETED tasks
+    // but the files are still on disk) + to delete downloads on un-save.
+    implementation(projects.core.download)
 
     // Koin (for koinInject of AnimeRepository + CategoryRepository)
     implementation(platform(libs.koin.bom))

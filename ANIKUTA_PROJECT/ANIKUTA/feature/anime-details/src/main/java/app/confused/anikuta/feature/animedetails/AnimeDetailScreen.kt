@@ -176,6 +176,11 @@ fun AnimeDetailScreen(
                     api = api,
                     viewPreferenceStore = org.koin.core.context.GlobalContext.get().get(),
                     appContext = context.applicationContext,
+                    // DOWNLOAD-STATUS-FILESYSTEM-FIX: injected so the VM can
+                    // scan the on-disk downloaded episodes (covers the
+                    // app-restart / queue-purge case) + delete them when the
+                    // user un-saves + picks "Delete" in the prompt.
+                    downloadManager = org.koin.core.context.GlobalContext.get().get(),
                     // Fix 2 (SOURCE-SWITCH-FIXES): bypass the DB-first short-circuit on
                     // initial load so the post-unlink page shows fresh extension data.
                     forceInitialRefresh = forceInitialRefresh,
@@ -202,6 +207,16 @@ fun AnimeDetailScreen(
     val currentAnimeCategoryIds by vm.currentAnimeCategoryIds.collectAsState()
     val currentDataSource by vm.currentDataSource.collectAsState()
     val availableSources = remember { vm.getAvailableSources() }
+    // DOWNLOAD-STATUS-FILESYSTEM-FIX: episode numbers downloaded on disk (from
+    // the VM's one-time filesystem scan). Merged with the episode-URL-keyed
+    // `downloadStates` map in DetailContent's EpisodeRow lookup so episodes
+    // that are NOT in the in-memory queue (e.g. after an app restart) are
+    // still shown as "Downloaded".
+    val scannedDownloadEpisodes by vm.scannedDownloadEpisodes.collectAsState()
+    // DOWNLOAD-STATUS-FILESYSTEM-FIX (Problem 5): drives the "Delete
+    // downloaded episodes?" AlertDialog when the user un-saves an anime that
+    // has on-disk downloads.
+    val pendingRemoveDownloadPrompt by vm.pendingRemoveDownloadPrompt.collectAsState()
 
     // ── AniList search sheet state (for "Switch anime" — linked anime only) ──
     var showAniListSearch by remember { mutableStateOf(false) }
@@ -278,6 +293,11 @@ fun AnimeDetailScreen(
                     onDownloadResume = onDownloadResume,
                     onDownloadRetry = onDownloadRetry,
                     onDownloadDelete = onDownloadDelete,
+                    // DOWNLOAD-STATUS-FILESYSTEM-FIX: the scanned-episode set
+                    // is merged with `downloadStates` in DetailContent's
+                    // EpisodeRow lookup so episodes that exist on disk but are
+                    // NOT in the in-memory queue still render as "Downloaded".
+                    scannedDownloadEpisodes = scannedDownloadEpisodes,
                 )
             }
         }
@@ -321,5 +341,39 @@ fun AnimeDetailScreen(
                 onDismiss = { showAddCategory = false },
             )
         }
+    }
+
+    // ── DOWNLOAD-STATUS-FILESYSTEM-FIX (Problem 5): "Delete downloaded
+    // episodes?" prompt ──
+    //
+    // Shown when the user un-saves an anime that has on-disk downloaded
+    // episodes. The un-save is deferred (held in the VM's
+    // `_pendingUnsaveAnimeId`) until the user picks:
+    //  - "Delete" → deletes the on-disk folder (DownloadManager.deleteAnimeDownloads)
+    //    + completes the un-save.
+    //  - "Keep"   → just completes the un-save (downloads stay on disk).
+    // Back-gesture / tap-outside (onDismissRequest) cancels the prompt
+    // entirely — the anime stays saved (no un-save, no delete).
+    if (pendingRemoveDownloadPrompt) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.cancelRemoveDownloadPrompt() },
+            title = { androidx.compose.material3.Text("Remove from library?") },
+            text = {
+                androidx.compose.material3.Text(
+                    "This anime has downloaded episodes on disk. " +
+                        "Do you want to delete them too, or keep them?",
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { vm.confirmRemoveDownloads(delete = true) },
+                ) { androidx.compose.material3.Text("Delete") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { vm.confirmRemoveDownloads(delete = false) },
+                ) { androidx.compose.material3.Text("Keep") }
+            },
+        )
     }
 }

@@ -16,6 +16,7 @@ import app.confused.anikuta.core.common.model.details.UnifiedAnime
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.common.repository.CategoryRepository
 import app.confused.anikuta.core.common.repository.EpisodeRepository
+import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadata
 import app.confused.anikuta.core.episodemetadata.model.EpisodeMetadataRequest
 import app.confused.anikuta.core.episodemetadata.repository.EpisodeMetadataRepository
@@ -92,6 +93,15 @@ class AnimeDetailViewModel(
     private val api: AniListApi,
     private val viewPreferenceStore: app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore,
     private val appContext: Context,
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: the download manager — used by
+     * [scanDownloads] (one-time filesystem scan on screen load, covers the
+     * app-restart / queue-purge case where COMPLETED tasks are missing from
+     * the in-memory DownloadStore but the files are still on disk) + by
+     * [confirmRemoveDownloads] (deletes the on-disk folder when the user
+     * un-saves the anime + picks "Delete" in the prompt).
+     */
+    private val downloadManager: DownloadManager,
     /** Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the [init] block calls
      * `loadInternal(forceRefresh = true)` instead of `load()` — bypassing the
      * DB-first short-circuit + forcing a fresh fetch from the provider. Used by
@@ -174,6 +184,37 @@ class AnimeDetailViewModel(
     private val _hasSearched = MutableStateFlow(false)
     val hasSearched: StateFlow<Boolean> = _hasSearched.asStateFlow()
 
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: the set of episode numbers downloaded on
+     * disk for this anime — populated by [scanDownloads] (one-time filesystem
+     * scan on screen load) + updated reactively as the in-memory queue changes.
+     *
+     * This is the seam between the (synchronous, in-memory-keyed)
+     * `AppController.getDownloadStates` and the (asynchronous, on-disk-truth)
+     * download engine. The UI observes this set + merges it with the
+     * episode-URL-keyed `downloadStates` map so episodes that are NOT in the
+     * in-memory queue (e.g. after an app restart) are still shown as
+     * "Downloaded" on the details page.
+     */
+    private val _scannedDownloadEpisodes = MutableStateFlow<Set<Float>>(emptySet())
+    val scannedDownloadEpisodes: StateFlow<Set<Float>> = _scannedDownloadEpisodes.asStateFlow()
+
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX: when `true`, the UI shows the "Delete
+     * downloaded episodes?" dialog (triggered by [toggleSave] when the user
+     * un-saves an anime that has on-disk downloads). The user picks "Delete"
+     * (calls [confirmRemoveDownloads] with `delete = true` → deletes the
+     * on-disk folder + completes the un-save) or "Keep" (calls
+     * [confirmRemoveDownloads] with `delete = false` → just completes the
+     * un-save, downloads stay on disk).
+     *
+     * The pending un-save is held in [_pendingUnsaveAnimeId] so
+     * [confirmRemoveDownloads] can finish the DB write after the user picks.
+     */
+    private val _pendingRemoveDownloadPrompt = MutableStateFlow(false)
+    val pendingRemoveDownloadPrompt: StateFlow<Boolean> = _pendingRemoveDownloadPrompt.asStateFlow()
+    private var _pendingUnsaveAnimeId: Long? = null
+
     private val sourcePrefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /** The active request (mutable — changes when the user switches extension). */
@@ -190,6 +231,12 @@ class AnimeDetailViewModel(
         } else {
             load()
         }
+        // DOWNLOAD-STATUS-FILESYSTEM-FIX: kick off a one-time filesystem scan so
+        // episodes that exist on disk but are no longer in the in-memory queue
+        // are surfaced as "Downloaded" on the details page. The scan runs in the
+        // background — the UI starts with an empty set + recomposes when the
+        // scan completes (typically <50ms for a typical anime).
+        scanDownloads()
         observeLibraryState()
         viewModelScope.launch {
             categoryRepository.observeVisible().collect { _categories.value = it }
@@ -412,27 +459,36 @@ class AnimeDetailViewModel(
                 try {
                     val identityManager = org.koin.core.context.GlobalContext.get()
                         .get<app.confused.anikuta.core.downloadidentity.DownloadIdentityManager>()
-                    val contentId = if (anilistId != null) {
+                    val oldContentId = if (anilistId != null) {
                         "al:$anilistId"
                     } else if (oldExt != null) {
                         "aniyomi:${oldExt.sourceId}:${oldExt.animeUrl}"
                     } else {
                         null
                     }
-                    if (contentId != null) {
+                    // The NEW contentId after switching sources:
+                    // - Linked: stays "al:$anilistId" (source-independent)
+                    // - Unlinked: changes to "aniyomi:${source.id}:${sAnime.url}" (new source)
+                    val newContentId = if (anilistId != null) {
+                        "al:$anilistId"
+                    } else {
+                        "aniyomi:${source.id}:${sAnime.url}"
+                    }
+                    if (oldContentId != null) {
                         val newIdentity = app.confused.anikuta.core.downloadidentity.DownloadIdentity(
-                            contentId = contentId,
+                            contentId = newContentId,
                             anilistId = anilistId,
                             sourceId = source.id,
                             sourceUrl = sAnime.url,
                             title = sAnime.title,
                         )
-                        val updated = identityManager.updateIdentity(contentId, newIdentity)
+                        val updated = identityManager.updateIdentity(oldContentId, newIdentity)
                         Log.i(TAG, "switchExtension: identity.json update " +
                             "${if (updated) "succeeded" else "skipped (no folder found)"} " +
-                            "(contentId=$contentId, new sourceId=${source.id}, new url=${sAnime.url})")
+                            "(oldContentId=$oldContentId, newContentId=$newContentId, " +
+                            "new sourceId=${source.id}, new url=${sAnime.url})")
                     } else {
-                        Log.w(TAG, "switchExtension: cannot compute contentId for identity " +
+                        Log.w(TAG, "switchExtension: cannot compute oldContentId for identity " +
                             "update (anilistId=$anilistId, oldExt=$oldExt) — skipping")
                     }
                 } catch (e: Exception) {
@@ -572,6 +628,22 @@ class AnimeDetailViewModel(
 
     // ── Library save ──
 
+    /**
+     * Toggles the anime's "saved to library" (favorite) flag.
+     *
+     * **DOWNLOAD-STATUS-FILESYSTEM-FIX (Problem 5):** when the user UN-saves
+     * (favorite=true → false) AND the anime has on-disk downloaded episodes,
+     * the un-save is deferred — instead of completing immediately, this
+     * method sets [_pendingRemoveDownloadPrompt] = true + stashes the DB row
+     * id in [_pendingUnsaveAnimeId]. The UI shows the "Delete downloaded
+     * episodes?" dialog; the user picks "Delete" (calls
+     * [confirmRemoveDownloads] with `delete = true`) or "Keep" (calls
+     * [confirmRemoveDownloads] with `delete = false`) — both complete the
+     * un-save; "Delete" additionally wipes the on-disk download folder via
+     * [DownloadManager.deleteAnimeDownloads].
+     *
+     * Saving (favorite=false → true) is unchanged — completes immediately.
+     */
     fun toggleSave() {
         viewModelScope.launch {
             try {
@@ -579,16 +651,28 @@ class AnimeDetailViewModel(
                 val existing = findLibraryAnime(unified)
                 if (existing != null) {
                     val newFav = !existing.favorite
-                    animeRepository.updateFavorite(
-                        id = existing.id,
-                        favorite = newFav,
-                        dateAdded = if (newFav) System.currentTimeMillis() else existing.dateAdded,
-                    )
-                    // Quick-win fallback: reflect the change immediately in the UI
-                    // so the save icon flips before the reactive flow emits.
-                    _isSaved.value = newFav
-                    Log.i(TAG, "toggleSave: updated existing id=${existing.id}, newFav=$newFav")
-                    if (newFav) categoryRepository.setAnimeCategories(existing.id, listOf(Category.DEFAULT_ID))
+                    if (!newFav) {
+                        // ── Un-saving: check for on-disk downloads first ──
+                        // If the anime has downloaded episodes, defer the
+                        // un-save + show the "Delete downloaded episodes?"
+                        // prompt. The check uses the (already-scanned)
+                        // [_scannedDownloadEpisodes] set first (fast — no I/O),
+                        // with a fallback to a fresh [downloadManager.getDownloadedEpisodes]
+                        // call (covers the brief window between screen load
+                        // and scan completion, and any downloads the user
+                        // completed since opening the page).
+                        val hasDownloads = _scannedDownloadEpisodes.value.isNotEmpty() ||
+                            hasOnDiskDownloads(unified)
+                        if (hasDownloads) {
+                            _pendingUnsaveAnimeId = existing.id
+                            _pendingRemoveDownloadPrompt.value = true
+                            Log.i(TAG, "toggleSave: deferring un-save for '${unified.title}' " +
+                                "(id=${existing.id}) — pending download-delete prompt " +
+                                "(scanned=${_scannedDownloadEpisodes.value.size} ep(s))")
+                            return@launch
+                        }
+                    }
+                    completeToggleSave(existing.id, newFav, existing.dateAdded)
                 } else {
                     saveAnimeToLibrary(unified)
                     // Quick-win fallback: reflect the new save immediately.
@@ -597,6 +681,161 @@ class AnimeDetailViewModel(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "toggleSave failed", e)
+            }
+        }
+    }
+
+    /**
+     * Resolves the "Delete downloaded episodes?" prompt set by [toggleSave].
+     *
+     * @param delete `true` → delete the on-disk download folder (via
+     *   [DownloadManager.deleteAnimeDownloads]) AND complete the deferred
+     *   un-save. `false` → just complete the un-save (downloads stay on disk).
+     *
+     * Resets [_pendingRemoveDownloadPrompt] + [_pendingUnsaveAnimeId]
+     * regardless. If there's no pending un-save (e.g. the user dismissed the
+     * dialog without a preceding toggleSave), this is a no-op.
+     */
+    fun confirmRemoveDownloads(delete: Boolean) {
+        val pendingId = _pendingUnsaveAnimeId
+        _pendingRemoveDownloadPrompt.value = false
+        _pendingUnsaveAnimeId = null
+        if (pendingId == null) {
+            Log.w(TAG, "confirmRemoveDownloads: no pending un-save — ignoring (delete=$delete)")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val contentId = currentContentId()
+                if (delete && contentId != null) {
+                    withContext(Dispatchers.IO) {
+                        downloadManager.deleteAnimeDownloads(contentId)
+                    }
+                    // Clear the scanned set so the UI recomposes with all
+                    // episodes marked NotDownloaded.
+                    _scannedDownloadEpisodes.value = emptySet()
+                    Log.i(TAG, "confirmRemoveDownloads: deleted downloads for contentId=$contentId " +
+                        "(pendingId=$pendingId)")
+                    Toast.makeText(appContext, "Downloads deleted", Toast.LENGTH_SHORT).show()
+                } else {
+                    Log.i(TAG, "confirmRemoveDownloads: keeping downloads (delete=$delete, " +
+                        "contentId=$contentId, pendingId=$pendingId)")
+                }
+                // Complete the deferred un-save (favorite=true → false).
+                completeToggleSave(pendingId, newFav = false, dateAdded = 0L)
+            } catch (e: Exception) {
+                Log.e(TAG, "confirmRemoveDownloads failed (pendingId=$pendingId, delete=$delete)", e)
+            }
+        }
+    }
+
+    /**
+     * Cancels the "Delete downloaded episodes?" prompt without changing the
+     * save state — used by the dialog's `onDismissRequest` (back-gesture /
+     * tap-outside) so the user can back out without un-saving OR deleting.
+     */
+    fun cancelRemoveDownloadPrompt() {
+        val had = _pendingRemoveDownloadPrompt.value
+        _pendingRemoveDownloadPrompt.value = false
+        _pendingUnsaveAnimeId = null
+        if (had) Log.i(TAG, "cancelRemoveDownloadPrompt: user dismissed — anime stays saved")
+    }
+
+    /**
+     * The actual DB write for [toggleSave] / [confirmRemoveDownloads].
+     * Split out so both paths share the same logic (favorite flag flip +
+     * _isSaved quick-win + categories-on-save).
+     */
+    private suspend fun completeToggleSave(id: Long, newFav: Boolean, dateAdded: Long) {
+        animeRepository.updateFavorite(
+            id = id,
+            favorite = newFav,
+            dateAdded = if (newFav) System.currentTimeMillis() else dateAdded,
+        )
+        // Quick-win fallback: reflect the change immediately in the UI
+        // so the save icon flips before the reactive flow emits.
+        _isSaved.value = newFav
+        Log.i(TAG, "completeToggleSave: updated id=$id, newFav=$newFav")
+        if (newFav) categoryRepository.setAnimeCategories(id, listOf(Category.DEFAULT_ID))
+    }
+
+    /**
+     * True if there are on-disk downloaded episodes for this anime.
+     * Uses [downloadManager.getDownloadedEpisodes] (which itself merges the
+     * in-memory queue with a filesystem scan). Called by [toggleSave] as the
+     * fallback when [_scannedDownloadEpisodes] is empty (e.g. the scan hasn't
+     * completed yet, or the user just finished a download after opening the
+     * page).
+     */
+    private suspend fun hasOnDiskDownloads(unified: UnifiedAnime): Boolean {
+        val contentId = currentContentId() ?: return false
+        return try {
+            withContext(Dispatchers.IO) {
+                downloadManager.getDownloadedEpisodes(contentId).isNotEmpty()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "hasOnDiskDownloads: failed for contentId=$contentId (non-fatal)", e)
+            false
+        }
+    }
+
+    /**
+     * The content_id for the currently-displayed anime — used to key the
+     * filesystem scan ([scanDownloads]) + the download-delete call
+     * ([confirmRemoveDownloads]).
+     *
+     * - Linked (anilistId != null): `"al:$anilistId"` (source-independent).
+     * - Unlinked extension: `"aniyomi:${sourceId}:${animeUrl}"` (per-source
+     *   local_id fallback).
+     *
+     * Returns null only if the active request is in an inconsistent state
+     * (shouldn't happen — both ByAniListId + ByExtension always yield a
+     * contentId).
+     */
+    private fun currentContentId(): String? {
+        val req = activeRequest
+        return when (req) {
+            is DetailsRequest.ByAniListId -> "al:${req.anilistId}"
+            is DetailsRequest.ByExtension -> {
+                val anilistId = req.anilistId
+                    ?: extensionLinkStore.getAniListId(req.sourceId, req.animeUrl)
+                if (anilistId != null) "al:$anilistId"
+                else "aniyomi:${req.sourceId}:${req.animeUrl}"
+            }
+        }
+    }
+
+    /**
+     * DOWNLOAD-STATUS-FILESYSTEM-FIX (Problem 3): one-time filesystem scan on
+     * screen load.
+     *
+     * Calls [DownloadManager.getDownloadedEpisodes] (which merges the
+     * in-memory queue with a filesystem scan in [DefaultDownloadManager]) +
+     * extracts the episode numbers into [_scannedDownloadEpisodes]. The UI
+     * observes the StateFlow + merges it with the episode-URL-keyed
+     * `downloadStates` map so episodes that are NOT in the in-memory queue
+     * (e.g. after an app restart) are still shown as "Downloaded" on the
+     * details page.
+     *
+     * Failure is non-fatal — the scan is best-effort. The UI falls back to
+     * the in-memory queue alone (the previous behavior).
+     */
+    private fun scanDownloads() {
+        viewModelScope.launch {
+            val contentId = currentContentId() ?: run {
+                Log.w(TAG, "scanDownloads: cannot compute contentId — skipping")
+                return@launch
+            }
+            try {
+                val downloaded = withContext(Dispatchers.IO) {
+                    downloadManager.getDownloadedEpisodes(contentId)
+                }
+                val downloadedEpNums = downloaded.map { it.episode.episodeNumber }.toSet()
+                _scannedDownloadEpisodes.value = downloadedEpNums
+                Log.d(TAG, "scanDownloads: found ${downloaded.size} downloaded episode(s) " +
+                    "for contentId=$contentId (numbers=$downloadedEpNums)")
+            } catch (e: Exception) {
+                Log.w(TAG, "scanDownloads: failed for contentId=$contentId (non-fatal)", e)
             }
         }
     }
