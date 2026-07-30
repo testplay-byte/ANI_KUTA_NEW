@@ -114,8 +114,10 @@ fun AnikutaRoot() {
         // not in the 6-hour dismiss cooldown, shows the update bottom sheet.
         LaunchedEffect(Unit) {
             try {
+                android.util.Log.d("AnikutaUpdate", "Startup: beginning update check...")
                 // checkForUpdate() is suspend — awaits the network result.
                 appController.updateManager.checkForUpdate()
+                android.util.Log.d("AnikutaUpdate", "Startup: check complete, shouldShow=${appController.updateManager.shouldShowDialog()}, latest=${appController.updateManager.latestUpdate.value?.versionName}")
                 if (appController.updateManager.shouldShowDialog()) {
                     appController.showUpdateSheet()
                 }

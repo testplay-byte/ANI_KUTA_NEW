@@ -82,6 +82,7 @@ fun AboutScreen(
     val latestUpdate by updateManager.latestUpdate.collectAsStateWithLifecycle()
     val downloadProgress by updateManager.downloadProgress.collectAsStateWithLifecycle()
     val isChecking by updateManager.isChecking.collectAsStateWithLifecycle()
+    val lastCheckError by updateManager.lastCheckError.collectAsStateWithLifecycle()
     val downloadedApks by updatePrefs.observeDownloadedApks().collectAsStateWithLifecycle(emptyList())
     val autoCheckEnabled by updatePrefs.observeUpdateCheckEnabled().collectAsStateWithLifecycle(true)
 
@@ -322,6 +323,32 @@ fun AboutScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            } else if (lastCheckError != null) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Check failed",
+                                fontFamily = RobotoFamily,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                text = lastCheckError ?: "",
+                                fontFamily = RobotoFamily,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
                         }
                     }
                 }

@@ -14,6 +14,6 @@ object AndroidConfig {
     val JvmTarget = KotlinJvmTarget.JVM_17
 
     const val APPLICATION_ID = "app.confused.anikuta"
-    const val VERSION_CODE = 3
-    const val VERSION_NAME = "0.2.1"
+    const val VERSION_CODE = 4
+    const val VERSION_NAME = "0.2.2"
 }
