@@ -286,11 +286,18 @@ class AppController(
 
     /**
      * Called by the UI when the user clicks Cancel on the ad dialog.
-     * Cancels the ad + proceeds with the deferred navigation (ad NOT counted).
+     * Cancels the ad — the deferred navigation is discarded, so the user
+     * stays on the current page. Only OK + min-stay (onAdReturn returns
+     * true) triggers the navigation.
      */
     fun onAdCancelled() {
         adManager.cancelAd()
-        executePendingNavigation()
+        // Do NOT execute the deferred navigation — the user cancelled the ad,
+        // so they stay on the current page. The deferred action is discarded.
+        // Only when the user clicks OK AND watches the ad for the minimum time
+        // (onAdReturn returns true) does the navigation proceed.
+        pendingAdNavigation = null
+        Log.i("AnikutaAds", "onAdCancelled: user cancelled — staying on current page (navigation discarded)")
     }
 
     /**
