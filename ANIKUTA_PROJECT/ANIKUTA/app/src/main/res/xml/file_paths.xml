@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cache directory — where downloaded update APKs are stored. -->
+    <cache-path name="updates" path="updates/" />
+    <!-- Internal cache root (for any other cached files). -->
+    <cache-path name="cache" path="." />
+</paths>

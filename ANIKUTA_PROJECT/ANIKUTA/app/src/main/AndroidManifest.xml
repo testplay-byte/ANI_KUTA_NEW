@@ -77,5 +77,16 @@
             (it needs a Listener constructor arg), so it is NOT declared here.
             The manager registers it for ACTION_PACKAGE_ADDED/REPLACED/REMOVED at startup.
         -->
+
+        <!-- FileProvider for sharing downloaded APK files with the system installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

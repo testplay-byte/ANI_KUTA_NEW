@@ -344,12 +344,53 @@ fun LibraryScreen(
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { viewModel.dismissDialog() },
                     title = { Text("Remove from Library", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold) },
-                    text = { Text("Remove ${dialog.animeIds.size} anime from your library?") },
+                    text = {
+                        androidx.compose.foundation.layout.Column {
+                            Text(
+                                "Remove ${dialog.animeIds.size} anime from your library?",
+                                fontFamily = RobotoFamily,
+                            )
+                            androidx.compose.foundation.layout.Spacer(
+                                modifier = Modifier.height(8.dp),
+                            )
+                            Text(
+                                "• \"Remove\" unfavorites the anime — downloaded episodes are kept on disk.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = RobotoFamily,
+                            )
+                            Text(
+                                "• \"Delete Anime\" unfavorites AND deletes all downloaded episodes.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = RobotoFamily,
+                            )
+                        }
+                    },
                     confirmButton = {
-                        androidx.compose.material3.TextButton(
-                            onClick = { viewModel.removeSelectedFromLibrary() },
+                        androidx.compose.foundation.layout.Row(
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
                         ) {
-                            Text("Remove", color = MaterialTheme.colorScheme.error, fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
+                            androidx.compose.material3.TextButton(
+                                onClick = { viewModel.removeSelectedFromLibrary() },
+                            ) {
+                                Text(
+                                    "Remove",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = RobotoFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                )
+                            }
+                            androidx.compose.material3.TextButton(
+                                onClick = { viewModel.deleteSelectedFromLibrary() },
+                            ) {
+                                Text(
+                                    "Delete Anime",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontFamily = RobotoFamily,
+                                    fontWeight = FontWeight.ExtraBold,
+                                )
+                            }
                         }
                     },
                     dismissButton = {

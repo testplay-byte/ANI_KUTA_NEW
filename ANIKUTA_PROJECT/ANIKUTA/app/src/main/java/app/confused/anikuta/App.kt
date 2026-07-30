@@ -115,6 +115,10 @@ class App : Application() {
                 app.confused.anikuta.di.providerApiModule,
                 // ── Phase 5: ContentIdMigrator (re-keys stores on link/unlink/switch) ──
                 app.confused.anikuta.di.contentIdMigratorModule,
+                // ── Advertising system (modular, customizable, on-device tracking) ──
+                app.confused.anikuta.core.ads.di.adsModule,
+                // ── App self-update system (GitHub releases + APK download + install) ──
+                app.confused.anikuta.core.appupdate.di.appUpdateModule,
             )
         }
 

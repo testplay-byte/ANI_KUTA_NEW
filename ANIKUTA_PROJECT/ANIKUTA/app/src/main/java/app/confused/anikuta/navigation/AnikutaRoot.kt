@@ -7,11 +7,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.MainActivity
 import app.confused.anikuta.core.designsystem.component.AnikutaBottomNavBar
@@ -87,6 +91,36 @@ fun AnikutaRoot() {
                     appController.handleOAuthCallback(callbackUrl)
                     MainActivity.pendingOAuthCallback.value = null
                 }
+            }
+        }
+
+        // ── Ad return lifecycle observer ──
+        // When the ad system is awaiting the user's return from the browser,
+        // observe the Activity lifecycle. On ON_RESUME, call appController.onAdReturn()
+        // so the ad manager can check if the user stayed long enough.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME && appController.adAwaitingReturn) {
+                    appController.onAdReturn()
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
+        // ── App update check on startup ──
+        // Checks for updates once on app open. If an update is available AND
+        // not in the 6-hour dismiss cooldown, shows the update bottom sheet.
+        LaunchedEffect(Unit) {
+            try {
+                // checkForUpdate() is suspend — awaits the network result.
+                appController.updateManager.checkForUpdate()
+                if (appController.updateManager.shouldShowDialog()) {
+                    appController.showUpdateSheet()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("AnikutaUpdate", "Startup update check failed", e)
             }
         }
 
@@ -249,5 +283,20 @@ private fun AppOverlays(appController: AppController) {
                 }
             },
         )
+    }
+
+    // ── 5. Ad interstitial dialog ──
+    // Shown when AppController.pendingAdNavigation is non-null (set by withAdGate).
+    // The user must accept or cancel before the deferred navigation proceeds.
+    if (appController.pendingAdNavigation != null) {
+        AdDialog(appController)
+    }
+
+    // ── 6. App update bottom sheet ──
+    // Shown when AppController.showUpdateDialog is true (set on startup if an
+    // update is available + not in the dismiss cooldown). The user can cancel
+    // (6-hour cooldown) or download (progress bar → auto-install).
+    if (appController.showUpdateDialog) {
+        UpdateBottomSheet(appController)
     }
 }

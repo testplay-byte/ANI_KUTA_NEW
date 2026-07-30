@@ -218,7 +218,7 @@ fun ExtensionLinkingSheet(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "Not found on AniList automatically.\nPick a match below or search manually.",
+                        text = "Link this anime to AniList?\nSearch manually or pick a match below.",
                         fontFamily = RobotoFamily,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

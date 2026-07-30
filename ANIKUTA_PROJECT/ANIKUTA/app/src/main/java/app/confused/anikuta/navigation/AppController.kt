@@ -1,6 +1,8 @@
 package app.confused.anikuta.navigation
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.getValue
@@ -112,6 +114,8 @@ class AppController(
     val themePrefs: app.confused.anikuta.core.preferences.ThemePreferences,
     val linkingPreferences: app.confused.anikuta.core.preferences.LinkingPreferences,
     val animeRepository: AnimeRepository,
+    val adManager: app.confused.anikuta.core.ads.AdManager,
+    val updateManager: app.confused.anikuta.core.appupdate.AppUpdateManager,
     private val context: Context,
 ) {
 
@@ -147,6 +151,33 @@ class AppController(
 
     /** Download video picker sheet target (null = sheet hidden). */
     var downloadPickerTarget by mutableStateOf<EnqueueResult.ShowPicker?>(null)
+        private set
+
+    /**
+     * The deferred navigation action that is waiting for the ad interaction
+     * to complete. When non-null, the [AdDialog] is shown.
+     *
+     * Set by [withAdGate] before any anime-detail navigation. Cleared when
+     * the ad interaction completes (or is cancelled) — at which point the
+     * deferred action is executed.
+     */
+    var pendingAdNavigation by mutableStateOf<(() -> Unit)?>(null)
+        private set
+
+    /**
+     * Whether the ad system is waiting for the user to return from the browser.
+     *
+     * When true, [onAdReturn] should be called (from the Activity's onResume).
+     * The ad manager checks if the user stayed long enough.
+     */
+    var adAwaitingReturn by mutableStateOf(false)
+        private set
+
+    /**
+     * The update info for the update dialog. When non-null, the
+     * [UpdateBottomSheet] is shown (if the dismiss cooldown allows).
+     */
+    var showUpdateDialog by mutableStateOf(false)
         private set
 
     /** Episodes currently resolving (tapped download, waiting for source response). */
@@ -187,8 +218,140 @@ class AppController(
     //  Navigation
     // ════════════════════════════════════════════════════════════════════
 
+    /**
+     * Ad gate — checks if an ad should be shown before executing [action].
+     *
+     * Called before EVERY anime-detail navigation. If [AdManager.shouldShowAd]
+     * returns true, the action is deferred (stored in [pendingAdNavigation]) +
+     * the ad dialog is shown. When the ad interaction completes (or is
+     * cancelled), [executePendingNavigation] runs the deferred action.
+     *
+     * If no ad is needed, [action] runs immediately.
+     *
+     * This ensures the user sees ads before opening anime details — regardless
+     * of which entry point they used (browse, search, library, downloads,
+     * history, continue-watching, extension linking, etc.).
+     *
+     * @param action the navigation action to execute (possibly deferred).
+     */
+    private fun withAdGate(action: () -> Unit) {
+        if (adManager.shouldShowAd()) {
+            // Store the deferred action + show the ad dialog.
+            pendingAdNavigation = action
+            adManager.startAdDialog()
+            Log.i("AnikutaAds", "withAdGate: ad gate triggered — navigation deferred")
+        } else {
+            // No ad needed — execute immediately.
+            action()
+        }
+    }
+
+    /**
+     * Executes the deferred navigation after the ad interaction completes.
+     * Called by [onAdAccepted] (after the user returns from the browser) or
+     * [onAdCancelled] (when the user cancels).
+     */
+    private fun executePendingNavigation() {
+        val action = pendingAdNavigation
+        pendingAdNavigation = null
+        action?.invoke()
+    }
+
+    /**
+     * Called by the UI when the user clicks OK on the ad dialog.
+     *
+     * Opens the browser to the ad URL + sets [adAwaitingReturn] so the
+     * Activity's onResume can call [onAdReturn].
+     */
+    fun onAdAccepted() {
+        val state = adManager.state.value as? app.confused.anikuta.core.ads.AdInteractionState.DialogShowing
+            ?: return
+        adManager.acceptAd()
+        adAwaitingReturn = true
+        // Open the browser.
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(state.adUrl)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+            Log.i("AnikutaAds", "onAdAccepted: opened browser to ${state.adUrl}")
+        } catch (e: Exception) {
+            Log.e("AnikutaAds", "onAdAccepted: failed to open browser", e)
+            // If the browser can't open, treat as a cancel — proceed with navigation.
+            adAwaitingReturn = false
+            adManager.cancelAd()
+            executePendingNavigation()
+        }
+    }
+
+    /**
+     * Called by the UI when the user clicks Cancel on the ad dialog.
+     * Cancels the ad + proceeds with the deferred navigation (ad NOT counted).
+     */
+    fun onAdCancelled() {
+        adManager.cancelAd()
+        executePendingNavigation()
+    }
+
+    /**
+     * Called by the Activity's onResume lifecycle callback when the ad system
+     * is awaiting the user's return from the browser.
+     *
+     * Checks if the user stayed long enough:
+     * - If yes → records the ad + proceeds with navigation.
+     * - If no → transitions to "ReturnedTooEarly" (UI shows a message).
+     */
+    fun onAdReturn() {
+        if (!adAwaitingReturn) return
+        adAwaitingReturn = false
+        val counted = adManager.onAdReturn()
+        if (counted) {
+            // Ad was counted — proceed with the deferred navigation.
+            executePendingNavigation()
+        }
+        // If not counted (returned too early), the UI will show the message.
+        // The user can then dismiss it (→ onAdTooEarlyDismiss) or retry.
+    }
+
+    /**
+     * Called by the UI when the user dismisses the "returned too early" message.
+     * Goes back to the ad dialog so the user can try again.
+     */
+    fun onAdTooEarlyRetry() {
+        adManager.dismissTooEarly()
+    }
+
+    /**
+     * Called by the UI when the user gives up from the "returned too early" state.
+     * Cancels the ad + proceeds with navigation (ad NOT counted).
+     */
+    fun onAdTooEarlyCancel() {
+        adManager.cancelFromTooEarly()
+        executePendingNavigation()
+    }
+
+    // ── Update dialog controls ──
+
+    /** Shows the update dialog (called by AnikutaRoot on startup if an update is available). */
+    fun showUpdateSheet() {
+        showUpdateDialog = true
+    }
+
+    /** Dismisses the update dialog + records the 6-hour cooldown. */
+    fun dismissUpdateSheet() {
+        showUpdateDialog = false
+        updateManager.dismissUpdate()
+    }
+
+    /** Hides the update dialog WITHOUT recording the cooldown (for after download starts). */
+    fun hideUpdateSheet() {
+        showUpdateDialog = false
+    }
+
     fun pushDetail(anilistId: Int) {
-        navigator?.push(AnimeDetailDestination(anilistId))
+        withAdGate {
+            navigator?.push(AnimeDetailDestination(anilistId))
+        }
     }
 
     /**
@@ -260,7 +423,17 @@ class AppController(
      *   merges AniList metadata into the view (linked extension anime).
      */
     fun pushExtensionDetail(source: AnimeCatalogueSource, sAnime: SAnime, anilistId: Int? = null) {
-        navigator?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId))
+        withAdGate {
+            // Parcelable fix: pass only serializable primitives — the live source +
+            // SAnime are resolved in ExtensionAnimeDetailDestination.Content().
+            navigator?.push(ExtensionAnimeDetailDestination(
+                sourceId = source.id,
+                animeUrl = sAnime.url,
+                animeTitle = sAnime.title,
+                thumbnailUrl = sAnime.thumbnail_url,
+                anilistId = anilistId,
+            ))
+        }
     }
 
     /**
@@ -1078,10 +1251,25 @@ class AppController(
                 "link (non-fatal) — anilistId=$anilistId", e)
         }
 
-        if (onDetailPage) {
-            nav?.replace(ExtensionAnimeDetailDestination(source, sAnime, anilistId = anilistId))
-        } else {
-            nav?.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId = anilistId))
+        // Ad gate: wrap the navigation so an ad is shown before the detail page opens.
+        withAdGate {
+            if (onDetailPage) {
+                nav?.replace(ExtensionAnimeDetailDestination(
+                    sourceId = source.id,
+                    animeUrl = sAnime.url,
+                    animeTitle = sAnime.title,
+                    thumbnailUrl = sAnime.thumbnail_url,
+                    anilistId = anilistId,
+                ))
+            } else {
+                nav?.push(ExtensionAnimeDetailDestination(
+                    sourceId = source.id,
+                    animeUrl = sAnime.url,
+                    animeTitle = sAnime.title,
+                    thumbnailUrl = sAnime.thumbnail_url,
+                    anilistId = anilistId,
+                ))
+            }
         }
         if (!wasCached) {
             Toast.makeText(context, "Linked to AniList", Toast.LENGTH_SHORT).show()
@@ -1098,14 +1286,22 @@ class AppController(
      */
     fun onGoWithoutLinking(source: AnimeCatalogueSource, sAnime: SAnime) {
         linkingTarget = null
-        // ExtensionDetailDestination is now an object (no constructor params) so the
-        // actual source/sAnime must be stashed in pendingExtension* BEFORE pushing,
-        // matching the flow used by pushExtensionDetail().
+        // Parcelable fix: pass only serializable primitives. The pendingExtension*
+        // fields are kept for backward-compat with any code that still reads them,
+        // but the destination itself no longer needs them.
         pendingExtensionSource = source
         pendingExtensionSAnime = sAnime
         val nav = navigator
-        if (nav != null && nav.lastItem !is ExtensionAnimeDetailDestination) {
-            nav.push(ExtensionAnimeDetailDestination(source, sAnime, anilistId = null))
+        withAdGate {
+            if (nav != null && nav.lastItem !is ExtensionAnimeDetailDestination) {
+                nav.push(ExtensionAnimeDetailDestination(
+                    sourceId = source.id,
+                    animeUrl = sAnime.url,
+                    animeTitle = sAnime.title,
+                    thumbnailUrl = sAnime.thumbnail_url,
+                    anilistId = null,
+                ))
+            }
         }
         Log.i("AnikutaSearch", "Go-without-linking: ${sAnime.title} from ${source.name}")
     }

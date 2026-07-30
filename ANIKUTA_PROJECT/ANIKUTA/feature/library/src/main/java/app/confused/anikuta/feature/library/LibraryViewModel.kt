@@ -10,6 +10,7 @@ import app.confused.anikuta.core.common.model.LibrarySort
 import app.confused.anikuta.core.common.model.LibrarySortType
 import app.confused.anikuta.core.common.repository.AnimeRepository
 import app.confused.anikuta.core.common.repository.CategoryRepository
+import app.confused.anikuta.core.download.DownloadManager
 import app.confused.anikuta.core.player.WatchProgressStore
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +46,7 @@ class LibraryViewModel(
     private val categoryRepository: CategoryRepository,
     private val watchProgressStore: WatchProgressStore,
     private val preferences: LibraryPreferences,
+    private val downloadManager: DownloadManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LibraryState())
@@ -381,6 +383,63 @@ class LibraryViewModel(
                 Log.d(TAG, "removeSelectedFromLibrary: ${animeIds.size} anime removed")
             } catch (e: Exception) {
                 Log.e(TAG, "removeSelectedFromLibrary failed", e)
+            }
+            _state.update {
+                it.copy(
+                    dialog = null,
+                    selectedIds = emptySet(),
+                    selectionMode = false,
+                )
+            }
+        }
+    }
+
+    /**
+     * "Delete Anime" — removes the anime from the library AND deletes all
+     * downloaded episodes for each anime from disk.
+     *
+     * This is the destructive option in the delete confirmation dialog (the
+     * other option, [removeSelectedFromLibrary], only unfavorites the anime
+     * and keeps downloads on disk).
+     *
+     * The contentId is computed per-anime:
+     *  - Linked (`anilistId != null`): `"al:$anilistId"`
+     *  - Unlinked: `"aniyomi:${sourceId}:${url}"` (the per-source local_id fallback)
+     *
+     * Errors during download deletion are logged but non-fatal — the library
+     * removal still proceeds so the user isn't stuck with an entry they can't
+     * remove.
+     */
+    fun deleteSelectedFromLibrary() {
+        val animeIds = _state.value.selectedIds
+        viewModelScope.launch {
+            try {
+                animeIds.forEach { id ->
+                    val anime = animeRepository.getById(id)
+                    if (anime != null) {
+                        // Compute the contentId for download deletion.
+                        val contentId = if (anime.anilistId != null) {
+                            "al:${anime.anilistId}"
+                        } else {
+                            "aniyomi:${anime.sourceId}:${anime.url}"
+                        }
+                        // Delete all downloaded episodes for this anime (non-fatal).
+                        try {
+                            downloadManager.deleteAnimeDownloads(contentId)
+                            Log.d(TAG, "deleteSelectedFromLibrary: deleted downloads for " +
+                                "contentId=$contentId ('${anime.title}')")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "deleteSelectedFromLibrary: failed to delete downloads " +
+                                "for contentId=$contentId (non-fatal — library removal proceeds)", e)
+                        }
+                        // Remove from library + clear categories.
+                        animeRepository.updateFavorite(id, favorite = false, dateAdded = anime.dateAdded)
+                        categoryRepository.setAnimeCategories(id, emptyList())
+                    }
+                }
+                Log.d(TAG, "deleteSelectedFromLibrary: ${animeIds.size} anime deleted (library + downloads)")
+            } catch (e: Exception) {
+                Log.e(TAG, "deleteSelectedFromLibrary failed", e)
             }
             _state.update {
                 it.copy(

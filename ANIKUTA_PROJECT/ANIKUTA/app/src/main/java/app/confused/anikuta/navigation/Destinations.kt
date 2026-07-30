@@ -173,6 +173,35 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
  * handles both data sources. The optional [anilistId] enables the AniList-merge
  * path in `ExtensionDetailsProvider` (linked extension anime get the best of both).
  *
+ * # Parcelable / Serialization Safety (CRITICAL FIX)
+ *
+ * This destination stores **only serializable primitive fields** ([sourceId],
+ * [animeUrl], [animeTitle], [thumbnailUrl], [anilistId], [forceInitialRefresh]).
+ * The live `AnimeCatalogueSource` + `SAnime` objects are **NOT** stored — they
+ * are resolved in [Content] via `SourceMatcher.getSourceById(sourceId)` +
+ * `SAnimeImpl` reconstruction.
+ *
+ * **Why:** Voyager saves the back stack to an Android `Bundle` when the Activity
+ * stops (`onStop` → `PendingTransactionActions$StopInfo`). The `Bundle` path
+ * Java-serializes each `Screen` data class. Extension classes (e.g.
+ * `eu.kanade.tachiyomi.animeextension.en.anikoto.Anikoto`) are NOT `Serializable`,
+ * so storing them directly caused `BadParcelableException` →
+ * `NotSerializableException` crashes on background / screen rotation.
+ *
+ * This mirrors the `LibraryExtensionDetailDestination` pattern (which already
+ * stored only primitives for the same reason). The `WatchDestination` uses an
+ * `object` + `AppController.pendingWatchRequest` for the same issue.
+ *
+ * @param sourceId the `AnimeCatalogueSource.id` — used to look up the live source
+ *   in [Content]. If the source was uninstalled while the app was dead, the page
+ *   opens in DB-first mode (`extensionSource = null`, like
+ *   [LibraryExtensionDetailDestination]).
+ * @param animeUrl the `SAnime.url` (source-relative).
+ * @param animeTitle the `SAnime.title` (for display + AniList reverse-search).
+ * @param thumbnailUrl the `SAnime.thumbnail_url` (optional — for cover display
+ *   before the fresh fetch completes).
+ * @param anilistId optional — when non-null, the ExtensionDetailsProvider merges
+ *   AniList metadata into the view (linked extension anime).
  * @param forceInitialRefresh Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the
  *   `AnimeDetailViewModel.init { loadInternal(forceRefresh = forceInitialRefresh) }`
  *   bypasses the DB-first short-circuit + forces a fresh fetch from the extension
@@ -181,8 +210,10 @@ data class AnimeDetailDestination(val animeId: Int) : Screen {
  *   so the post-unlink page shows fresh extension data instead of stale AniList data.
  */
 data class ExtensionAnimeDetailDestination(
-    val source: AnimeCatalogueSource,
-    val sAnime: SAnime,
+    val sourceId: Long,
+    val animeUrl: String,
+    val animeTitle: String,
+    val thumbnailUrl: String? = null,
     val anilistId: Int? = null,
     val forceInitialRefresh: Boolean = false,
 ) : Screen {
@@ -190,21 +221,44 @@ data class ExtensionAnimeDetailDestination(
      *  Includes anilistId + forceInitialRefresh so that navigating from a linked entry
      *  (anilistId=12345) to an unlinked entry (anilistId=null) doesn't reuse the same key
      *  (which would crash with "Key was used multiple times"). */
-    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${source.id}_${sAnime.url}_${anilistId ?: "none"}_$forceInitialRefresh)"
+    override val key: ScreenKey = "ExtensionAnimeDetailDestination(${sourceId}_${animeUrl}_${anilistId ?: "none"}_$forceInitialRefresh)"
+
     @Composable
     override fun Content() {
         val appController = koinInject<AppController>()
         val navigator = LocalNavigator.currentOrThrow
 
+        // Resolve the live source from the stored sourceId. If the extension was
+        // uninstalled while the app was dead, source will be null — the page opens
+        // in DB-first mode (same as LibraryExtensionDetailDestination).
+        val source = remember(sourceId) {
+            appController.sourceMatcher.getSourceById(sourceId)
+        }
+
+        // Reconstruct the SAnime from the stored primitives. This is safe because
+        // SAnimeImpl is a simple data holder; the details page's fresh fetch will
+        // overwrite these fields with live data from the extension anyway.
+        val sAnime = remember(sourceId, animeUrl, animeTitle, thumbnailUrl) {
+            eu.kanade.tachiyomi.animesource.model.SAnimeImpl().apply {
+                url = animeUrl
+                title = animeTitle
+                thumbnail_url = thumbnailUrl
+            }
+        }
+
         // Phase 6 (ADR-050): compute the content_id for this extension anime.
         //  - Linked:   "al:$anilistId" (matches the AniList-linked grouping).
-        //  - Unlinked: "aniyomi:${source.id}:${sAnime.url}" — the per-source
+        //  - Unlinked: "aniyomi:${sourceId}:${animeUrl}" — the per-source
         //    local_id fallback (matches LocalId format from Phase 1). This is
         //    the gate-removal fix: unlinked extension anime are now downloadable
         //    (their content_id = local_id), so the user can download without
         //    first linking to AniList.
+        //
+        //  Note: we use sourceId (the stored primitive) instead of source?.id
+        //  because source may be null (extension uninstalled). The contentId
+        //  must be stable regardless of whether the source is currently installed.
         val contentId = if (anilistId != null) "al:$anilistId"
-            else "aniyomi:${source.id}:${sAnime.url}"
+            else "aniyomi:$sourceId:$animeUrl"
 
         val downloadTasksMap by appController.downloadTasksFlow
             .collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -214,6 +268,7 @@ data class ExtensionAnimeDetailDestination(
             extensionSource = source,
             extensionSAnime = sAnime,
             extensionAnilistId = anilistId,
+            extensionSourceId = sourceId,
             forceInitialRefresh = forceInitialRefresh,
             onBack = { navigator.pop() },
             onOpenEpisode = { episode, src, episodeList, watchCtx ->
@@ -231,18 +286,23 @@ data class ExtensionAnimeDetailDestination(
             onDownloadRetry = { episodeUrl -> appController.retryDownload(contentId, episodeUrl) },
             onDownloadDelete = { episodeUrl -> appController.deleteDownload(contentId, episodeUrl) },
             // Extension mode: "Link to AniList" opens the AniList linking sheet overlay.
-            onLinkToAniList = { appController.startLinking(source, sAnime) },
+            // Only available when the source is installed (can't link without a live source).
+            onLinkToAniList = {
+                if (source != null) {
+                    appController.startLinking(source, sAnime)
+                }
+            },
             // "Switch anime" picked (linked only) — update links + navigate to the new anime.
             onSwitchAnimePicked = { newId ->
                 if (anilistId != null) {
                     appController.switchAnilistAnime(anilistId, newId)
                 }
             },
-            // "Unlink from AniList" (linked only) — pass the live source.id + sAnime.url
+            // "Unlink from AniList" (linked only) — pass the stored sourceId + animeUrl
             // so AppController doesn't have to re-resolve from SourceLinkStore.
             onUnlinkFromAniList = {
                 if (anilistId != null) {
-                    appController.unlinkFromAniList(anilistId, source.id, sAnime.url)
+                    appController.unlinkFromAniList(anilistId, sourceId, animeUrl)
                 }
             },
         )
@@ -541,6 +601,7 @@ object SettingsDestination : Screen {
             onOpenGeneral = { navigator.push(GeneralSettingsDestination) },
             onOpenPlayer = { navigator.push(PlayerSettingsDestination) },
             onOpenBackup = { navigator.push(BackupDestination) },
+            onOpenAbout = { navigator.push(AboutDestination) },
             onBack = { navigator.pop() },
         )
     }
@@ -639,5 +700,24 @@ object EpisodeMetadataSettingsDestination : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         EpisodeMetadataSettingsScreen(onBack = { navigator.pop() })
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  About + Updates
+// ════════════════════════════════════════════════════════════════════════
+
+/**
+ * The About & Updates screen — shows app version, lets the user manually check
+ * for updates, download available updates, and re-open previously downloaded
+ * APK versions.
+ */
+object AboutDestination : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        app.confused.anikuta.feature.settings.AboutScreen(
+            onBack = { navigator.pop() },
+        )
     }
 }

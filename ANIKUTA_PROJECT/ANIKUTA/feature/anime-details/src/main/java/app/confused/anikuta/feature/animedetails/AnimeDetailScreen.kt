@@ -175,6 +175,7 @@ fun AnimeDetailScreen(
                     sourceMatcher = sourceMatcher,
                     api = api,
                     viewPreferenceStore = org.koin.core.context.GlobalContext.get().get(),
+                    detailsViewPreferences = org.koin.core.context.GlobalContext.get().get(),
                     appContext = context.applicationContext,
                     // Fix 2 (SOURCE-SWITCH-FIXES): bypass the DB-first short-circuit on
                     // initial load so the post-unlink page shows fresh extension data.

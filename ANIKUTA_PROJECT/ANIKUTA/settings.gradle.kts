@@ -54,6 +54,8 @@ include(":core:download")
 // :core:notification removed (Phase 9 — empty stub, 0 .kt files; re-add when episode-release notifications are implemented per ADR-014)
 include(":core:backup")
 include(":core:video-resolver")  // Phase 8: video-resolver logic + types (Doc 04 violations 3+4)
+include(":core:ads")             // Advertising system (modular, customizable, on-device tracking)
+include(":core:app-update")      // App self-update system (GitHub releases + APK download + install)
 
 // ── :data ──
 include(":data:anime")

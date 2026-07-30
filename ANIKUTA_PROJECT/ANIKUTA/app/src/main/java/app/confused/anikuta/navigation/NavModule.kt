@@ -58,6 +58,8 @@ val navModule: Module = module {
             themePrefs = get<ThemePreferences>(),
             linkingPreferences = get(),
             animeRepository = get(),
+            adManager = get(),
+            updateManager = get(),
             context = get(),
         )
     }

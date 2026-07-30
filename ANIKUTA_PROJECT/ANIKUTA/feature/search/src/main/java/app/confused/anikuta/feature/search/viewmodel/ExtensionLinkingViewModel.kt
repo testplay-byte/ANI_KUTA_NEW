@@ -112,12 +112,27 @@ class ExtensionLinkingViewModel(
             return
         }
 
-        // 2. Check the auto-link setting. If OFF, go straight to the extension-only
-        //    details page (no auto-search, no linking sheet). The user can still
-        //    manually link later via the "A" re-link button on the details page.
+        // 2. Check the auto-link setting.
+        //
+        //    **Auto-link ON:** search AniList by the extension title. If a match
+        //    is found, auto-link it (no sheet). If no match or search fails,
+        //    show the manual-link sheet so the user can pick or search manually.
+        //
+        //    **Auto-link OFF:** skip the auto-search and show the manual-link
+        //    sheet immediately (with empty results). The user can:
+        //      - Search manually (via the search field)
+        //      - Pick a result
+        //      - Tap "Go without linking" (opens extension-only detail)
+        //
+        //    This ensures the user ALWAYS has the option to manually link,
+        //    regardless of the auto-link setting. Previously, auto-link OFF
+        //    went straight to extension-only mode WITHOUT showing the sheet —
+        //    the user had no way to link from the initial open (only via the
+        //    "A" re-link button on the details page, which was hard to discover).
         if (!linkingPreferences.isAutoLinkEnabled()) {
-            Log.i(TAG, "Auto-link is OFF — opening '${sAnime.title}' as extension-only")
-            _state.value = ExtensionLinkingState.GoWithoutLinking(source, sAnime)
+            Log.i(TAG, "Auto-link is OFF — showing manual-link sheet for '${sAnime.title}' " +
+                "(user can search manually or go without linking)")
+            _state.value = ExtensionLinkingState.NeedsManualLink(results = emptyList())
             return
         }
 

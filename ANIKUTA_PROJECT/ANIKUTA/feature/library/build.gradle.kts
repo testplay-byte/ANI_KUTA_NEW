@@ -13,6 +13,7 @@ dependencies {
     implementation(projects.core.anilist)
     implementation(projects.core.preferences)
     implementation(projects.core.player)        // WatchProgressStore for continue-watching
+    implementation(projects.core.download)      // DownloadManager for "Delete Anime" (delete downloads)
 
     // Data modules (for repository impl visibility at runtime)
     implementation(projects.data.anime)

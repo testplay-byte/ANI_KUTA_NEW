@@ -91,6 +91,7 @@ class AnimeDetailViewModel(
     private val sourceMatcher: SourceMatcher,
     private val api: AniListApi,
     private val viewPreferenceStore: app.confused.anikuta.data.extension.cache.DetailsViewPreferenceStore,
+    private val detailsViewPreferences: app.confused.anikuta.core.preferences.DetailsViewPreferences,
     private val appContext: Context,
     /** Fix 2 (SOURCE-SWITCH-FIXES): when `true`, the [init] block calls
      * `loadInternal(forceRefresh = true)` instead of `load()` — bypassing the
@@ -596,23 +597,61 @@ class AnimeDetailViewModel(
     // ── Internal helpers ──
 
     /**
-     * Determines the initial data source — reads the per-anime preference first,
-     * falls back to the entry mode (AniList entry → ANILIST; Extension entry → EXTENSION).
+     * Determines the initial data source using a three-tier cascade:
      *
-     * This makes re-opening an anime respect the user's previous "View from Extension" /
-     * "View from AniList" choice.
+     * 1. **Per-anime preference** (`DetailsViewPreferenceStore`) — if the user
+     *    previously manually switched for THIS anime (via "View from AniList" /
+     *    "View from Extension"), that choice is remembered + respected.
+     * 2. **Global default** (`DetailsViewPreferences`) — the user's app-wide
+     *    preference set in Settings → General → "Default details view". Only
+     *    applies when the preferred source is available for this anime.
+     * 3. **Entry mode fallback** — AniList entry → ANILIST; Extension entry → EXTENSION.
+     *
+     * # Availability check for the global default
+     *
+     * The global default only applies when the preferred source is actually
+     * available:
+     * - Default "AniList" but anime has no anilistId (unlinked extension) →
+     *   fall back to Extension.
+     * - Default "Extension" but anime has no source link (AniList-only) →
+     *   fall back to AniList.
+     *
+     * This prevents the page from opening in a mode that can't load any data.
      */
     private fun initialDataSource(): DataSource {
-        // Check the per-anime preference.
-        val pref = when (initialRequest) {
+        // 1. Per-anime preference (highest priority — user manually switched for this anime).
+        val perAnimePref = when (initialRequest) {
             is DetailsRequest.ByAniListId -> viewPreferenceStore.get(initialRequest.anilistId)
             is DetailsRequest.ByExtension -> {
                 viewPreferenceStore.get(initialRequest.sourceId, initialRequest.animeUrl)
                     ?: initialRequest.anilistId?.let { viewPreferenceStore.get(it) }
             }
         }
-        if (pref != null) return pref
-        // Fall back to the entry mode.
+        if (perAnimePref != null) return perAnimePref
+
+        // 2. Global default (from Settings → General → "Default details view").
+        val globalDefault = detailsViewPreferences.getDefaultDataSource()
+        if (globalDefault != null) {
+            // Check if the preferred source is available for this request.
+            val hasAnilist = when (initialRequest) {
+                is DetailsRequest.ByAniListId -> true
+                is DetailsRequest.ByExtension -> initialRequest.anilistId != null
+            }
+            val hasExtension = when (initialRequest) {
+                is DetailsRequest.ByAniListId -> {
+                    // Check if a source link exists for this anilistId.
+                    // sourceLinkStore is PreferenceStore-backed (synchronous, fast).
+                    sourceLinkStore.getLink("al:${initialRequest.anilistId}") != null
+                }
+                is DetailsRequest.ByExtension -> true
+            }
+            return when (globalDefault) {
+                DataSource.ANILIST -> if (hasAnilist) DataSource.ANILIST else DataSource.EXTENSION
+                DataSource.EXTENSION -> if (hasExtension) DataSource.EXTENSION else DataSource.ANILIST
+            }
+        }
+
+        // 3. Entry mode fallback (no global default set).
         return when (initialRequest) {
             is DetailsRequest.ByAniListId -> DataSource.ANILIST
             is DetailsRequest.ByExtension -> DataSource.EXTENSION

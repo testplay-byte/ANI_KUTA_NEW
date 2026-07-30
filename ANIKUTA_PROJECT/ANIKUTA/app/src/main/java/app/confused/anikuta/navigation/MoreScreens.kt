@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Settings
@@ -112,6 +113,7 @@ fun SettingsScreen(
     onOpenGeneral: () -> Unit = {},
     onOpenPlayer: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
@@ -163,6 +165,16 @@ fun SettingsScreen(
                     title = "Backup & Restore",
                     subtitle = "Back up your library, history, and preferences",
                     onClick = onOpenBackup,
+                )
+            }
+            // About — app version, updates, downloads
+            item {
+                SettingsSectionLabel("About")
+                MoreRow(
+                    icon = Icons.Filled.Info,
+                    title = "About & Updates",
+                    subtitle = "App version, check for updates, downloaded versions",
+                    onClick = onOpenAbout,
                 )
             }
         }
