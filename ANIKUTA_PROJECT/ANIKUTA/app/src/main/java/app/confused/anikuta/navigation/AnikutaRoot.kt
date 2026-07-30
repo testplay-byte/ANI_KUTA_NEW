@@ -69,7 +69,7 @@ fun AnikutaRoot() {
     // Activity recreation). Clearing these prevents crashes from stale state.
     LaunchedEffect(Unit) {
         appController.linkingTarget = null
-        appController.downloadPickerTarget = null
+        appController.dismissDownloadPicker()
         if (appController.resolverState !is VideoResolverState.Hidden) {
             appController.hideResolver()
         }
