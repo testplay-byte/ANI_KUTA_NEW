@@ -110,15 +110,28 @@ fun AnikutaRoot() {
         }
 
         // ── App update check on startup ──
-        // Checks for updates once on app open. If an update is available AND
-        // not in the 6-hour dismiss cooldown, shows the update bottom sheet.
+        // Checks for updates immediately on app open. If an update is available,
+        // shows the update bottom sheet right away (no 6-hour cooldown during
+        // testing — the user wants to see the update dialog every time they
+        // open the app so they can test the download/install flow repeatedly).
+        //
+        // Also cleans up old downloaded APKs (versions <= current) to free storage.
         LaunchedEffect(Unit) {
             try {
+                android.util.Log.d("AnikutaUpdate", "Startup: cleaning up old downloads...")
+                appController.updateManager.cleanupOldDownloads()
+
                 android.util.Log.d("AnikutaUpdate", "Startup: beginning update check...")
-                // checkForUpdate() is suspend — awaits the network result.
-                appController.updateManager.checkForUpdate()
-                android.util.Log.d("AnikutaUpdate", "Startup: check complete, shouldShow=${appController.updateManager.shouldShowDialog()}, latest=${appController.updateManager.latestUpdate.value?.versionName}")
-                if (appController.updateManager.shouldShowDialog()) {
+                val update = appController.updateManager.checkForUpdate()
+                android.util.Log.d("AnikutaUpdate", "Startup: check complete, update=${update?.versionName}")
+
+                if (update != null) {
+                    // Clear the dismiss cooldown so the dialog ALWAYS shows on
+                    // startup (for testing the update flow repeatedly). Once the
+                    // system is fully tested, we can re-enable the 6-hour cooldown.
+                    org.koin.core.context.GlobalContext.get()
+                        .get<app.confused.anikuta.core.appupdate.AppUpdatePreferences>()
+                        .clearDismissCooldown()
                     appController.showUpdateSheet()
                 }
             } catch (e: Exception) {

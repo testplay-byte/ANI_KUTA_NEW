@@ -716,8 +716,16 @@ object AboutDestination : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val appController = koinInject<AppController>()
         app.confused.anikuta.feature.settings.AboutScreen(
             onBack = { navigator.pop() },
+            onUpdateFound = {
+                // Clear the dismiss cooldown so the sheet shows, then display it
+                org.koin.core.context.GlobalContext.get()
+                    .get<app.confused.anikuta.core.appupdate.AppUpdatePreferences>()
+                    .clearDismissCooldown()
+                appController.showUpdateSheet()
+            },
         )
     }
 }

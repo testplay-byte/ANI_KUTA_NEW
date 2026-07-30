@@ -264,6 +264,90 @@ class AppUpdateManager(
         _latestUpdate.value = null
     }
 
+    // ── Downloaded state helpers ──
+
+    /**
+     * Checks if the latest update has already been downloaded.
+     *
+     * Returns true if [latestUpdate] is non-null AND an APK file for that
+     * version exists on disk. The UI uses this to show "Install" instead of
+     * "Download" when the user re-opens the update sheet.
+     */
+    fun isLatestUpdateDownloaded(): Boolean {
+        val update = _latestUpdate.value ?: return false
+        return preferences.isVersionDownloaded(update.versionName)
+    }
+
+    /**
+     * Gets the file path for the latest update's downloaded APK.
+     * Returns null if not downloaded.
+     */
+    fun getDownloadedApkPath(): String? {
+        val update = _latestUpdate.value ?: return null
+        return preferences.getDownloadedApkPath(update.versionName)
+    }
+
+    /**
+     * Deletes a downloaded APK file AND removes its record.
+     * Also clears download progress if it matches the current download.
+     *
+     * @param filePath the file path of the APK to delete.
+     * @return true if the file was deleted (or didn't exist).
+     */
+    fun deleteDownloadedApk(filePath: String): Boolean {
+        // Clear download progress if it's for the same file
+        _downloadProgress.value = null
+        return preferences.deleteDownloadedApk(filePath)
+    }
+
+    /**
+     * Cleans up old downloaded APKs — deletes any APK whose version is older
+     * than or equal to the currently installed version.
+     *
+     * Called on app startup to prevent storage bloat. After a successful
+     * update install, the old APK files are no longer needed.
+     */
+    fun cleanupOldDownloads() {
+        val currentCode = getInstalledVersionCode()
+        val downloaded = preferences.getDownloadedApks()
+        if (downloaded.isEmpty()) return
+
+        Log.i(TAG, "cleanupOldDownloads: checking ${downloaded.size} downloaded APKs against current versionCode=$currentCode")
+        var cleaned = 0
+        downloaded.forEach { apk ->
+            // Parse the version code from the APK's version name
+            val apkCode = parseVersionCode(apk.versionName)
+            if (apkCode <= currentCode) {
+                // This APK is for the current or older version — delete it
+                if (preferences.deleteDownloadedApk(apk.filePath)) {
+                    cleaned++
+                    Log.d(TAG, "cleanupOldDownloads: deleted ${apk.versionName} (code=$apkCode <= $currentCode)")
+                }
+            }
+        }
+        if (cleaned > 0) {
+            Log.i(TAG, "cleanupOldDownloads: cleaned up $cleaned old APK(s)")
+        }
+    }
+
+    /**
+     * Parses a semantic version string ("MAJOR.MINOR.PATCH") into a comparable
+     * long: `major * 10000 + minor * 100 + patch`.
+     */
+    private fun parseVersionCode(versionName: String): Long {
+        val cleanName = versionName.removePrefix("v").removePrefix("V")
+            .substringBefore("-").substringBefore("+").trim()
+        val parts = cleanName.split(".")
+        return try {
+            val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+            val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+            major * 10000L + minor * 100L + patch
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
     private fun createOkHttpClient(): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)

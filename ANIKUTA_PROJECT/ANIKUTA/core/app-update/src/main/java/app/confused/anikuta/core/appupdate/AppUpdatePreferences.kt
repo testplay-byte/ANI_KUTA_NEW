@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import java.io.File
 
 /**
  * Preferences for the app self-update system.
@@ -17,14 +18,17 @@ import kotlinx.serialization.json.Json
  * - [lastDismissedTimestamp] — when the user dismissed it (for the 6-hour cooldown).
  * - [downloadedApks] — list of downloaded APK files (for the "downloaded versions" UI).
  *
- * # 6-hour dismiss cooldown
+ * # Downloaded APK lifecycle
  *
- * When the user clicks "Cancel" on the update dialog, we record the version +
- * timestamp. On the next app open, [AppUpdateManager.shouldShowDialog] checks:
- * - Is the dismissed version the same as the latest available version?
- * - Has 6 hours passed since the dismiss timestamp?
- * If same version AND < 6 hours → don't show the dialog automatically.
- * The user can still check manually in Settings → About → Updates.
+ * When a download completes, the APK file path is recorded in [downloadedApks].
+ * The user can:
+ * - **Install** — opens the system installer via [ApkInstaller].
+ * - **Delete** — [deleteDownloadedApk] removes both the file from disk AND the
+ *   record from the list. This frees up storage.
+ *
+ * Old downloaded APKs (for versions older than the currently installed one) are
+ * automatically cleaned up by [AppUpdateManager.cleanupOldDownloads] on app
+ * startup to prevent storage bloat.
  *
  * @param preferenceStore the backing preference store.
  */
@@ -69,19 +73,11 @@ class AppUpdatePreferences(
     fun getLastDismissedVersion(): String = lastDismissedVersionPref.get()
     fun getLastDismissedTimestamp(): Long = lastDismissedTimestampPref.get()
 
-    /**
-     * Records that the user dismissed the update dialog for [version].
-     * Sets both the version + the current timestamp (for the 6-hour cooldown).
-     */
     fun recordDismissal(version: String) {
         lastDismissedVersionPref.set(version)
         lastDismissedTimestampPref.set(System.currentTimeMillis())
     }
 
-    /**
-     * Checks if the update dialog should be suppressed for [version].
-     * Returns true if the user dismissed this exact version AND < 6 hours have passed.
-     */
     fun isDismissedInCooldown(version: String): Boolean {
         val dismissedVersion = lastDismissedVersionPref.get()
         if (dismissedVersion != version) return false
@@ -89,6 +85,12 @@ class AppUpdatePreferences(
         if (dismissedAt == 0L) return false
         val elapsed = System.currentTimeMillis() - dismissedAt
         return elapsed < DISMISS_COOLDOWN_MS
+    }
+
+    /** Clears the dismiss cooldown (for testing). */
+    fun clearDismissCooldown() {
+        lastDismissedVersionPref.set("")
+        lastDismissedTimestampPref.set(0L)
     }
 
     // ── Downloaded APKs ──
@@ -104,11 +106,53 @@ class AppUpdatePreferences(
         downloadedApksPref.set(current)
     }
 
-    /** Removes a downloaded APK record (does NOT delete the file). */
+    /**
+     * Removes a downloaded APK record from the list (does NOT delete the file).
+     * Use [deleteDownloadedApk] to also delete the file from disk.
+     */
     fun removeDownloadedApk(filePath: String) {
         val current = downloadedApksPref.get().toMutableList()
         current.removeAll { it.filePath == filePath }
         downloadedApksPref.set(current)
+    }
+
+    /**
+     * Deletes the downloaded APK file from disk AND removes its record.
+     * Returns true if the file was deleted (or didn't exist).
+     */
+    fun deleteDownloadedApk(filePath: String): Boolean {
+        var deleted = true
+        try {
+            val file = File(filePath)
+            if (file.exists()) {
+                deleted = file.delete()
+            }
+        } catch (e: Exception) {
+            // Non-fatal — still remove from the list
+            deleted = false
+        }
+        removeDownloadedApk(filePath)
+        return deleted
+    }
+
+    /**
+     * Checks if an APK for [versionName] has been downloaded.
+     * Verifies both the record exists AND the file is present on disk.
+     */
+    fun isVersionDownloaded(versionName: String): Boolean {
+        return downloadedApksPref.get().any { apk ->
+            apk.versionName == versionName && File(apk.filePath).exists()
+        }
+    }
+
+    /**
+     * Gets the file path for a downloaded APK by version name.
+     * Returns null if not downloaded or file doesn't exist.
+     */
+    fun getDownloadedApkPath(versionName: String): String? {
+        return downloadedApksPref.get().firstOrNull { apk ->
+            apk.versionName == versionName && File(apk.filePath).exists()
+        }?.filePath
     }
 
     private companion object {

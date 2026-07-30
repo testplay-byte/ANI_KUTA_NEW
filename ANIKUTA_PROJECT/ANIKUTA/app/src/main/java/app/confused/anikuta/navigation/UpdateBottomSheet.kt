@@ -2,7 +2,9 @@
 
 package app.confused.anikuta.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,17 +13,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -29,7 +36,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.appupdate.DownloadProgress
@@ -41,22 +50,26 @@ import java.util.Locale
 /**
  * The update bottom sheet — shown when [AppController.showUpdateDialog] is true.
  *
- * # Design
+ * # Design (per user spec)
  *
  * A bottom-up sheet (per DESIGN_LANGUAGE §2 — `dragHandle = null`) with:
- * - Title: "New update available"
- * - Version + release date
- * - Scrollable changelog/description area
- * - Download button (becomes a progress bar when downloading)
- * - Cancel button
+ * - **Bold, theme-colored heading** at the top: "New Update Available"
+ * - **Version + release date** just below the heading
+ * - **Dedicated changelog section** (scrollable) with a "What's New" sub-heading
+ * - **Download + Cancel on the SAME row** at the bottom:
+ *   - Left: Download button (wider) — transforms into an in-button progress bar
+ *   - Right: X (cancel) button — closes the sheet
  *
- * # Behavior
+ * # Download button states
  *
- * - **Cancel** → [AppController.dismissUpdateSheet] (records 6-hour cooldown).
- * - **Download** → [AppUpdateManager.startDownload]. The button transforms into
- *   a progress bar. When complete, the APK is auto-opened via [AppUpdateManager.installDownloadedApk].
- * - If the user closes the sheet while downloading, the download continues in
- *   the background (the [AppUpdateManager] coroutine scope is independent).
+ * - **Not downloaded**: "Download" with a download icon
+ * - **Downloading**: The button itself becomes a progress bar — the fill color
+ *   moves left-to-right, and "Downloading X%" text is shown inside
+ * - **Downloaded**: "Install Update" with an install icon
+ * - **Error**: "Retry" with error text above
+ *
+ * The button does NOT disappear or get replaced by a separate progress bar —
+ * it transforms in place (per user spec).
  *
  * @param appController the app controller (provides update state + callbacks).
  */
@@ -68,6 +81,9 @@ fun UpdateBottomSheet(appController: AppController) {
 
     val info = updateInfo ?: return
 
+    // Check if this version is already downloaded (file exists on disk)
+    val isAlreadyDownloaded = appController.updateManager.isLatestUpdateDownloaded()
+
     ModalBottomSheet(
         onDismissRequest = { appController.dismissUpdateSheet() },
         sheetState = sheetState,
@@ -78,20 +94,21 @@ fun UpdateBottomSheet(appController: AppController) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 300.dp, max = 600.dp)
+                .heightIn(min = 320.dp, max = 620.dp)
                 .padding(top = 24.dp, start = 20.dp, end = 20.dp, bottom = 20.dp),
         ) {
-            // ── Title ──
+            // ── Heading (bold + theme-colored) ──
             Text(
-                text = "New update available",
+                text = "New Update Available",
                 fontFamily = RobotoFamily,
-                fontSize = 22.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.primary,
+                letterSpacing = (-0.5).sp,
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Version + date ──
+            // ── Version + release date ──
             val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -101,9 +118,9 @@ fun UpdateBottomSheet(appController: AppController) {
                 Text(
                     text = "v${info.versionName}",
                     fontFamily = RobotoFamily,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (info.releaseDate > 0) {
                     Text(
@@ -114,169 +131,241 @@ fun UpdateBottomSheet(appController: AppController) {
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Changelog (scrollable) ──
+            // ── Changelog section ──
             Text(
-                text = "What's new",
+                text = "What's New",
                 fontFamily = RobotoFamily,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = info.changelog,
-                    fontFamily = RobotoFamily,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 18.sp,
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 80.dp, max = 280.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(14.dp),
+                ) {
+                    Text(
+                        text = info.changelog,
+                        fontFamily = RobotoFamily,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 19.sp,
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Download button / progress bar ──
-            DownloadSection(
-                progress = downloadProgress,
-                apkSizeBytes = info.apkSizeBytes,
-                onDownload = { appController.updateManager.startDownload() },
-                onInstall = {
-                    appController.updateManager.installDownloadedApk()
-                },
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // ── Cancel button ──
-            OutlinedButton(
-                onClick = { appController.dismissUpdateSheet() },
+            // ── Bottom row: Download (left) + Cancel/X (right) ──
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "Cancel",
-                    fontFamily = RobotoFamily,
-                    fontWeight = FontWeight.SemiBold,
+                // Download button (takes most of the width) — transforms into progress bar
+                DownloadButtonWithProgress(
+                    progress = downloadProgress,
+                    isAlreadyDownloaded = isAlreadyDownloaded,
+                    apkSizeBytes = info.apkSizeBytes,
+                    onDownload = { appController.updateManager.startDownload() },
+                    onInstall = {
+                        val path = appController.updateManager.getDownloadedApkPath()
+                        appController.updateManager.installDownloadedApk(path)
+                    },
+                    modifier = Modifier.weight(1f),
                 )
+
+                // X (cancel) button — square-ish, icon only
+                IconButton(
+                    onClick = { appController.dismissUpdateSheet() },
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
 }
 
+/**
+ * The download button that transforms into a progress bar in-place.
+ *
+ * States:
+ * - `progress == null && !isAlreadyDownloaded` → "Download" button
+ * - `progress == null && isAlreadyDownloaded` → "Install Update" button
+ * - `progress.isComplete` → "Install Update" button
+ * - `progress.error != null` → "Retry" button
+ * - `progress` (downloading) → button with fill animation + "Downloading X%"
+ *
+ * The fill animation: the button background fills left-to-right proportionally
+ * to the download percentage, giving a visual progress indicator inside the
+ * button itself.
+ */
 @Composable
-private fun DownloadSection(
+private fun DownloadButtonWithProgress(
     progress: DownloadProgress?,
+    isAlreadyDownloaded: Boolean,
     apkSizeBytes: Long?,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val isDownloading = progress != null && !progress.isComplete && progress.error == null
+    val isComplete = progress != null && progress.isComplete && progress.error == null
+    val hasError = progress != null && progress.error != null
+    val showInstall = isAlreadyDownloaded || isComplete
+
     when {
-        progress == null -> {
-            // Initial state — show download button.
+        hasError -> {
+            // Error state — show retry
             Button(
                 onClick = onDownload,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = modifier.height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text(
+                    text = "Retry",
+                    fontFamily = RobotoFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                )
+            }
+        }
+        showInstall -> {
+            // Already downloaded or download complete → show Install
+            Button(
+                onClick = onInstall,
+                modifier = modifier.height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                 ),
             ) {
+                Icon(
+                    imageVector = Icons.Filled.InstallMobile,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Install Update",
+                    fontFamily = RobotoFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                )
+            }
+        }
+        isDownloading -> {
+            // Downloading — in-button progress bar with fill animation
+            val percent = progress?.percent ?: 0
+            DownloadProgressButton(
+                percent = percent,
+                speedText = progress?.let {
+                    val downloaded = formatBytes(it.bytesDownloaded)
+                    val total = it.totalBytes?.let { formatBytes(it) } ?: "?"
+                    "$downloaded / $total"
+                } ?: "",
+                modifier = modifier,
+            )
+        }
+        else -> {
+            // Initial state — show Download button
+            Button(
+                onClick = onDownload,
+                modifier = modifier.height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Download,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 val sizeText = apkSizeBytes?.let { " (${formatBytes(it)})" } ?: ""
                 Text(
                     text = "Download$sizeText",
                     fontFamily = RobotoFamily,
                     fontWeight = FontWeight.ExtraBold,
-                )
-            }
-        }
-        progress.error != null -> {
-            // Error state.
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "Download failed: ${progress.error}",
-                    fontFamily = RobotoFamily,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = onDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                ) {
-                    Text("Retry", fontFamily = RobotoFamily, fontWeight = FontWeight.ExtraBold)
-                }
-            }
-        }
-        progress.isComplete -> {
-            // Download complete — show install button.
-            Button(
-                onClick = onInstall,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                ),
-            ) {
-                Text(
-                    text = "Install Update",
-                    fontFamily = RobotoFamily,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-            }
-        }
-        else -> {
-            // Downloading — show progress bar.
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Downloading…",
-                        fontFamily = RobotoFamily,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "${progress.percent ?: 0}%",
-                        fontFamily = RobotoFamily,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { (progress.percent ?: 0) / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                val downloaded = formatBytes(progress.bytesDownloaded)
-                val total = progress.totalBytes?.let { formatBytes(it) } ?: "?"
-                Text(
-                    text = "$downloaded / $total",
-                    fontFamily = RobotoFamily,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
                 )
             }
         }
     }
 }
+
+/**
+ * A button that shows download progress with a left-to-right fill animation.
+ *
+ * The button background fills proportionally to [percent]. Inside, it shows
+ * "Downloading X%" centered. The fill color is a lighter shade of primary,
+ * giving a smooth visual progress indicator.
+ */
+@Composable
+private fun DownloadProgressButton(
+    percent: Int,
+    speedText: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+    ) {
+        // Fill layer (left-to-right, proportional to percent)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(percent / 100f)
+                .height(52.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.primary),
+        )
+        // Text overlay (centered, on top of fill)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Downloading $percent%",
+                fontFamily = RobotoFamily,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onPrimary,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** Helper: fills a fraction of the max width. */
+private fun Modifier.fillMaxWidth(fraction: Float): Modifier =
+    this.then(androidx.compose.foundation.layout.fillMaxWidth(fraction))
 
 /** Formats a byte count into a human-readable string (e.g., "12.3 MB"). */
 private fun formatBytes(bytes: Long): String {

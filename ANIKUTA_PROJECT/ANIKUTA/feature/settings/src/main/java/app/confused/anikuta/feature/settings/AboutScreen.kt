@@ -17,24 +17,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +47,7 @@ import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -56,31 +55,38 @@ import java.util.Locale
 /**
  * The About & Updates screen — reached from Settings → About & Updates.
  *
- * Contains:
- * - **App version** — the installed version name + code.
- * - **Auto-update toggle** — whether to check for updates on app open.
- * - **Check for updates** button — manually triggers a check.
- * - **Latest update info** — if an update is available, shows version + changelog
- *   + a download button (with progress bar).
- * - **Downloaded versions** — list of previously downloaded APKs. Tapping one
- *   opens the system installer to re-install it.
+ * # Design (per user spec)
  *
- * The download continues in the background even if the user navigates away
- * (the [AppUpdateManager] coroutine scope is independent of this screen).
+ * - **App version** section: shows installed version name + code.
+ * - **Updates** section: auto-check toggle + manual "Check for updates" button.
+ *   Does NOT show the update info card inline — the update is shown as a
+ *   bottom-up sheet (UpdateBottomSheet) when an update is found via [onUpdateFound].
+ * - **Downloaded versions** section: only shows if there are actual downloaded
+ *   APK files on disk. Each row has Install + Delete buttons.
+ *
+ * # Manual check behavior
+ *
+ * When the user taps "Check for updates":
+ * 1. The check runs (suspend).
+ * 2. If an update is found → [onUpdateFound] is called → the caller shows the
+ *    UpdateBottomSheet.
+ * 3. If no update → "You're on the latest version" is shown inline.
+ * 4. If error → error card is shown inline.
  *
  * @param onBack Pops this screen.
+ * @param onUpdateFound Called when a manual check finds an update. The caller
+ *   should show the UpdateBottomSheet in response.
  */
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
+    onUpdateFound: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val updateManager = koinInject<AppUpdateManager>()
     val updatePrefs = koinInject<AppUpdatePreferences>()
     val scope = rememberCoroutineScope()
 
-    val latestUpdate by updateManager.latestUpdate.collectAsStateWithLifecycle()
-    val downloadProgress by updateManager.downloadProgress.collectAsStateWithLifecycle()
     val isChecking by updateManager.isChecking.collectAsStateWithLifecycle()
     val lastCheckError by updateManager.lastCheckError.collectAsStateWithLifecycle()
     val downloadedApks by updatePrefs.observeDownloadedApks().collectAsStateWithLifecycle(emptyList())
@@ -112,6 +118,11 @@ fun AboutScreen(
 
     val scrollState = rememberScrollState()
     val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.US) }
+
+    // Filter downloaded APKs to only show those that actually exist on disk
+    val validDownloadedApks = remember(downloadedApks) {
+        downloadedApks.filter { apk -> File(apk.filePath).exists() }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "About", scrollState = scrollState)
@@ -162,8 +173,7 @@ fun AboutScreen(
                 GeneralToggleCard(
                     title = "Auto-check for updates",
                     subtitle = "Check for new versions when the app starts. If an update is " +
-                        "available (and you haven't dismissed it in the last 6 hours), the " +
-                        "update dialog appears automatically.",
+                        "available, the update dialog appears automatically.",
                     checked = autoCheckEnabled,
                     onCheckedChange = { updatePrefs.setUpdateCheckEnabled(it) },
                 )
@@ -182,7 +192,13 @@ fun AboutScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable(enabled = !isChecking) {
-                                scope.launch { updateManager.checkForUpdate() }
+                                scope.launch {
+                                    val result = updateManager.checkForUpdate()
+                                    if (result != null) {
+                                        // Update found — show the bottom sheet via callback
+                                        onUpdateFound()
+                                    }
+                                }
                             }
                             .padding(horizontal = 16.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -223,110 +239,8 @@ fun AboutScreen(
                 }
             }
 
-            // Latest update info (if available)
-            if (latestUpdate != null) {
-                item {
-                    val info = latestUpdate!!
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                        ) {
-                            Text(
-                                text = "Update available: v${info.versionName}",
-                                fontFamily = RobotoFamily,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            if (info.releaseDate > 0) {
-                                Text(
-                                    text = "Released: ${dateFormatter.format(Date(info.releaseDate))}",
-                                    fontFamily = RobotoFamily,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = info.changelog.take(500) + if (info.changelog.length > 500) "…" else "",
-                                fontFamily = RobotoFamily,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                lineHeight = 16.sp,
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Download button / progress
-                            when {
-                                downloadProgress == null -> {
-                                    Button(
-                                        onClick = { updateManager.startDownload() },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                        ),
-                                    ) {
-                                        Icon(Icons.Filled.Download, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Download Update", fontWeight = FontWeight.ExtraBold)
-                                    }
-                                }
-                                downloadProgress!!.isComplete -> {
-                                    Button(
-                                        onClick = { updateManager.installDownloadedApk() },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                        ),
-                                    ) {
-                                        Text("Install Now", fontWeight = FontWeight.ExtraBold)
-                                    }
-                                }
-                                downloadProgress!!.error != null -> {
-                                    Text(
-                                        text = "Error: ${downloadProgress!!.error}",
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontSize = 12.sp,
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
-                                        onClick = { updateManager.startDownload() },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(14.dp),
-                                    ) {
-                                        Text("Retry", fontWeight = FontWeight.ExtraBold)
-                                    }
-                                }
-                                else -> {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Text("Downloading…", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                        Text("${downloadProgress!!.percent ?: 0}%", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    LinearProgressIndicator(
-                                        progress = { (downloadProgress!!.percent ?: 0) / 100f },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (lastCheckError != null) {
+            // Error display (only if a check failed)
+            if (lastCheckError != null && !isChecking) {
                 item {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
@@ -352,37 +266,19 @@ fun AboutScreen(
                         }
                     }
                 }
-            } else if (!isChecking) {
-                item {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text = "You're on the latest version.",
-                            fontFamily = RobotoFamily,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp),
-                        )
-                    }
-                }
             }
 
-            // ── Downloaded versions ──
-            if (downloadedApks.isNotEmpty()) {
+            // ── Downloaded versions (only show if there are valid files) ──
+            if (validDownloadedApks.isNotEmpty()) {
                 item {
                     SettingsSectionLabel("Downloaded versions")
                 }
-                items(downloadedApks, key = { it.filePath }) { apk ->
+                items(validDownloadedApks, key = { it.filePath }) { apk ->
                     DownloadedApkRow(
                         apk = apk,
                         dateFormatter = dateFormatter,
                         onInstall = { updateManager.installDownloadedApk(apk.filePath) },
-                        onRemove = { updatePrefs.removeDownloadedApk(apk.filePath) },
+                        onDelete = { updateManager.deleteDownloadedApk(apk.filePath) },
                     )
                 }
             }
@@ -390,12 +286,18 @@ fun AboutScreen(
     }
 }
 
+/**
+ * One downloaded APK row — shows version + size + date + Install + Delete buttons.
+ *
+ * The Delete button (trash icon) deletes the file from disk AND removes the record.
+ * The Install button opens the system installer.
+ */
 @Composable
 private fun DownloadedApkRow(
     apk: DownloadedApk,
     dateFormatter: SimpleDateFormat,
     onInstall: () -> Unit,
-    onRemove: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -431,11 +333,37 @@ private fun DownloadedApkRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            OutlinedButton(
+            // Install button
+            Button(
                 onClick = onInstall,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                ),
+                modifier = Modifier.padding(end = 4.dp),
             ) {
-                Text("Install", fontWeight = FontWeight.SemiBold)
+                Icon(
+                    imageVector = Icons.Filled.InstallMobile,
+                    contentDescription = null,
+                    modifier = Modifier.width(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Install",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 12.sp,
+                )
+            }
+            // Delete button (trash icon)
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.padding(start = 0.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }
