@@ -719,6 +719,7 @@ object AboutDestination : Screen {
         val appController = koinInject<AppController>()
         app.confused.anikuta.feature.settings.AboutScreen(
             onBack = { navigator.pop() },
+            hideUpdates = app.confused.anikuta.BuildConfig.BETA_BUILD,
             onUpdateFound = {
                 // Clear the dismiss cooldown so the sheet shows, then display it
                 org.koin.core.context.GlobalContext.get()

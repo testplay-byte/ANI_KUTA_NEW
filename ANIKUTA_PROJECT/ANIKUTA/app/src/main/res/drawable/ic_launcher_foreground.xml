@@ -1,20 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ANIKUTA icon — lime green play button on dark background. -->
+<!-- ANIKUTA icon — solid neon green. No details, no play button, just plain neon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Full background -->
     <path
-        android:fillColor="#0a120a"
+        android:fillColor="#39FF14"
         android:pathData="M0,0h108v108h-108z" />
-    <!-- Top-half slightly lighter -->
-    <path
-        android:fillColor="#0f1a0f"
-        android:pathData="M0,0h108v54h-108z" />
-    <!-- Play triangle — lime green (#B1F256 matches the app's brand color) -->
-    <path
-        android:fillColor="#B1F256"
-        android:pathData="M42,36L42,72L72,54Z" />
 </vector>

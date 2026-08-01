@@ -87,6 +87,7 @@ import java.util.Locale
 fun AboutScreen(
     onBack: () -> Unit,
     onUpdateFound: () -> Unit = {},
+    hideUpdates: Boolean = false,
 ) {
     val context = LocalContext.current
     val updateManager = koinInject<AppUpdateManager>()
@@ -179,11 +180,11 @@ fun AboutScreen(
                 }
             }
 
-            // ── Updates section ──
+            // ── Updates section (hidden in beta build) ──
+            if (!hideUpdates) {
             item {
                 SettingsSectionLabel("Updates")
             }
-
             // Auto-update toggle
             item {
                 GeneralToggleCard(
@@ -359,6 +360,7 @@ fun AboutScreen(
                     )
                 }
             }
+            } // end if (!hideUpdates)
         }
     }
 }

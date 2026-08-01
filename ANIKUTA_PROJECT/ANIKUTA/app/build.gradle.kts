@@ -28,14 +28,20 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
             signingConfig = signingConfigs.getByName("debug")
+            // Beta build: disable the update checker so the beta APK doesn't
+            // show test updates from the main repo.
+            buildConfigField("boolean", "BETA_BUILD", "true")
         }
         getByName("release") {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("boolean", "BETA_BUILD", "false")
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 }
 
