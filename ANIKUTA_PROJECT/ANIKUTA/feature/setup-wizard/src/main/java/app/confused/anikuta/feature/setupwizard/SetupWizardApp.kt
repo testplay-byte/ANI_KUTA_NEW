@@ -854,6 +854,23 @@ fun FolderScreen(folderSelected: Boolean, folderUri: String, onSelect: (String) 
                     }
                     if (!scanning) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary)
                 }
+                // "Change folder" button — lets the user re-select a different folder
+                // after already selecting one. Without this, the folder picker was
+                // unreachable once a folder was chosen.
+                if (!scanning) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { folderLauncher.launch(null) },
+                        shape = RoundedCornerShape(999.dp),
+                        modifier = Modifier.align(Alignment.CenterHorizontally).height(40.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Change Folder", color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = RobotoFamily,
+        fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
             }
         }
         // Fixed footer

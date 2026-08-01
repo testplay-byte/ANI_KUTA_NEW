@@ -256,7 +256,18 @@ class AppController(
      *
      * @param action the navigation action to execute (possibly deferred).
      */
+    private var firstDetailNavigationDone = false
+
     private fun withAdGate(action: () -> Unit) {
+        // Skip the ad on the very first anime detail navigation per app session.
+        // The user sees the first anime without an ad, then ads start from the
+        // second navigation onwards. This gives a smoother first-use experience.
+        if (!firstDetailNavigationDone) {
+            firstDetailNavigationDone = true
+            Log.i("AnikutaAds", "withAdGate: skipping ad (first detail navigation)")
+            action()
+            return
+        }
         if (adManager.shouldShowAd()) {
             // Store the deferred action + show the ad dialog.
             pendingAdNavigation = action

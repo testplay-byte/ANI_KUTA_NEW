@@ -159,15 +159,11 @@ fun AnikutaRoot() {
                     return@LaunchedEffect
                 }
 
-                // ── Beta build: skip the update check ──
-                // The beta APK is a standalone release — it should NOT check
-                // for updates from the main repo (which has test releases like
-                // v0.3.0 that would confuse beta testers).
-                if (app.confused.anikuta.BuildConfig.BETA_BUILD) {
-                    android.util.Log.d("AnikutaUpdate", "Startup: BETA_BUILD=true — skipping update check")
-                    appController.updateManager.clearUpdateState()
-                    return@LaunchedEffect
-                }
+                // ── Update check ──
+                // Both beta and non-beta builds check for updates. The update source
+                // (GitHubUpdateSource) is configured in AppUpdateModule to point at
+                // the beta repo (Confused-Creature-180/APP_BETA), so beta builds
+                // check against beta releases — not the old test repo.
 
                 android.util.Log.d("AnikutaUpdate", "Startup: cleaning up old downloads + state...")
                 appController.updateManager.cleanupOldDownloads()

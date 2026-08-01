@@ -185,7 +185,7 @@ fun UpdateBottomSheet(appController: AppController) {
                     // "View on GitHub" link — always present so the user can
                     // see the full release page even if the changelog has no URLs.
                     Spacer(modifier = Modifier.height(10.dp))
-                    val releaseUrl = "https://github.com/testplay-byte/ANI_KUTA_NEW/releases/tag/v${info.versionName}"
+                    val releaseUrl = "https://github.com/Confused-Creature-180/APP_BETA/releases/tag/v${info.versionName}"
                     Text(
                         text = "View full release on GitHub →",
                         fontFamily = RobotoFamily,

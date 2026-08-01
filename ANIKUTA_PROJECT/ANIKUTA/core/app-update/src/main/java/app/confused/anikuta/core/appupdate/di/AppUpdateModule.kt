@@ -33,11 +33,11 @@ import java.util.concurrent.TimeUnit
 val appUpdateModule = module {
     single { AppUpdatePreferences(get<PreferenceStore>()) }
 
-    // GitHub update source — configured for the ANIKUTA repo.
+    // GitHub update source — configured for the beta repo.
     single<UpdateSource>(named("github")) {
         GitHubUpdateSource(
-            owner = "testplay-byte",
-            repo = "ANI_KUTA_NEW",
+            owner = "Confused-Creature-180",
+            repo = "APP_BETA",
             client = get(named("appUpdate")),
         )
     }
