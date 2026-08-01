@@ -210,6 +210,26 @@ class AppUpdateManager(
             return
         }
 
+        // ── Retry cleanup ──
+        // If the previous download errored, delete the partial APK file +
+        // clear the download progress state before starting a fresh download.
+        // Without this, the retry would either append to a corrupted file or
+        // the UI would stay stuck on the "Retry" button.
+        _downloadProgress.value?.let { existing ->
+            if (existing.error != null) {
+                Log.i(TAG, "startDownload: previous download errored — cleaning up before retry")
+                val apkFile = downloader.getApkFile(update.versionName)
+                if (apkFile.exists()) {
+                    val deleted = apkFile.delete()
+                    Log.d(TAG, "startDownload: deleted partial APK (${apkFile.absolutePath}) — $deleted")
+                }
+                // Remove any stale record from the downloaded APKs list
+                preferences.removeDownloadedApk(apkFile.absolutePath)
+                // Clear the error state so the UI shows "downloading" immediately
+                _downloadProgress.value = null
+            }
+        }
+
         Log.i(TAG, "startDownload: starting download of ${update.versionName}")
         scope.launch {
             downloader.download(update).collectLatest { progress ->

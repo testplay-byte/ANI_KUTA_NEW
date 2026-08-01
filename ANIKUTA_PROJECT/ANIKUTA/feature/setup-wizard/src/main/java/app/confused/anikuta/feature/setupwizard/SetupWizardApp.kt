@@ -213,10 +213,45 @@ fun SetupWizardApp(onComplete: () -> Unit = {}) {
         customCard = Color(customCardArgb.toLong() and 0xFFFFFFFF),
         customText = Color(customTextArgb.toLong() and 0xFFFFFFFF),
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
+        // ── Poison screen always forces dark mode ──
+        // When the user is on the "Choose Your Poison" screen, override the
+        // entire theme to dark red — regardless of the user's chosen theme mode.
+        // The PoisonScreen's hardcoded colors (0xFFFF6B6B etc.) are designed
+        // for a dark background and look wrong on light.
+        val isPoisonStep = state.step == WizardStep.POISON
+        if (isPoisonStep) {
+            val baseScheme = MaterialTheme.colorScheme
+            val poisonScheme = baseScheme.copy(
+                primary = Color(0xFFFF5252),
+                onPrimary = Color(0xFF1A0000),
+                primaryContainer = Color(0xFF5C1A1A),
+                onPrimaryContainer = Color(0xFFFFE5E5),
+                background = Color(0xFF1A0808),
+                surface = Color(0xFF240D0D),
+                surfaceVariant = Color(0xFF2E1414),
+                onBackground = Color(0xFFFFEAEA),
+                onSurface = Color(0xFFFFEAEA),
+            )
+            MaterialTheme(colorScheme = poisonScheme) {
+                WizardContent(state, poisonStep, applyPreferences, onComplete)
+            }
+        } else {
+            WizardContent(state, poisonStep, applyPreferences, onComplete)
+        }
+    }
+}
+
+@Composable
+private fun WizardContent(
+    state: WizardState,
+    poisonStep: Int,
+    applyPreferences: () -> Unit,
+    onComplete: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Progress bar — FLUSH AT THE VERY TOP (y=0, full width, no padding).
                 // The transparent status bar is drawn ON TOP of this bar.
@@ -296,34 +331,17 @@ fun SetupWizardApp(onComplete: () -> Unit = {}) {
                                 onNext = { state = state.copy(step = WizardStep.POISON); poisonStep = 0 }
                             )
                             WizardStep.POISON -> {
-                                // ── Poison screen: force a red ColorScheme override ──
-                                // The "Choose Your Poison" screen keeps its own dark-red
-                                // aesthetic regardless of the user's chosen theme — it's
-                                // a stylized ad-consent screen. We wrap just this screen's
-                                // content in a MaterialTheme override so the rest of the
-                                // wizard continues to use the user's real theme.
-                                val baseScheme = MaterialTheme.colorScheme
-                                val poisonScheme = baseScheme.copy(
-                                    primary = Color(0xFFFF5252),
-                                    onPrimary = Color(0xFF1A0000),
-                                    primaryContainer = Color(0xFF5C1A1A),
-                                    onPrimaryContainer = Color(0xFFFFE5E5),
-                                    background = Color(0xFF1A0808),
-                                    surface = Color(0xFF240D0D),
-                                    surfaceVariant = Color(0xFF2E1414),
-                                    onBackground = Color(0xFFFFEAEA),
-                                    onSurface = Color(0xFFFFEAEA),
+                                // Poison screen — the outer WizardContent already wraps
+                                // in the poison ColorScheme when step == POISON, so we
+                                // just render the screen directly.
+                                PoisonScreen(
+                                    adSettings = state.adSettings,
+                                    onUpdate = { state = state.copy(adSettings = it) },
+                                    step = poisonStep,
+                                    onStepChange = { poisonStep = it },
+                                    onBack = { state = state.copy(step = WizardStep.RESTORE_SUCCESS) },
+                                    onNext = { state = state.copy(step = WizardStep.FINISH) }
                                 )
-                                MaterialTheme(colorScheme = poisonScheme) {
-                                    PoisonScreen(
-                                        adSettings = state.adSettings,
-                                        onUpdate = { state = state.copy(adSettings = it) },
-                                        step = poisonStep,
-                                        onStepChange = { poisonStep = it },
-                                        onBack = { state = state.copy(step = WizardStep.RESTORE_SUCCESS) },
-                                        onNext = { state = state.copy(step = WizardStep.FINISH) }
-                                    )
-                                }
                             }
                             WizardStep.FINISH -> FinishScreen(
                                 state = state,

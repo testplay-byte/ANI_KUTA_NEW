@@ -44,17 +44,17 @@ class DownloadPreferences(
     val hasDownloadFolder: Boolean
         get() = downloadFolderUri().get().isNotBlank()
 
-    /** The download method (NORMAL = single-threaded; ADVANCED = multi-threaded + resume). */
+    /** The download method (NORMAL = single-threaded; ADVANCED = multi-threaded + resume). Default: ADVANCED. */
     fun method(): Preference<DownloadMethod> =
-        store.getEnum(KEY_METHOD, DownloadMethod.NORMAL)
+        store.getEnum(KEY_METHOD, DownloadMethod.ADVANCED)
 
     /** Only download on Wi-Fi (default true). */
     fun wifiOnly(): Preference<Boolean> =
         store.getBoolean(KEY_WIFI_ONLY, true)
 
-    /** Max parallel downloads (default 3; 1..5 clamped at the UI layer). */
+    /** Max parallel downloads (default 1; 1..5 clamped at the UI layer). */
     fun concurrentDownloads(): Preference<Int> =
-        store.getInt(KEY_CONCURRENT, 3)
+        store.getInt(KEY_CONCURRENT, 1)
 
     /** Show the download button on episode rows (default true). */
     fun showDownloadButton(): Preference<Boolean> =
@@ -65,10 +65,10 @@ class DownloadPreferences(
     /**
      * When ON, tapping download auto-picks the best video based on the
      * preference lists (no picker sheet). When OFF, shows the picker sheet.
-     * Default: ON (single-tap downloads — the common case).
+     * Default: OFF (user picks the video manually).
      */
     fun autoDownload(): Preference<Boolean> =
-        store.getBoolean(KEY_AUTO_PICK, true)
+        store.getBoolean(KEY_AUTO_PICK, false)
 
     // ── Preference lists (priority-ordered) ──
 
@@ -141,11 +141,11 @@ class DownloadPreferences(
 
     /** Number of parallel threads for the Advanced method (default 4; 1..8). */
     fun advancedThreadCount(): Preference<Int> =
-        store.getInt(KEY_ADV_THREADS, 4)
+        store.getInt(KEY_ADV_THREADS, 8)  // 8 threads (maximum) by default
 
     /** Max retries per chunk on failure for the Advanced method (default 3; 0..10). */
     fun advancedMaxRetries(): Preference<Int> =
-        store.getInt(KEY_ADV_RETRIES, 3)
+        store.getInt(KEY_ADV_RETRIES, 25)  // 25 retries by default
 
     /**
      * Min file size (in MB) to use multi-threading. Files smaller than this
@@ -153,7 +153,7 @@ class DownloadPreferences(
      * small files). Default: 5 MB.
      */
     fun advancedMinSizeMb(): Preference<Int> =
-        store.getInt(KEY_ADV_MIN_SIZE_MB, 5)
+        store.getInt(KEY_ADV_MIN_SIZE_MB, 1)  // 1 MB — multi-threading for all files
 
     companion object {
         private const val KEY_FOLDER_URI = "pref_dl_folder_uri"

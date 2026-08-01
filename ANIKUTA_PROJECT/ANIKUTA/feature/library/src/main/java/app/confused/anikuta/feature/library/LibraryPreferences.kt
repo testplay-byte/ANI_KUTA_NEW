@@ -25,10 +25,10 @@ class LibraryPreferences(
         store.getEnum("pref_library_display_mode", LibraryDisplayMode.COMPACT_GRID)
 
     fun columnsPortrait(): Preference<Int> =
-        store.getInt("pref_library_columns_portrait", 0)    // 0 = auto (adaptive)
+        store.getInt("pref_library_columns_portrait", 3)    // 3 columns by default
 
     fun columnsLandscape(): Preference<Int> =
-        store.getInt("pref_library_columns_landscape", 0)
+        store.getInt("pref_library_columns_landscape", 3)
 
     fun sortType(): Preference<LibrarySortType> =
         store.getEnum("pref_library_sort_type", LibrarySortType.TITLE)
@@ -37,22 +37,22 @@ class LibraryPreferences(
         store.getBoolean("pref_library_sort_ascending", true)
 
     fun showContinueWatching(): Preference<Boolean> =
-        store.getBoolean("pref_library_show_continue_watching", true)
+        store.getBoolean("pref_library_show_continue_watching", false)  // OFF by default
 
     /** Controls what the episode badge shows: total, released, or off. */
     fun episodeBadgeMode(): Preference<EpisodeBadgeMode> =
-        store.getEnum("pref_library_episode_badge_mode", EpisodeBadgeMode.RELEASED)
+        store.getEnum("pref_library_episode_badge_mode", EpisodeBadgeMode.OFF)  // OFF by default
 
     fun showScoreBadge(): Preference<Boolean> =
         store.getBoolean("pref_library_show_score_badge", false)
 
     /** When true, the library header shows "N in Library" instead of just "Library". */
     fun showTotalEntries(): Preference<Boolean> =
-        store.getBoolean("pref_library_show_total_entries", false)
+        store.getBoolean("pref_library_show_total_entries", true)  // ON by default
 
     /** Number of lines for anime titles in grid/list (1, 2, or 3). */
     fun titleLines(): Preference<Int> =
-        store.getInt("pref_library_title_lines", 2)
+        store.getInt("pref_library_title_lines", 1)  // 1 line by default
 
     /** Where the episode badge sits on the card. */
     fun episodeBadgePosition(): Preference<BadgePosition> =

@@ -62,7 +62,7 @@ class DetailsViewPreferences(
      */
     private val defaultDataSourcePref = preferenceStore.getString(
         KEY_DEFAULT_DATA_SOURCE,
-        DEFAULT_ENTRY_MODE,
+        VALUE_ANILIST,  // Default: AniList (per user spec)
     )
 
     /**
