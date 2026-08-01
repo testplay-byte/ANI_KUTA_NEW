@@ -488,7 +488,7 @@ fun WelcomeScreen(onNext: () -> Unit) {
         // Fixed header
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             Text(
-                "Welcome to Anime App!",
+                "Welcome to beta version",
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 42.sp,
                 fontWeight = FontWeight.ExtraBold,

@@ -407,6 +407,37 @@ class AppUpdateManager(
     }
 
     /**
+     * Deletes ALL downloaded APK files + records — unconditionally.
+     *
+     * Called by the post-install success popup after the user installs an
+     * update. At that point, ALL downloaded APKs are stale (the just-installed
+     * one has been consumed by the system installer, and any older ones are
+     * definitely not needed).
+     *
+     * This is more aggressive than [cleanupOldDownloads] (which only deletes
+     * APKs whose version <= the installed version) — but it's the correct
+     * behavior for the post-install case because the GitHub release tag
+     * version (e.g., "0.3.0" → code 300) doesn't match the APK's actual
+     * build versionCode (e.g., 7), so the version comparison in
+     * [cleanupOldDownloads] would fail to delete the APK.
+     */
+    fun deleteAllDownloadedApks() {
+        val downloaded = preferences.getDownloadedApks()
+        if (downloaded.isEmpty()) return
+        Log.i(TAG, "deleteAllDownloadedApks: deleting ${downloaded.size} APK(s)")
+        downloaded.forEach { apk ->
+            preferences.deleteDownloadedApk(apk.filePath)
+        }
+        // Also clear the downloader's cache directory for good measure
+        try {
+            downloader.clearAllDownloads()
+        } catch (e: Exception) {
+            Log.w(TAG, "deleteAllDownloadedApks: clearAllDownloads failed (non-fatal)", e)
+        }
+        Log.i(TAG, "deleteAllDownloadedApks: complete")
+    }
+
+    /**
      * Parses a semantic version string ("MAJOR.MINOR.PATCH") into a comparable
      * long: `major * 10000 + minor * 100 + patch`.
      */

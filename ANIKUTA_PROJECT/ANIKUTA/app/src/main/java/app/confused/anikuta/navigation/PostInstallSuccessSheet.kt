@@ -80,11 +80,15 @@ fun PostInstallSuccessSheet(appController: AppController) {
     // 2000ms: dismiss
     LaunchedEffect(Unit) {
         delay(1500)
-        // Delete the just-installed APK file (no longer needed).
+        // Delete ALL downloaded APK files — after an install, none are needed.
+        // Uses deleteAllDownloadedApks() (not cleanupOldDownloads) because the
+        // GitHub release tag version (e.g. "0.3.0" → code 300) doesn't match
+        // the APK's actual build versionCode (e.g. 7), so the version-based
+        // comparison in cleanupOldDownloads would fail to delete the APK.
         try {
-            appController.updateManager.cleanupOldDownloads()
+            appController.updateManager.deleteAllDownloadedApks()
         } catch (e: Exception) {
-            android.util.Log.w("PostInstall", "cleanupOldDownloads failed (non-fatal)", e)
+            android.util.Log.w("PostInstall", "deleteAllDownloadedApks failed (non-fatal)", e)
         }
         phase = 1
         delay(500)
