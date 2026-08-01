@@ -62,6 +62,12 @@ class AdsPreferences(
     /** The ad URL. Default: https://1118000.xyz/ */
     private val adUrlPref = preferenceStore.getString(KEY_AD_URL, DEFAULT_AD_URL)
 
+    /** Ad branding (poison vs pills). Default: POISON. */
+    private val adNamePref = preferenceStore.getString(KEY_AD_NAME, AdName.POISON.name)
+
+    /** Ad timing (when ads appear). Default: APP_OPEN. */
+    private val adTimingPref = preferenceStore.getString(KEY_AD_TIMING, AdTiming.APP_OPEN.name)
+
     // ── Ads enabled ──
 
     fun isAdsEnabled(): Boolean = adsEnabledPref.get()
@@ -110,12 +116,40 @@ class AdsPreferences(
 
     fun observeAdUrl(): Flow<String> = adUrlPref.changes()
 
+    // ── Ad branding (poison vs pills) ──
+
+    fun getAdName(): AdName {
+        val name = adNamePref.get()
+        return AdName.entries.firstOrNull { it.name == name } ?: AdName.POISON
+    }
+
+    fun setAdName(name: AdName) = adNamePref.set(name.name)
+
+    fun observeAdName(): Flow<AdName> = adNamePref.changes().map { name ->
+        AdName.entries.firstOrNull { it.name == name } ?: AdName.POISON
+    }
+
+    // ── Ad timing ──
+
+    fun getAdTiming(): AdTiming {
+        val timing = adTimingPref.get()
+        return AdTiming.entries.firstOrNull { it.name == timing } ?: AdTiming.APP_OPEN
+    }
+
+    fun setAdTiming(timing: AdTiming) = adTimingPref.set(timing.name)
+
+    fun observeAdTiming(): Flow<AdTiming> = adTimingPref.changes().map { timing ->
+        AdTiming.entries.firstOrNull { it.name == timing } ?: AdTiming.APP_OPEN
+    }
+
     private companion object {
         private const val KEY_ADS_ENABLED = "pref_ads_enabled"
         private const val KEY_DAILY_QUOTA = "pref_ads_daily_quota"
         private const val KEY_COOLDOWN_MINUTES = "pref_ads_cooldown_minutes"
         private const val KEY_MIN_STAY_SECONDS = "pref_ads_min_stay_seconds"
         private const val KEY_AD_URL = "pref_ads_url"
+        private const val KEY_AD_NAME = "pref_ads_name"
+        private const val KEY_AD_TIMING = "pref_ads_timing"
 
         private const val MIN_QUOTA = 1
         private const val MAX_QUOTA = 1000

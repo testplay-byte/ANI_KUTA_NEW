@@ -24,9 +24,33 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import app.confused.anikuta.feature.setupwizard.theme.*
 import app.confused.anikuta.feature.setupwizard.components.*
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import app.confused.anikuta.core.ads.AdName
+import app.confused.anikuta.core.ads.AdTiming
+import app.confused.anikuta.core.ads.AdsPreferences
+import app.confused.anikuta.core.preferences.AccentPreset
+import app.confused.anikuta.core.preferences.ThemePreferences
+import app.confused.anikuta.core.preferences.SetupWizardPreferences
+import app.confused.anikuta.core.download.DownloadPreferences
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.PowerManager
+import android.provider.Settings
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 
 // ============================================================================
@@ -53,8 +77,6 @@ enum class WizardStep(val route: String) {
 
 val STEP_ORDER = WizardStep.values().toList()
 
-enum class AdName(val label: String) { POISON("Daily dose of poison"), PILLS("Daily dose of pills") }
-enum class AdTiming(val label: String) { APP_OPEN("On app open"), EPISODE_START("On episode start"), BOTH("Both") }
 enum class ThemeMode(val label: String) { DARK("Dark"), LIGHT("Light"), SYSTEM("System") }
 
 data class AdSettings(
@@ -75,6 +97,7 @@ data class WizardState(
     val paletteIndex: Int = 0,
     val themeMode: ThemeMode = ThemeMode.DARK,
     val folderSelected: Boolean = false,
+    val folderUri: String = "",
     val permissions: Map<String, Boolean> = mapOf("installApps" to false, "notifications" to false, "battery" to false, "allFiles" to false),
     val linkedAnime: List<LinkedAnime> = DEFAULT_ANIME,
     val adSettings: AdSettings = AdSettings(),
@@ -138,28 +161,43 @@ fun SetupWizardApp(onComplete: () -> Unit = {}) {
 
     // ── Real preference integration ──
     // When the user finishes the wizard, apply their choices to the real
-    // app preferences (theme + ads) and mark the wizard as completed.
-    val context = androidx.compose.ui.platform.LocalContext.current
+    // app preferences (theme + ads + folder) and mark the wizard as completed.
+    val context = LocalContext.current
     val applyPreferences: () -> Unit = {
         try {
             val prefs = org.koin.core.context.GlobalContext.get()
-            // Apply theme preferences
-            val themePrefs = prefs.get<app.confused.anikuta.core.preferences.ThemePreferences>()
+            // Apply theme preferences — map the wizard's paletteIndex to a real AccentPreset.
+            val themePrefs = prefs.get<ThemePreferences>()
             val mode = when (state.themeMode) {
                 ThemeMode.DARK -> app.confused.anikuta.core.preferences.ThemeMode.DARK
                 ThemeMode.LIGHT -> app.confused.anikuta.core.preferences.ThemeMode.LIGHT
                 ThemeMode.SYSTEM -> app.confused.anikuta.core.preferences.ThemeMode.SYSTEM
             }
             themePrefs.themeMode.set(mode)
-            // Apply ad preferences
-            val adsPrefs = prefs.get<app.confused.anikuta.core.ads.AdsPreferences>()
+            val accentPreset = when (state.paletteIndex) {
+                0 -> AccentPreset.LIME
+                1 -> AccentPreset.TEAL
+                2 -> AccentPreset.VIOLET  // wizard "Purple" → real Violet
+                3 -> AccentPreset.CORAL
+                else -> AccentPreset.LIME
+            }
+            themePrefs.accentPreset.set(accentPreset)
+            // Apply ad preferences — persist the poison/pills choice + timing.
+            val adsPrefs = prefs.get<AdsPreferences>()
             adsPrefs.setAdsEnabled(true)
             adsPrefs.setDailyQuota(state.adSettings.frequency.coerceIn(1, 10))
+            adsPrefs.setAdName(state.adSettings.name)
+            adsPrefs.setAdTiming(state.adSettings.timing)
+            // Persist the selected SAF folder URI (if any) to DownloadPreferences.
+            if (state.folderUri.isNotBlank()) {
+                val dlPrefs = prefs.get<DownloadPreferences>()
+                dlPrefs.downloadFolderUri().set(state.folderUri)
+            }
             // Mark wizard as completed
-            val setupPrefs = prefs.get<app.confused.anikuta.core.preferences.SetupWizardPreferences>()
+            val setupPrefs = prefs.get<SetupWizardPreferences>()
             setupPrefs.setCompleted(true)
         } catch (e: Exception) {
-            android.util.Log.e("SetupWizard", "Failed to apply preferences", e)
+            Log.e("SetupWizard", "Failed to apply preferences", e)
         }
     }
 
@@ -204,14 +242,13 @@ fun SetupWizardApp(onComplete: () -> Unit = {}) {
                             WizardStep.FOLDER -> FolderScreen(
                                 palette = effectivePalette,
                                 folderSelected = state.folderSelected,
-                                onSelect = { state = state.copy(folderSelected = true) },
+                                folderUri = state.folderUri,
+                                onSelect = { uri -> state = state.copy(folderSelected = true, folderUri = uri) },
                                 onBack = { state = state.copy(step = WizardStep.THEME) },
                                 onNext = { state = state.copy(step = WizardStep.PERMISSIONS) }
                             )
                             WizardStep.PERMISSIONS -> PermissionsScreen(
                                 palette = effectivePalette,
-                                permissions = state.permissions,
-                                onToggle = { key -> state = state.copy(permissions = state.permissions.toMutableMap().apply { this[key] = !(this[key] ?: false) }) },
                                 onBack = { state = state.copy(step = WizardStep.FOLDER) },
                                 onNext = { state = state.copy(step = WizardStep.RESTORE) }
                             )
@@ -540,9 +577,43 @@ fun ThemeScreen(palette: WizardPalette, paletteIndex: Int, onPaletteChange: (Int
 }
 
 @Composable
-fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, onSelect: () -> Unit, onBack: () -> Unit, onNext: () -> Unit) {
+fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, folderUri: String, onSelect: (String) -> Unit, onBack: () -> Unit, onNext: () -> Unit) {
+    val context = LocalContext.current
     var scanning by remember(folderSelected) { mutableStateOf(folderSelected) }
     LaunchedEffect(scanning) { if (scanning) { delay(1500); scanning = false } }
+
+    // Real SAF folder picker — OpenDocumentTree returns a content:// URI for the
+    // user-selected folder tree. We persist it + take persistable URI permission
+    // so it survives app restarts (otherwise we'd lose access on next launch).
+    val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            try {
+                // Take persistable read+write permission so the URI stays valid
+                // across app restarts (default permission is one-shot).
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (e: Exception) {
+                Log.e("SetupWizard", "Failed to take persistable URI permission", e)
+            }
+            onSelect(uri.toString())
+        }
+    }
+
+    // Parse the folder display name from the SAF URI — the URI looks like
+    //   content://com.android.externalstorage.documents/tree/primary%3AAnime%2FLibrary
+    // The last path segment (URL-decoded) gives the folder name (e.g. "primary:Anime/Library").
+    val folderDisplayName = remember(folderUri) {
+        if (folderUri.isBlank()) "" else runCatching {
+            val tree = Uri.parse(folderUri)
+            val last = tree.lastPathSegment ?: ""
+            // Decode %2F → /, %3A → :, etc. Strip the "primary:" prefix if present.
+            val decoded = Uri.decode(last)
+            decoded.substringAfter("primary:").ifBlank { decoded }
+        }.getOrDefault("")
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Fixed header
         PageHeading("Folder", palette)
@@ -567,7 +638,7 @@ fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, onSelect: () -
             Spacer(Modifier.height(12.dp))
             if (!folderSelected) {
                 OutlinedButton(
-                    onClick = onSelect,
+                    onClick = { folderLauncher.launch(null) },
                     shape = RoundedCornerShape(999.dp),
                     modifier = Modifier.align(Alignment.CenterHorizontally).height(44.dp),
                     border = BorderStroke(1.5.dp, palette.primary)
@@ -578,7 +649,7 @@ fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, onSelect: () -
         fontWeight = FontWeight.Bold)
                 }
             } else {
-                // Folder card
+                // Folder card — show the real (parsed) folder name + URI host.
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(palette.surface2).border(1.dp, palette.primary, RoundedCornerShape(16.dp)).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -588,9 +659,13 @@ fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, onSelect: () -
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("/storage/anime-library", color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontFamily = RobotoFamily,
-        fontWeight = FontWeight.Bold)
-                        Text(if (scanning) "Scanning…" else "247 items · ready", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text(
+                            if (folderDisplayName.isNotBlank()) folderDisplayName else "Folder selected",
+                            color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontFamily = RobotoFamily,
+        fontWeight = FontWeight.Bold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(if (scanning) "Scanning…" else "Ready", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f), fontSize = 12.sp)
                     }
                     if (!scanning) Icon(Icons.Default.Check, null, tint = palette.primary)
                 }
@@ -614,7 +689,83 @@ fun FolderScreen(palette: WizardPalette, folderSelected: Boolean, onSelect: () -
 }
 
 @Composable
-fun PermissionsScreen(palette: WizardPalette, permissions: Map<String, Boolean>, onToggle: (String) -> Unit, onBack: () -> Unit, onNext: () -> Unit) {
+fun PermissionsScreen(palette: WizardPalette, onBack: () -> Unit, onNext: () -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // ── Real permission state — checked from the system, not a local map ──
+    var installApps by remember { mutableStateOf(checkInstallAppsPermission(context)) }
+    var notifications by remember { mutableStateOf(checkNotificationsPermission(context)) }
+    var battery by remember { mutableStateOf(checkBatteryPermission(context)) }
+    var allFiles by remember { mutableStateOf(checkAllFilesPermission(context)) }
+
+    fun refreshAll() {
+        installApps = checkInstallAppsPermission(context)
+        notifications = checkNotificationsPermission(context)
+        battery = checkBatteryPermission(context)
+        allFiles = checkAllFilesPermission(context)
+    }
+
+    // When the user returns from a system Settings screen (ON_RESUME), the
+    // permission may have been granted/revoked — re-check all of them.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshAll()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Notification permission uses the runtime permission contract (Android 13+).
+    // The other three go through system Settings intents.
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notifications = granted
+        // Also refresh the others — anything could have changed off-screen.
+        refreshAll()
+    }
+
+    fun requestPermission(key: String) {
+        try {
+            when (key) {
+                "installApps" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    }
+                }
+                "notifications" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        // Below Android 13, notifications are granted at install time.
+                        notifications = true
+                    }
+                }
+                "battery" -> {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+                "allFiles" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SetupWizard", "Failed to launch permission intent for $key", e)
+        }
+    }
+
     val rows = listOf(
         "installApps" to ("Install apps" to "Allow installing anime extensions"),
         "notifications" to ("Notifications" to "Get notified about new episodes"),
@@ -635,7 +786,13 @@ fun PermissionsScreen(palette: WizardPalette, permissions: Map<String, Boolean>,
             Subtitle("Optional: you can skip these", modifier = Modifier.fillMaxWidth().padding(top = 0.dp))
             Spacer(Modifier.height(8.dp))
             rows.forEach { (key, pair) ->
-                val isOn = permissions[key] ?: false
+                val isOn = when (key) {
+                    "installApps" -> installApps
+                    "notifications" -> notifications
+                    "battery" -> battery
+                    "allFiles" -> allFiles
+                    else -> false
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp)).background(palette.surface2).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -662,7 +819,14 @@ fun PermissionsScreen(palette: WizardPalette, permissions: Map<String, Boolean>,
         fontWeight = FontWeight.Bold)
                         Text(pair.second, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f), fontSize = 11.sp)
                     }
-                    Switch(checked = isOn, onCheckedChange = { onToggle(key) }, colors = SwitchDefaults.colors(checkedTrackColor = palette.primary, checkedThumbColor = palette.onPrimary))
+                    // When toggled ON, launch the real system intent. When toggled
+                    // OFF, do nothing here — the system Settings screen handles
+                    // revocation; the actual state is re-checked on ON_RESUME.
+                    Switch(
+                        checked = isOn,
+                        onCheckedChange = { requested -> if (requested) requestPermission(key) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = palette.primary, checkedThumbColor = palette.onPrimary),
+                    )
                 }
             }
         }
@@ -671,8 +835,53 @@ fun PermissionsScreen(palette: WizardPalette, permissions: Map<String, Boolean>,
     }
 }
 
+// ── Permission check helpers — return the actual system state ──
+
+private fun checkInstallAppsPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        context.packageManager.canRequestPackageInstalls()
+
+private fun checkNotificationsPermission(context: Context): Boolean {
+    // POST_NOTIFICATIONS only exists on Android 13+ (TIRAMISU). Below that,
+    // notifications are granted at install time and are always "on".
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+    return ContextCompat.checkSelfPermission(
+        context, Manifest.permission.POST_NOTIFICATIONS,
+    ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun checkBatteryPermission(context: Context): Boolean {
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+    return pm.isIgnoringBatteryOptimizations(context.packageName)
+}
+
+private fun checkAllFilesPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+
 @Composable
 fun RestoreScreen(palette: WizardPalette, onBack: () -> Unit, onNext: () -> Unit, onSkip: () -> Unit) {
+    val context = LocalContext.current
+
+    // Real file picker — OpenDocument launches the system file picker and
+    // returns a content:// URI for the user-selected backup file. We then
+    // proceed to the FORMAT step (the demo restore flow continues from there).
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                // Take persistable read permission so the URI survives app
+                // restarts (used later when the actual restore runs).
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (e: Exception) {
+                Log.e("SetupWizard", "Failed to take persistable URI permission for backup file", e)
+            }
+            // Proceed to the FORMAT step (demo restore flow).
+            onNext()
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Fixed header
         PageHeading("Restore Backup", palette)
@@ -690,7 +899,7 @@ fun RestoreScreen(palette: WizardPalette, onBack: () -> Unit, onNext: () -> Unit
             )
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = onNext,
+                onClick = { fileLauncher.launch(arrayOf("*/*")) },
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier.align(Alignment.CenterHorizontally).height(44.dp),
                 border = BorderStroke(1.5.dp, palette.primary)
@@ -1261,7 +1470,7 @@ fun PoisonScreen(palette: WizardPalette, adSettings: AdSettings, onUpdate: (AdSe
                 0 -> {
                     Text("What should we call it?", color = Color(0xFFD9A0A0), fontSize = 12.sp, fontFamily = RobotoFamily, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).background(palette.surface2).border(1.dp, palette.surface3, RoundedCornerShape(999.dp)).padding(4.dp)) {
-                        AdName.values().forEach { name ->
+                        AdName.entries.forEach { name ->
                             Row(
                                 Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(999.dp)).background(if (adSettings.name == name) palette.primary else Color.Transparent).clickable { onUpdate(adSettings.copy(name = name)) },
                                 horizontalArrangement = Arrangement.Center,
@@ -1293,7 +1502,7 @@ fun PoisonScreen(palette: WizardPalette, adSettings: AdSettings, onUpdate: (AdSe
                 2 -> {
                     Text("When should they appear?", color = Color(0xFFD9A0A0), fontSize = 12.sp, fontFamily = RobotoFamily, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AdTiming.values().forEach { t ->
+                        AdTiming.entries.forEach { t ->
                             Box(
                                 Modifier.clip(RoundedCornerShape(999.dp)).background(if (adSettings.timing == t) palette.primary else palette.surface2).border(1.dp, if (adSettings.timing == t) palette.primary else palette.surface3, RoundedCornerShape(999.dp)).clickable { onUpdate(adSettings.copy(timing = t)) }.padding(horizontal = 14.dp, vertical = 8.dp)
                             ) {

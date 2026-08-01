@@ -11,6 +11,7 @@ dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.preferences)
     implementation(projects.core.ads)
+    implementation(projects.core.download)
 
     // Koin
     implementation(libs.koin.androidx.compose)

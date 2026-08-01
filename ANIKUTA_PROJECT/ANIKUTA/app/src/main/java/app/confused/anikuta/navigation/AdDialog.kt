@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +34,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.ads.AdInteractionState
+import app.confused.anikuta.core.ads.AdName
+import app.confused.anikuta.core.ads.AdsPreferences
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 
 /**
@@ -57,6 +61,11 @@ import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 fun AdDialog(appController: AppController) {
     val adState by appController.adManager.state.collectAsState()
 
+    // Read the user's ad branding preference (poison vs pills) to show the
+    // correct emoji + title text in the dialog.
+    val adsPrefs = koinInject<AdsPreferences>()
+    val adName by adsPrefs.observeAdName().collectAsStateWithLifecycle(initialValue = adsPrefs.getAdName())
+
     // Don't render if idle or in a terminal state.
     if (adState is AdInteractionState.Idle ||
         adState is AdInteractionState.Completed ||
@@ -74,6 +83,7 @@ fun AdDialog(appController: AppController) {
         when (val state = adState) {
             is AdInteractionState.DialogShowing -> AdDialogCard(
                 remainingQuota = state.remainingQuota,
+                adName = adName,
                 onAccept = { appController.onAdAccepted() },
                 onCancel = { appController.onAdCancelled() },
             )
@@ -92,6 +102,7 @@ fun AdDialog(appController: AppController) {
 @Composable
 private fun AdDialogCard(
     remainingQuota: Int,
+    adName: AdName,
     onAccept: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -106,7 +117,7 @@ private fun AdDialogCard(
             modifier = Modifier.padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Pill emoji icon area
+            // Ad branding emoji — poison (☠️) or pills (💊) based on user's preference
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(50),
@@ -114,14 +125,14 @@ private fun AdDialogCard(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = "\uD83D\uDC8A", // pill emoji
+                        text = adName.emoji,
                         fontSize = 36.sp,
                     )
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "Your daily dose of pills is here.",
+                text = adName.titleText,
                 fontFamily = RobotoFamily,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
