@@ -18,6 +18,7 @@ val preferenceModule = module {
     single { ContentIdPreferences(get()) }
     single { LinkingPreferences(get()) }
     single { DetailsViewPreferences(get()) }
+    single { SetupWizardPreferences(get()) }
     single<ProviderPreferences> { AndroidProviderPreferences(get()) }
 
     // ── Phase 8 (Doc 04 violation 2): EpisodeDisplayPreferences ──
@@ -25,10 +26,4 @@ val preferenceModule = module {
     // (now in :core:preferences) so :feature:anime-details +
     // :feature:episode-settings can koinInject it without a feature→feature dep.
     single { EpisodeDisplayPreferences(get()) }
-
-    // ── Setup Wizard gate ──
-    // Tracks whether the user has completed the first-launch Setup Wizard.
-    // :app reads this on startup to decide whether to show the wizard or the
-    // main UI. Lives here so :app doesn't need a feature→feature dep.
-    single { SetupWizardPreferences(get()) }
 }

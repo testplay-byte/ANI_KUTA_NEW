@@ -66,6 +66,22 @@ private val navItems = listOf(
 @Composable
 fun AnikutaRoot() {
     val appController = koinInject<AppController>()
+    val setupPrefs = koinInject<app.confused.anikuta.core.preferences.SetupWizardPreferences>()
+    val isSetupCompleted by setupPrefs.observeCompleted()
+        .collectAsStateWithLifecycle(initialValue = setupPrefs.isCompleted())
+
+    // ── Setup Wizard gate ──
+    // On first launch (or when the user re-runs the wizard from Settings),
+    // show the SetupWizardApp instead of the main Navigator.
+    if (!isSetupCompleted) {
+        app.confused.anikuta.feature.setupwizard.SetupWizardApp(
+            onComplete = {
+                // The wizard calls setCompleted(true) internally.
+                // The state flow will recompose this composable → main UI shows.
+            },
+        )
+        return
+    }
 
     // TODO(owner): Voyager 1.0.1 doesn't have rememberNavigator(). The app
     // loses the back stack when the Activity is recreated (e.g. switching apps).

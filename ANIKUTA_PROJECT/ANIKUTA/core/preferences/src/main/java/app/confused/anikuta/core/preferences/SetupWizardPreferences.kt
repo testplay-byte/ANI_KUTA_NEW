@@ -1,28 +1,30 @@
 package app.confused.anikuta.core.preferences
 
+import kotlinx.coroutines.flow.Flow
+
 /**
- * One-shot preference gate for the Setup Wizard.
+ * Tracks whether the setup wizard has been completed.
  *
- * Tracks whether the user has completed the first-launch Setup Wizard flow.
- * - On a fresh install, [isCompleted] returns `false` → the app shows the wizard
- *   instead of the main `AnikutaRoot` UI.
- * - On wizard completion, the wizard calls [setCompleted]`(true)` and the app
- *   recomposes to show the main UI.
- * - The "Run setup wizard again" entry in Settings → General sets it back to
- *   `false` to re-trigger the wizard.
+ * On first app launch, [isCompleted] returns `false` → the app shows the
+ * `SetupWizardApp` composable instead of the main `Navigator`. When the user
+ * finishes the wizard, [setCompleted] is called with `true` → the app
+ * recomposes to show the main UI.
  *
- * Lives in `:core:preferences` (not `:feature:setup-wizard`) so that `:app`
- * can read it on startup WITHOUT depending on the wizard feature module
- * (Rule §14 — feature modules are leaf deps).
+ * The user can re-run the wizard from Settings → General → "Run setup wizard
+ * again", which calls [setCompleted]`(false)` + recomposes.
  */
 class SetupWizardPreferences(
-    private val store: PreferenceStore,
+    private val preferenceStore: PreferenceStore,
 ) {
-    private val completedPref = store.getBoolean("pref_setup_wizard_completed", false)
+    private val completedPref = preferenceStore.getBoolean(KEY_COMPLETED, false)
 
-    /** Whether the user has already finished the Setup Wizard. */
     fun isCompleted(): Boolean = completedPref.get()
 
-    /** Mark the wizard as completed (or, with `false`, re-arm it). */
     fun setCompleted(done: Boolean) = completedPref.set(done)
+
+    fun observeCompleted(): Flow<Boolean> = completedPref.changes()
+
+    private companion object {
+        private const val KEY_COMPLETED = "pref_setup_wizard_completed"
+    }
 }
