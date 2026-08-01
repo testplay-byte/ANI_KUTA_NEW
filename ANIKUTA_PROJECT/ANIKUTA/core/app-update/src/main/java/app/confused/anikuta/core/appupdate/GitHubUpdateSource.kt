@@ -97,9 +97,15 @@ class GitHubUpdateSource(
 
             // Derive version code from version name.
             val versionCode = parseVersionCode(versionName)
-            if (versionCode <= currentVersionCode) {
+            // Check if this is the same version the user already has.
+            // The GitHub release tag (e.g. "1.0.0") parses to a versionCode
+            // (10000) that doesn't match the APK's actual build versionCode (100).
+            // So we also compare version NAMES — if they match, it's the same
+            // release, not an update.
+            if (versionName == currentVersionName || versionCode <= currentVersionCode) {
                 Log.i(TAG, "fetchLatestUpdate: no update available " +
-                    "(latest=$versionName/$versionCode <= current=$currentVersionName/$currentVersionCode)")
+                    "(latest=$versionName/$versionCode, current=$currentVersionName/$currentVersionCode, " +
+                    "sameVersion=${versionName == currentVersionName})")
                 return@withContext null
             }
 
