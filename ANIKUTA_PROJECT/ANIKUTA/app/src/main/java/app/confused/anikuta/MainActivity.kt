@@ -5,10 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.confused.anikuta.core.designsystem.theme.AnikutaTheme
+import app.confused.anikuta.core.preferences.SetupWizardPreferences
 import app.confused.anikuta.core.preferences.ThemePreferences
+import app.confused.anikuta.feature.setupwizard.SetupWizardApp
 import app.confused.anikuta.navigation.AnikutaRoot
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.compose.koinInject
@@ -26,6 +31,15 @@ import org.koin.compose.koinInject
  * Appearance screen, the entire app recomposes live (no restart) with a
  * smooth cross-fade transition. See ADR-038.
  *
+ * **Setup Wizard (first launch):** On a fresh install, [SetupWizardPreferences]
+ * `.isCompleted()` returns `false` → the activity shows [SetupWizardApp]
+ * (the wizard's own theme, bypassing AnikutaTheme). When the user taps "Start
+ * Exploring", the wizard writes `completed = true` + invokes its `onComplete`
+ * callback, which flips the local `wizardDone` state and recomposes to the
+ * main AnikutaRoot flow. Re-runnable from Settings → General → "Run setup
+ * wizard again" (which sets `completed = false` + finishes the activity so
+ * the next launch shows the wizard again).
+ *
  * **OAuth callback handling:** Tracker OAuth redirects come back as
  * `ACTION_VIEW` intents. This activity receives them (via `singleTask` launch
  * mode) and publishes the callback URL to [pendingOAuthCallback], which
@@ -36,6 +50,28 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            // ── Setup Wizard gate ──
+            // Read once at startup; the wizard's onComplete callback flips this to
+            // true (and the SetupWizardPreferences backing it is also written).
+            // The "Run setup wizard again" entry in Settings → General writes
+            // completed=false + finishes this activity; the next launch re-enters
+            // the wizard branch.
+            val setupPrefs = koinInject<SetupWizardPreferences>()
+            var wizardDone by remember { mutableStateOf(setupPrefs.isCompleted()) }
+
+            if (!wizardDone) {
+                // The wizard brings its own theme (SetupWizardTheme) — bypass the
+                // main AnikutaTheme entirely. When the user picks a palette/mode
+                // on the Theme screen, the wizard writes to ThemePreferences; the
+                // values are picked up the moment wizardDone flips to true and
+                // AnikutaTheme enters composition (it reads the current pref as
+                // its initial value).
+                SetupWizardApp(
+                    onComplete = { wizardDone = true },
+                )
+                return@setContent
+            }
+
             // Observe theme preferences reactively — the app theme updates live
             // with a smooth cross-fade transition.
             val themePrefs = koinInject<ThemePreferences>()

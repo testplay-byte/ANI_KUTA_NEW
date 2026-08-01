@@ -1,5 +1,7 @@
 package app.confused.anikuta.feature.settings
 
+import android.app.Activity
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,7 +14,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -27,6 +32,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +42,7 @@ import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
 import app.confused.anikuta.core.preferences.DetailsViewPreferences
 import app.confused.anikuta.core.preferences.LinkingPreferences
+import app.confused.anikuta.core.preferences.SetupWizardPreferences
 import org.koin.compose.koinInject
 
 /**
@@ -151,6 +159,14 @@ fun GeneralSettingsScreen(
             item {
                 AdSettingsSection()
             }
+
+            // ── Onboarding section ──
+            item {
+                GeneralSectionLabel("Onboarding")
+            }
+            item {
+                SetupWizardRerunCard()
+            }
         }
     }
 
@@ -167,7 +183,9 @@ fun GeneralSettingsScreen(
     }
 }
 
-/** Converts a nullable [DataSource] to a user-facing display label. */
+/**
+ * Converts a nullable [DataSource] to a user-facing display label.
+ */
 private fun DataSource?.displayLabel(): String = when (this) {
     DataSource.ANILIST -> "AniList"
     DataSource.EXTENSION -> "Extension"
@@ -400,4 +418,71 @@ internal fun GeneralSelectorCard(
             }
         }
     }
+}
+
+/**
+ * Card that re-runs the 15-screen Setup Wizard.
+ *
+ * Tapping it sets `SetupWizardPreferences.completed = false` and recreates the
+ * activity — on the next composition, `MainActivity` reads the gate and shows
+ * `SetupWizardApp` instead of `AnikutaRoot`. The user's existing library +
+ * settings are NOT cleared; they just walk through the wizard again.
+ */
+@Composable
+private fun SetupWizardRerunCard() {
+    val setupPrefs = koinInject<SetupWizardPreferences>()
+    val context = LocalContext.current
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable {
+                setupPrefs.setCompleted(false)
+                context.findActivity()?.recreate()
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Run setup wizard again",
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Re-runs the 15-screen onboarding flow (theme, folder, " +
+                        "permissions, ads). Your existing library and settings are kept — " +
+                        "you'll just walk through the wizard again. The app will restart " +
+                        "into the wizard after you tap.",
+                    fontFamily = RobotoFamily,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Walks up the [Context] chain to find the hosting [Activity]. Returns null if
+ * the composable isn't hosted in an activity (e.g. preview).
+ */
+private tailrec fun Context.findActivity(): Activity? {
+    if (this is Activity) return this
+    return (this as? android.content.ContextWrapper)?.baseContext?.findActivity()
 }

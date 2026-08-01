@@ -116,6 +116,7 @@ class App : Application() {
                 // ── Phase 5: ContentIdMigrator (re-keys stores on link/unlink/switch) ──
                 app.confused.anikuta.di.contentIdMigratorModule,
                 // ── Advertising system (modular, customizable, on-device tracking) ──
+                // Also consumed by the Setup Wizard's "Choose Your Poison" screen.
                 app.confused.anikuta.core.ads.di.adsModule,
                 // ── App self-update system (GitHub releases + APK download + install) ──
                 app.confused.anikuta.core.appupdate.di.appUpdateModule,

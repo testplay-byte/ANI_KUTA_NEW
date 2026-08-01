@@ -84,5 +84,9 @@ include(":feature:settings")
 include(":feature:trackers")
 include(":feature:backup")
 include(":feature:download")
+// :feature:setup-wizard — 15-screen animated onboarding flow shown on first
+// launch (gated by SetupWizardPreferences.isCompleted). Re-runnable from
+// Settings → General → "Run setup wizard again".
+include(":feature:setup-wizard")
 
 // :i18n removed (Phase 9 — phantom module declared but no directory existed; re-add when Moko Resources is implemented per ADR-027)

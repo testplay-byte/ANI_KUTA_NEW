@@ -95,9 +95,14 @@ dependencies {
     implementation(projects.feature.backup)
 
     // ── Advertising system ──
+    // (Consumed by AppController's withAdGate + the Setup Wizard's "Choose Your
+    // Poison" screen which writes AdsPreferences.)
     implementation(projects.core.ads)
-    // ── App self-update system ──
+    // ── App self-update system (GitHub releases + APK download + install) ──
     implementation(projects.core.appUpdate)
+
+    // ── Setup Wizard (15-screen onboarding flow; shown on first launch) ──
+    implementation(projects.feature.setupWizard)
 
     // OkHttp + serialization (used by ExtensionModule for extension API HTTP client)
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
