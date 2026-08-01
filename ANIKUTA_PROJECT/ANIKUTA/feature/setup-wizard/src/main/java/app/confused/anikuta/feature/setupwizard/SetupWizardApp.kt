@@ -563,26 +563,21 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
         .collectAsStateWithLifecycle(initialValue = themePrefs.themeMode.get())
     val accentPreset by themePrefs.accentPreset.changes()
         .collectAsStateWithLifecycle(initialValue = themePrefs.accentPreset.get())
-    val amoled by themePrefs.amoled.changes()
-        .collectAsStateWithLifecycle(initialValue = themePrefs.amoled.get())
     val paletteMode by themePrefs.paletteMode.changes()
         .collectAsStateWithLifecycle(initialValue = themePrefs.paletteMode.get())
     val customAccentArgb by themePrefs.customAccentColor.changes()
         .collectAsStateWithLifecycle(initialValue = themePrefs.customAccentColor.get())
     val customAccent = Color(customAccentArgb.toLong() and 0xFFFFFFFF)
 
-    val isDark = when (themeMode) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-    }
-
     val palette = wizardPaletteFromMaterialTheme()
 
-    // The 10 accent-only presets (skip CUSTOM — it's shown separately).
+    // All presets in a single row: 10 accent-only + 5 full-palette, then CUSTOM
+    // at the end. Accent-only presets show a gradient circle; full-palette
+    // presets show a mini swatch (bg + card + accent). Both use the same card
+    // width so the row looks uniform.
     val accentPresets = AccentPreset.entries.filter { !it.isFullPalette && it != AccentPreset.CUSTOM }
-    // The 5 full-palette presets.
     val fullPalettePresets = AccentPreset.entries.filter { it.isFullPalette }
+    val allPresets = accentPresets + fullPalettePresets
 
     fun selectPreset(preset: AccentPreset) {
         if (preset.isFullPalette) {
@@ -640,94 +635,40 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            // ── Accent presets carousel ──
-            Text(
-                "Accent colors",
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                fontFamily = RobotoFamily,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            )
+            // ── Single carousel: ALL presets (10 accent + 5 full-palette + CUSTOM) ──
+            // Accent-only presets show a gradient circle (full-palette card width).
+            // Full-palette presets show a mini swatch (bg + card + accent).
+            // CUSTOM shows a gradient circle with a palette icon.
             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                items(accentPresets) { preset ->
+                items(allPresets) { preset ->
                     val seed = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF)
-                    val selected = accentPreset == preset
-                    Column(
-                        modifier = Modifier.width(80.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) seed.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) seed else Color.Transparent, RoundedCornerShape(16.dp)).clickable { selectPreset(preset) }.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(Modifier.size(40.dp).clip(CircleShape).background(brush = Brush.linearGradient(listOf(seed, seed.copy(alpha = 0.7f)))))
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            preset.displayName,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-                            fontSize = 10.sp,
-                            fontFamily = RobotoFamily,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                // CUSTOM card at the end of the accent row
-                item {
-                    val selected = accentPreset == AccentPreset.CUSTOM
-                    Column(
-                        modifier = Modifier.width(80.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) customAccent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) customAccent else Color.Transparent, RoundedCornerShape(16.dp)).clickable { themePrefs.selectCustom() }.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(brush = Brush.linearGradient(listOf(customAccent, customAccent.copy(alpha = 0.7f)))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Custom",
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-                            fontSize = 10.sp,
-                            fontFamily = RobotoFamily,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            // ── Full-palette presets carousel ──
-            Text(
-                "Full palettes",
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                fontSize = 12.sp,
-                fontFamily = RobotoFamily,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                items(fullPalettePresets) { preset ->
-                    val seed = Color(preset.seedColorArgb.toLong() and 0xFFFFFFFF)
-                    val bg = Color(preset.backgroundArgb!!.toLong() and 0xFFFFFFFF)
-                    val card = Color(preset.cardArgb!!.toLong() and 0xFFFFFFFF)
-                    val text = Color(preset.textArgb!!.toLong() and 0xFFFFFFFF)
                     val selected = accentPreset == preset
                     Column(
                         modifier = Modifier.width(110.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) seed.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) seed else Color.Transparent, RoundedCornerShape(16.dp)).clickable { selectPreset(preset) }.padding(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Mini palette swatch: bg + card + accent
-                        Box(
-                            Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(10.dp)).background(bg).padding(6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        if (preset.isFullPalette) {
+                            // Mini palette swatch: bg + card + accent
+                            val bg = Color(preset.backgroundArgb!!.toLong() and 0xFFFFFFFF)
+                            val card = Color(preset.cardArgb!!.toLong() and 0xFFFFFFFF)
+                            Box(
+                                Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(10.dp)).background(bg).padding(6.dp)
                             ) {
-                                Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(card))
-                                Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(seed))
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(card))
+                                    Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(4.dp)).background(seed))
+                                }
+                            }
+                        } else {
+                            // Accent-only: gradient circle in the same card width
+                            Box(
+                                Modifier.fillMaxWidth().height(54.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(Modifier.size(48.dp).clip(CircleShape).background(brush = Brush.linearGradient(listOf(seed, seed.copy(alpha = 0.7f)))))
                             }
                         }
                         Spacer(Modifier.height(6.dp))
@@ -741,37 +682,34 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
                         )
                     }
                 }
-            }
-            // ── AMOLED toggle — only visible in dark mode ──
-            if (isDark) {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
+                // CUSTOM card at the end of the row
+                item {
+                    val selected = accentPreset == AccentPreset.CUSTOM
+                    Column(
+                        modifier = Modifier.width(110.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) customAccent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) customAccent else Color.Transparent, RoundedCornerShape(16.dp)).clickable { themePrefs.selectCustom() }.padding(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(54.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                Modifier.size(48.dp).clip(CircleShape).background(brush = Brush.linearGradient(listOf(customAccent, customAccent.copy(alpha = 0.7f)))),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            "AMOLED black surfaces",
-                            color = MaterialTheme.colorScheme.onBackground,
-                            fontSize = 14.sp,
-                            fontFamily = RobotoFamily,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            "Pure black for OLED screens",
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            "Custom",
+                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
                             fontSize = 11.sp,
                             fontFamily = RobotoFamily,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
                         )
                     }
-                    Switch(
-                        checked = amoled,
-                        onCheckedChange = { themePrefs.amoled.set(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    )
                 }
             }
         }
@@ -828,7 +766,7 @@ fun FolderScreen(folderSelected: Boolean, folderUri: String, onSelect: (String) 
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(200.dp).padding(vertical = 8.dp)) {
+            Box(modifier = Modifier.size(280.dp).padding(vertical = 8.dp)) {
                 FolderVisual(palette, selected = folderSelected && !scanning)
             }
             DescriptiveTitle(if (folderSelected) "Folder connected!" else "Select your anime folder", modifier = Modifier.fillMaxWidth())
@@ -987,7 +925,7 @@ fun PermissionsScreen(onBack: () -> Unit, onNext: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(180.dp).padding(vertical = 4.dp)) { ShieldVisual(palette) }
+            Box(modifier = Modifier.size(240.dp).padding(vertical = 4.dp)) { ShieldVisual(palette) }
             DescriptiveTitle("Grant permissions", modifier = Modifier.fillMaxWidth())
             Subtitle("Optional: you can skip these", modifier = Modifier.fillMaxWidth().padding(top = 0.dp))
             Spacer(Modifier.height(8.dp))
@@ -1101,7 +1039,7 @@ fun RestoreScreen(onBack: () -> Unit, onNext: () -> Unit, onSkip: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(180.dp).padding(vertical = 8.dp)) { RestoreVisual(palette) }
+            Box(modifier = Modifier.size(240.dp).padding(vertical = 8.dp)) { RestoreVisual(palette) }
             DescriptiveTitle("Restore backup", modifier = Modifier.fillMaxWidth())
             Subtitle(
                 "Got a backup from a previous install? Restore your library, history, and settings in one tap.",
@@ -1146,7 +1084,7 @@ fun FormatScreen(onBack: () -> Unit, onNext: () -> Unit) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(280.dp).padding(vertical = 8.dp)) { WarningVisual(palette) }
+            Box(modifier = Modifier.size(320.dp).padding(vertical = 8.dp)) { WarningVisual(palette) }
             Text(
                 "This is not the format I was expecting.",
                 color = MaterialTheme.colorScheme.onBackground,
@@ -1233,13 +1171,14 @@ fun SummaryScreen(onCancel: () -> Unit, onNext: () -> Unit) {
         // Scrollable content
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(180.dp).padding(vertical = 4.dp)) { ClipboardVisual(palette) }
+            Box(modifier = Modifier.size(140.dp).padding(vertical = 4.dp)) { ClipboardVisual(palette) }
             DescriptiveTitle("Backup summary", modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             items.forEachIndexed { i, (icon, pair) ->
+                if (i > 0) Spacer(Modifier.height(4.dp))
                 val isWarn = i == 5
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp)).background(if (isWarn) Color(0xFFF2B8B5).copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant).border(1.dp, if (isWarn) Color(0xFFF2B8B5).copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).padding(11.dp),
@@ -1278,17 +1217,18 @@ fun LinkingScreen(linkedAnime: List<LinkedAnime>, onUnlink: (Int) -> Unit, onBac
     val remaining = maxOf(0, total - revealed)
     val allRevealed = revealed >= total
     Column(modifier = Modifier.fillMaxSize()) {
-        // Fixed header (heading + title + subtitle + stats) — dedicated background card
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).padding(12.dp)
-        ) {
-            Text("Backup Restore", color = MaterialTheme.colorScheme.primary, fontSize = 42.sp, fontFamily = RobotoFamily,
-        fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.75).sp, lineHeight = 46.sp, modifier = Modifier.padding(top = 0.dp))
+        // Standalone heading — NOT inside a card (matches other screens)
+        PageHeading("Backup Restore")
+        // Content: title + subtitle (standalone) + stats card + list card
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp)) {
             DescriptiveTitle("Linking anime", modifier = Modifier.fillMaxWidth())
             Subtitle("Matching your backup entries", modifier = Modifier.fillMaxWidth().padding(top = 0.dp))
             Spacer(Modifier.height(4.dp))
-            // Stats — wider (squished vertically), bigger values
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Stats — kept in a card
+            Row(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 listOf(
                     "Linked" to linked to MaterialTheme.colorScheme.primary,
                     "No match" to unlinked to Color(0xFFF2B8B5),
@@ -1308,14 +1248,12 @@ fun LinkingScreen(linkedAnime: List<LinkedAnime>, onUnlink: (Int) -> Unit, onBac
                 }
             }
             Spacer(Modifier.height(4.dp))
-        }
-        // Scrollable list — dedicated section with surface background
-        Column(modifier = Modifier.weight(1f).padding(horizontal = 20.dp)) {
             // Section label
             Text("Entries", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), fontSize = 11.sp, fontFamily = RobotoFamily, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, modifier = Modifier.padding(bottom = 4.dp))
-            // List card with surface background
+            // List card with surface background — weight(1f) so it takes the
+            // remaining height after the title/subtitle/stats/label above.
             LazyColumn(
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).padding(8.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)).padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
             items(linkedAnime.take(revealed)) { anime ->
@@ -1396,7 +1334,7 @@ fun ManualScreen(linkedAnime: List<LinkedAnime>, onLink: (Int, String) -> Unit, 
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Fixed header
-        PageHeading("Restore Backup")
+        PageHeading("Manual Linking")
         // Scrollable content
         Column(
             modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -1404,7 +1342,7 @@ fun ManualScreen(linkedAnime: List<LinkedAnime>, onLink: (Int, String) -> Unit, 
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top animation — search magnifying glass OR all-linked celebration
-            Box(modifier = Modifier.size(150.dp).padding(vertical = 8.dp)) {
+            Box(modifier = Modifier.size(200.dp).padding(vertical = 8.dp)) {
                 if (unlinked.isEmpty()) {
                     AllLinkedVisual(palette)
                 } else {
@@ -1422,7 +1360,7 @@ fun ManualScreen(linkedAnime: List<LinkedAnime>, onLink: (Int, String) -> Unit, 
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)).clickable { selectedId = anime.id; query = anime.backupName; searchOpen = true }.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(anime.backupName, color = MaterialTheme.colorScheme.onBackground, fontSize = 12.sp, fontFamily = RobotoFamily,
+                    Text(anime.backupName, color = MaterialTheme.colorScheme.onBackground, fontSize = 14.sp, fontFamily = RobotoFamily,
         fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp))
                     // Plus icon (matches web prototype)
