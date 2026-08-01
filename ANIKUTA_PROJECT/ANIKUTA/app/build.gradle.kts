@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    // ABI splits: arm64-v8a only (ADR-032)
+    // ABI splits: all common architectures + universal APK
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a")
-            isUniversalApk = false
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
         }
     }
 
