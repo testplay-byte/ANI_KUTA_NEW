@@ -62,15 +62,5 @@ val PoisonSurface3 = Color(0xFF3A1C1C)
 val PoisonSurface4 = Color(0xFF462424)
 val PoisonSurface5 = Color(0xFF522C2C)
 
-val PoisonPalette = WizardPalette(
-    primary = PoisonPrimary,
-    onPrimary = PoisonOnPrimary,
-    primaryContainer = PoisonPrimaryContainer,
-    onPrimaryContainer = PoisonOnPrimaryContainer,
-    background = PoisonBg,
-    surface1 = PoisonSurface1,
-    surface2 = PoisonSurface2,
-    surface3 = PoisonSurface3,
-    surface4 = PoisonSurface4,
-    surface5 = PoisonSurface5,
-)
+// PoisonPalette is defined in WizardPalette.kt (it needs the WizardPalette
+// data class which is also in that file).

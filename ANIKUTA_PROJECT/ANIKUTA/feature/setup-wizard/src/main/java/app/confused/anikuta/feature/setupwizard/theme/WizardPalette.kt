@@ -7,11 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import app.confused.anikuta.core.designsystem.theme.RobotoFamily
-import androidx.compose.material3.Typography
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 
 data class WizardPalette(
     val primary: Color,
@@ -68,13 +63,6 @@ val PoisonPalette = WizardPalette(
 )
 
 val LocalWizardPalette = staticCompositionLocalOf { LimePalette }
-
-private val SetupWizardTypography = Typography(
-    bodyLarge = TextStyle(fontFamily = RobotoFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
-    bodyMedium = TextStyle(fontFamily = RobotoFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
-    titleLarge = TextStyle(fontFamily = RobotoFamily, fontWeight = FontWeight.Bold, fontSize = 22.sp),
-    labelLarge = TextStyle(fontFamily = RobotoFamily, fontWeight = FontWeight.Bold, fontSize = 14.sp),
-)
 
 @Composable
 fun SetupWizardTheme(
