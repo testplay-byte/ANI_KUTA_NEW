@@ -3,6 +3,7 @@
 package app.confused.anikuta.navigation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -34,11 +36,19 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.appupdate.DownloadProgress
@@ -80,6 +90,8 @@ fun UpdateBottomSheet(appController: AppController) {
     val downloadProgress by appController.updateManager.downloadProgress.collectAsState()
 
     val info = updateInfo ?: return
+
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // Check if this version is already downloaded (file exists on disk)
     val isAlreadyDownloaded = appController.updateManager.isLatestUpdateDownloaded()
@@ -154,12 +166,43 @@ fun UpdateBottomSheet(appController: AppController) {
                         .verticalScroll(rememberScrollState())
                         .padding(14.dp),
                 ) {
-                    Text(
+                    ClickableChangelogText(
                         text = info.changelog,
+                        onLinkClick = { url ->
+                            // Open the URL in the system browser
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                android.util.Log.w("UpdateSheet", "Failed to open URL: $url", e)
+                            }
+                        },
+                    )
+                    // "View on GitHub" link — always present so the user can
+                    // see the full release page even if the changelog has no URLs.
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val releaseUrl = "https://github.com/testplay-byte/ANI_KUTA_NEW/releases/tag/v${info.versionName}"
+                    Text(
+                        text = "View full release on GitHub →",
                         fontFamily = RobotoFamily,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        lineHeight = 19.sp,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(releaseUrl)).apply {
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.util.Log.w("UpdateSheet", "Failed to open release URL", e)
+                                }
+                            },
                     )
                 }
             }
@@ -389,6 +432,90 @@ private fun DownloadProgressButton(
             )
         }
     }
+}
+
+// ── URL regex for detecting links in the changelog ──
+private val URL_REGEX = Regex(
+    """https?://[^\s\n\r<>"']+""",
+    setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+)
+
+/**
+ * Renders the changelog text with clickable URL links.
+ *
+ * Detects all `http://` and `https://` URLs in the text and renders them as
+ * clickable links styled with the primary color + underline. Clicking a link
+ * calls [onLinkClick] with the URL string (the caller opens it in the browser).
+ *
+ * Uses [ClickableText] with an [AnnotatedString] — the standard Compose
+ * pattern for mixed-style text with interactive regions.
+ *
+ * @param text the raw changelog text (may contain URLs)
+ * @param onLinkClick called when the user taps a URL in the text
+ */
+@Composable
+private fun ClickableChangelogText(
+    text: String,
+    onLinkClick: (String) -> Unit,
+) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onSurface
+
+    val annotatedText = remember(text, primaryColor, textColor) {
+        buildAnnotatedString {
+            var lastIndex = 0
+            // Find all URL matches in the text
+            for (match in URL_REGEX.findAll(text)) {
+                // Append the text before the URL
+                if (match.range.first > lastIndex) {
+                    append(text.substring(lastIndex, match.range.first))
+                }
+                // Append the URL as a clickable link
+                val url = match.value
+                withLink(LinkAnnotation.Url(url = url, styles = TextLinkStyles(
+                    style = SpanStyle(
+                        color = primaryColor,
+                        textDecoration = TextDecoration.Underline,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )))
+                append(url)
+                lastIndex = match.range.last + 1
+            }
+            // Append any remaining text after the last URL
+            if (lastIndex < text.length) {
+                append(text.substring(lastIndex))
+            }
+            // Apply the base style to the entire string (non-link text)
+            addStyle(
+                style = SpanStyle(
+                    color = textColor,
+                    fontSize = 13.sp,
+                    fontFamily = RobotoFamily,
+                ),
+                start = 0,
+                end = length,
+            )
+        }
+    }
+
+    ClickableText(
+        text = annotatedText,
+        style = androidx.compose.ui.text.TextStyle(
+            fontFamily = RobotoFamily,
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+            color = textColor,
+        ),
+        onClick = { offset ->
+            // Check if the click landed on a link annotation
+            val link = annotatedText.getLinkAnnotations(offset).firstOrNull()
+            if (link != null) {
+                val url = annotatedText.substring(link.start, link.end)
+                onLinkClick(url)
+            }
+        },
+    )
 }
 
 /** Formats a byte count into a human-readable string (e.g., "12.3 MB"). */
