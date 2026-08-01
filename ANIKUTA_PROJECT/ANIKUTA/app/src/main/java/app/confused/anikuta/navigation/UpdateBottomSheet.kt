@@ -472,14 +472,20 @@ private fun ClickableChangelogText(
                 }
                 // Append the URL as a clickable link
                 val url = match.value
-                withLink(LinkAnnotation.Url(url = url, styles = TextLinkStyles(
-                    style = SpanStyle(
-                        color = primaryColor,
-                        textDecoration = TextDecoration.Underline,
-                        fontWeight = FontWeight.Bold,
+                withLink(
+                    LinkAnnotation.Url(
+                        url = url,
+                        styles = TextLinkStyles(
+                            style = SpanStyle(
+                                color = primaryColor,
+                                textDecoration = TextDecoration.Underline,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                        ),
                     ),
-                )))
-                append(url)
+                ) {
+                    append(url)
+                }
                 lastIndex = match.range.last + 1
             }
             // Append any remaining text after the last URL
@@ -509,7 +515,7 @@ private fun ClickableChangelogText(
         ),
         onClick = { offset ->
             // Check if the click landed on a link annotation
-            val link = annotatedText.getLinkAnnotations(offset).firstOrNull()
+            val link = annotatedText.getLinkAnnotations(offset, offset).firstOrNull()
             if (link != null) {
                 val url = annotatedText.substring(link.start, link.end)
                 onLinkClick(url)
