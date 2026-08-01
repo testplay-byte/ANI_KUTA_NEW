@@ -49,6 +49,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.confused.anikuta.core.appupdate.DownloadProgress
@@ -120,8 +122,8 @@ fun UpdateBottomSheet(appController: AppController) {
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // ── Version + release date ──
-            val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
+            // ── Version + release date + time ──
+            val dateFormatter = SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.US)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -434,24 +436,35 @@ private fun DownloadProgressButton(
     }
 }
 
-// ── URL regex for detecting links in the changelog ──
-private val URL_REGEX = Regex(
-    """https?://[^\s\n\r<>"']+""",
-    setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
-)
+// ── Markdown parsing for the changelog ──
+// Supports: ## headers, **bold**, *italic*, `code`, [text](url) links,
+// bare URLs, - bullet lists, and plain text.
+
+private val MD_HEADER = Regex("""^(#{1,3})\s+(.+)$""", RegexOption.MULTILINE)
+private val MD_BOLD = Regex("""\*\*(.+?)\*\*""")
+private val MD_ITALIC = Regex("""\*(.+?)\*""")
+private val MD_CODE = Regex("""`(.+?)`""")
+private val MD_LINK = Regex("""\[([^\]]+)\]\(([^)]+)\)""")
+private val MD_BARE_URL = Regex("""https?://[^\s\n\r<>"'\)\]]+""")
+private val MD_BULLET = Regex("""^[\s]*[-*]\s+(.+)$""", RegexOption.MULTILINE)
 
 /**
- * Renders the changelog text with clickable URL links.
+ * Renders the changelog text with Markdown formatting + clickable links.
  *
- * Detects all `http://` and `https://` URLs in the text and renders them as
- * clickable links styled with the primary color + underline. Clicking a link
- * calls [onLinkClick] with the URL string (the caller opens it in the browser).
+ * Supported Markdown:
+ * - `## Header` / `### Header` — bold, primary-colored, larger text
+ * - `**bold**` — bold text
+ * - `*italic*` — italic text
+ * - `` `code` `` — monospace text with a subtle background tint
+ * - `[link text](url)` — clickable link showing the TEXT (not the URL)
+ * - Bare URLs (`https://...`) — clickable link showing the full URL
+ * - `- item` — bullet list with a dot prefix
  *
- * Uses [ClickableText] with an [AnnotatedString] — the standard Compose
- * pattern for mixed-style text with interactive regions.
+ * Links are styled with the primary color + underline. Clicking a link calls
+ * [onLinkClick] with the URL (the caller opens it in the browser).
  *
- * @param text the raw changelog text (may contain URLs)
- * @param onLinkClick called when the user taps a URL in the text
+ * @param text the raw changelog text (Markdown)
+ * @param onLinkClick called when the user taps a link
  */
 @Composable
 private fun ClickableChangelogText(
@@ -462,47 +475,11 @@ private fun ClickableChangelogText(
     val textColor = MaterialTheme.colorScheme.onSurface
 
     val annotatedText = remember(text, primaryColor, textColor) {
-        buildAnnotatedString {
-            var lastIndex = 0
-            // Find all URL matches in the text
-            for (match in URL_REGEX.findAll(text)) {
-                // Append the text before the URL
-                if (match.range.first > lastIndex) {
-                    append(text.substring(lastIndex, match.range.first))
-                }
-                // Append the URL as a clickable link
-                val url = match.value
-                withLink(
-                    LinkAnnotation.Url(
-                        url = url,
-                        styles = TextLinkStyles(
-                            style = SpanStyle(
-                                color = primaryColor,
-                                textDecoration = TextDecoration.Underline,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                        ),
-                    ),
-                ) {
-                    append(url)
-                }
-                lastIndex = match.range.last + 1
-            }
-            // Append any remaining text after the last URL
-            if (lastIndex < text.length) {
-                append(text.substring(lastIndex))
-            }
-            // Apply the base style to the entire string (non-link text)
-            addStyle(
-                style = SpanStyle(
-                    color = textColor,
-                    fontSize = 13.sp,
-                    fontFamily = RobotoFamily,
-                ),
-                start = 0,
-                end = length,
-            )
-        }
+        buildMarkdownAnnotatedString(
+            text = text,
+            primaryColor = primaryColor,
+            textColor = textColor,
+        )
     }
 
     ClickableText(
@@ -510,18 +487,191 @@ private fun ClickableChangelogText(
         style = androidx.compose.ui.text.TextStyle(
             fontFamily = RobotoFamily,
             fontSize = 13.sp,
-            lineHeight = 19.sp,
+            lineHeight = 20.sp,
             color = textColor,
         ),
         onClick = { offset ->
-            // Check if the click landed on a link annotation
             val link = annotatedText.getLinkAnnotations(offset, offset).firstOrNull()
             if (link != null) {
-                val url = annotatedText.substring(link.start, link.end)
-                onLinkClick(url)
+                val url = (link as? LinkAnnotation.Url)?.url
+                if (url != null) {
+                    onLinkClick(url)
+                }
             }
         },
     )
+}
+
+/**
+ * Parses a Markdown string into a Compose [AnnotatedString] with styled spans
+ * + clickable link annotations.
+ */
+private fun buildMarkdownAnnotatedString(
+    text: String,
+    primaryColor: androidx.compose.ui.graphics.Color,
+    textColor: androidx.compose.ui.graphics.Color,
+): AnnotatedString = buildAnnotatedString {
+    val lines = text.split("\n")
+    for ((lineIndex, line) in lines.withIndex()) {
+        // ── Header detection (## or ###) ──
+        val headerMatch = MD_HEADER.find(line)
+        if (headerMatch != null) {
+            val level = headerMatch.groupValues[1].length
+            val headerText = headerMatch.groupValues[2]
+            val cleanHeader = stripInlineMarkdown(headerText)
+            withStyle(SpanStyle(
+                color = primaryColor,
+                fontSize = if (level <= 1) 16.sp else if (level == 2) 15.sp else 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = RobotoFamily,
+            )) {
+                append(cleanHeader)
+            }
+            if (lineIndex < lines.size - 1) append("\n")
+            continue
+        }
+
+        // ── Bullet list item ──
+        val bulletMatch = MD_BULLET.find(line)
+        if (bulletMatch != null) {
+            append("  • ")
+            appendInlineMarkdown(
+                text = bulletMatch.groupValues[1],
+                primaryColor = primaryColor,
+                textColor = textColor,
+            )
+            if (lineIndex < lines.size - 1) append("\n")
+            continue
+        }
+
+        // ── Regular line (with inline markdown) ──
+        appendInlineMarkdown(
+            text = line,
+            primaryColor = primaryColor,
+            textColor = textColor,
+        )
+        if (lineIndex < lines.size - 1) append("\n")
+    }
+}
+
+/**
+ * Appends a single line of text with inline Markdown formatting:
+ * **bold**, *italic*, `code`, [text](url), bare URLs.
+ */
+private fun AnnotatedString.Builder.appendInlineMarkdown(
+    text: String,
+    primaryColor: androidx.compose.ui.graphics.Color,
+    textColor: androidx.compose.ui.graphics.Color,
+) {
+    data class Token(val start: Int, val end: Int, val type: String, val content: String, val url: String?)
+
+    val tokens = mutableListOf<Token>()
+
+    // [text](url) links
+    for (match in MD_LINK.findAll(text)) {
+        tokens.add(Token(match.range.first, match.range.last + 1, "link", match.groupValues[1], match.groupValues[2]))
+    }
+    // **bold**
+    for (match in MD_BOLD.findAll(text)) {
+        if (tokens.none { it.start <= match.range.first && it.end >= match.range.last + 1 }) {
+            tokens.add(Token(match.range.first, match.range.last + 1, "bold", match.groupValues[1], null))
+        }
+    }
+    // *italic*
+    for (match in MD_ITALIC.findAll(text)) {
+        if (tokens.none { it.start <= match.range.first && it.end >= match.range.last + 1 }) {
+            tokens.add(Token(match.range.first, match.range.last + 1, "italic", match.groupValues[1], null))
+        }
+    }
+    // `code`
+    for (match in MD_CODE.findAll(text)) {
+        if (tokens.none { it.start <= match.range.first && it.end >= match.range.last + 1 }) {
+            tokens.add(Token(match.range.first, match.range.last + 1, "code", match.groupValues[1], null))
+        }
+    }
+    // Bare URLs (not already inside a [text](url) link)
+    for (match in MD_BARE_URL.findAll(text)) {
+        if (tokens.none { it.start <= match.range.first && it.end >= match.range.last + 1 }) {
+            tokens.add(Token(match.range.first, match.range.last + 1, "url", match.value, match.value))
+        }
+    }
+
+    tokens.sortBy { it.start }
+    var lastIndex = 0
+    for (token in tokens) {
+        if (token.start > lastIndex) {
+            withStyle(SpanStyle(color = textColor, fontSize = 13.sp, fontFamily = RobotoFamily)) {
+                append(text.substring(lastIndex, token.start))
+            }
+        }
+        when (token.type) {
+            "link", "url" -> {
+                withLink(LinkAnnotation.Url(
+                    url = token.url!!,
+                    styles = TextLinkStyles(style = SpanStyle(
+                        color = primaryColor,
+                        textDecoration = TextDecoration.Underline,
+                        fontWeight = FontWeight.Bold,
+                    )),
+                )) {
+                    withStyle(SpanStyle(
+                        color = primaryColor,
+                        textDecoration = TextDecoration.Underline,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        fontFamily = RobotoFamily,
+                    )) {
+                        append(token.content)
+                    }
+                }
+            }
+            "bold" -> {
+                withStyle(SpanStyle(
+                    color = textColor,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    fontFamily = RobotoFamily,
+                )) {
+                    append(token.content)
+                }
+            }
+            "italic" -> {
+                withStyle(SpanStyle(
+                    color = textColor,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    fontSize = 13.sp,
+                    fontFamily = RobotoFamily,
+                )) {
+                    append(token.content)
+                }
+            }
+            "code" -> {
+                withStyle(SpanStyle(
+                    color = primaryColor,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    background = primaryColor.copy(alpha = 0.12f).toArgb(),
+                )) {
+                    append(" ${token.content} ")
+                }
+            }
+        }
+        lastIndex = token.end
+    }
+    if (lastIndex < text.length) {
+        withStyle(SpanStyle(color = textColor, fontSize = 13.sp, fontFamily = RobotoFamily)) {
+            append(text.substring(lastIndex))
+        }
+    }
+}
+
+/** Strips inline markdown (bold/italic/code/links) from a string — used for headers. */
+private fun stripInlineMarkdown(text: String): String {
+    return text
+        .replace(MD_BOLD, "$1")
+        .replace(MD_ITALIC, "$1")
+        .replace(MD_CODE, "$1")
+        .replace(MD_LINK, "$1")
 }
 
 /** Formats a byte count into a human-readable string (e.g., "12.3 MB"). */
