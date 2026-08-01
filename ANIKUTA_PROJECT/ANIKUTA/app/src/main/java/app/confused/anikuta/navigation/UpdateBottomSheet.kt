@@ -650,7 +650,7 @@ private fun AnnotatedString.Builder.appendInlineMarkdown(
                     color = primaryColor,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     fontSize = 12.sp,
-                    background = primaryColor.copy(alpha = 0.12f).toArgb(),
+                    background = primaryColor.copy(alpha = 0.12f),
                 )) {
                     append(" ${token.content} ")
                 }
