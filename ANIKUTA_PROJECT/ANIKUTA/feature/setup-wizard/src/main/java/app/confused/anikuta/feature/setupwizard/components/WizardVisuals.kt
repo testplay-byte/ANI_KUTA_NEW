@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -19,8 +20,65 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.confused.anikuta.feature.setupwizard.theme.WizardPalette
 import kotlin.math.*
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WizardPalette — a small data class used ONLY by the animated Canvas visuals.
+//
+// The wizard's SCREEN UI uses `MaterialTheme.colorScheme.*` directly (the real
+// ANIKUTA design system, reactively driven by `ThemePreferences`). The visuals
+// below, however, need a handful of color "tones" (primary, primaryContainer,
+// surface1..5, background) that don't all have exact M3 equivalents. This data
+// class carries those tones; build one with [wizardPaletteFromMaterialTheme]
+// inside a composable and pass it to a visual.
+// ─────────────────────────────────────────────────────────────────────────────
+
+data class WizardPalette(
+    val primary: Color,
+    val onPrimary: Color,
+    val primaryContainer: Color,
+    val onPrimaryContainer: Color,
+    val background: Color,
+    val surface1: Color,
+    val surface2: Color,
+    val surface3: Color,
+    val surface4: Color,
+    val surface5: Color,
+)
+
+/** Mixes two colors at `ratio` (0 = base, 1 = tint). */
+private fun colorMix(base: Color, tint: Color, ratio: Float): Color = Color(
+    red = base.red * (1 - ratio) + tint.red * ratio,
+    green = base.green * (1 - ratio) + tint.green * ratio,
+    blue = base.blue * (1 - ratio) + tint.blue * ratio,
+    alpha = 1f,
+)
+
+/**
+ * Builds a [WizardPalette] from the current [MaterialTheme.colorScheme].
+ *
+ * The wizard uses the REAL ANIKUTA theme (`AnikutaTheme` from `:core:designsystem`),
+ * so the colors here reflect the user's chosen accent + theme mode + palette
+ * mode. The intermediate tones (surface3, surface4, surface5) are derived as
+ * blends between the M3 surface roles — this preserves the layered look the
+ * visuals were designed with, without introducing a separate color system.
+ */
+@Composable
+fun wizardPaletteFromMaterialTheme(): WizardPalette {
+    val cs = MaterialTheme.colorScheme
+    return WizardPalette(
+        primary = cs.primary,
+        onPrimary = cs.onPrimary,
+        primaryContainer = cs.primaryContainer,
+        onPrimaryContainer = cs.onPrimaryContainer,
+        background = cs.background,
+        surface1 = cs.surface,
+        surface2 = cs.surfaceVariant,
+        surface3 = colorMix(cs.surface, cs.surfaceVariant, 0.5f),
+        surface4 = cs.outlineVariant,
+        surface5 = cs.outline,
+    )
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED HELPERS
