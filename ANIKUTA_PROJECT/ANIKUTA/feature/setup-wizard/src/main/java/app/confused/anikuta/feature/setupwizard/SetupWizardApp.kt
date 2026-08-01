@@ -218,40 +218,14 @@ fun SetupWizardApp(onComplete: () -> Unit = {}) {
         // entire theme to dark red — regardless of the user's chosen theme mode.
         // The PoisonScreen's hardcoded colors (0xFFFF6B6B etc.) are designed
         // for a dark background and look wrong on light.
-        val isPoisonStep = state.step == WizardStep.POISON
-        if (isPoisonStep) {
-            val baseScheme = MaterialTheme.colorScheme
-            val poisonScheme = baseScheme.copy(
-                primary = Color(0xFFFF5252),
-                onPrimary = Color(0xFF1A0000),
-                primaryContainer = Color(0xFF5C1A1A),
-                onPrimaryContainer = Color(0xFFFFE5E5),
-                background = Color(0xFF1A0808),
-                surface = Color(0xFF240D0D),
-                surfaceVariant = Color(0xFF2E1414),
-                onBackground = Color(0xFFFFEAEA),
-                onSurface = Color(0xFFFFEAEA),
-            )
-            MaterialTheme(colorScheme = poisonScheme) {
-                WizardContent(state, poisonStep, applyPreferences, onComplete)
-            }
-        } else {
-            WizardContent(state, poisonStep, applyPreferences, onComplete)
-        }
-    }
-}
-
-@Composable
-private fun WizardContent(
-    state: WizardState,
-    poisonStep: Int,
-    applyPreferences: () -> Unit,
-    onComplete: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
+        // The override is applied at the OUTER Surface level (via a local
+        // composable lambda) so the background, progress bar, and all UI use
+        // the dark red theme.
+        val wizardContent: @Composable () -> Unit = {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Progress bar — FLUSH AT THE VERY TOP (y=0, full width, no padding).
                 // The transparent status bar is drawn ON TOP of this bar.
@@ -331,9 +305,9 @@ private fun WizardContent(
                                 onNext = { state = state.copy(step = WizardStep.POISON); poisonStep = 0 }
                             )
                             WizardStep.POISON -> {
-                                // Poison screen — the outer WizardContent already wraps
-                                // in the poison ColorScheme when step == POISON, so we
-                                // just render the screen directly.
+                                // Poison screen — the outer wizardContent lambda
+                                // already wraps in the poison ColorScheme when
+                                // step == POISON, so we just render the screen directly.
                                 PoisonScreen(
                                     adSettings = state.adSettings,
                                     onUpdate = { state = state.copy(adSettings = it) },
@@ -355,6 +329,26 @@ private fun WizardContent(
                     }
                 }
             }
+        }
+        }
+        if (state.step == WizardStep.POISON) {
+            val baseScheme = MaterialTheme.colorScheme
+            val poisonScheme = baseScheme.copy(
+                primary = Color(0xFFFF5252),
+                onPrimary = Color(0xFF1A0000),
+                primaryContainer = Color(0xFF5C1A1A),
+                onPrimaryContainer = Color(0xFFFFE5E5),
+                background = Color(0xFF1A0808),
+                surface = Color(0xFF240D0D),
+                surfaceVariant = Color(0xFF2E1414),
+                onBackground = Color(0xFFFFEAEA),
+                onSurface = Color(0xFFFFEAEA),
+            )
+            MaterialTheme(colorScheme = poisonScheme) {
+                wizardContent()
+            }
+        } else {
+            wizardContent()
         }
     }
 }
