@@ -132,8 +132,33 @@ fun AnikutaRoot() {
         // open the app so they can test the download/install flow repeatedly).
         //
         // Also cleans up old downloaded APKs (versions <= current) to free storage.
+        //
+        // **Post-install popup:** if the user just installed an update (recorded
+        // via AppUpdatePreferences.pendingPostInstall before the system installer
+        // launched), show the post-install success popup instead of the update
+        // sheet — and skip the update check (we already know we're on the latest).
         LaunchedEffect(Unit) {
             try {
+                val updatePrefs = org.koin.core.context.GlobalContext.get()
+                    .get<app.confused.anikuta.core.appupdate.AppUpdatePreferences>()
+
+                // ── Post-install success popup check ──
+                // If the user just installed an update, show the popup + skip
+                // the update check (we just installed the latest, no point).
+                val pendingPostInstall = updatePrefs.getPendingPostInstall()
+                if (pendingPostInstall.isNotEmpty()) {
+                    android.util.Log.d("AnikutaUpdate",
+                        "Startup: pending post-install v$pendingPostInstall — showing popup, skipping update check")
+                    updatePrefs.clearPendingPostInstall()
+                    // Clean up the just-installed APK file too (the popup also
+                    // does this, but cleaning here handles the case where the
+                    // popup is dismissed before its cleanup runs).
+                    appController.updateManager.cleanupOldDownloads()
+                    appController.updateManager.clearUpdateState()
+                    appController.showPostInstallPopup()
+                    return@LaunchedEffect
+                }
+
                 android.util.Log.d("AnikutaUpdate", "Startup: cleaning up old downloads + state...")
                 appController.updateManager.cleanupOldDownloads()
                 appController.updateManager.clearUpdateState()
@@ -146,9 +171,7 @@ fun AnikutaRoot() {
                     // Clear the dismiss cooldown so the dialog ALWAYS shows on
                     // startup (for testing the update flow repeatedly). Once the
                     // system is fully tested, we can re-enable the 6-hour cooldown.
-                    org.koin.core.context.GlobalContext.get()
-                        .get<app.confused.anikuta.core.appupdate.AppUpdatePreferences>()
-                        .clearDismissCooldown()
+                    updatePrefs.clearDismissCooldown()
                     appController.showUpdateSheet()
                 }
             } catch (e: Exception) {
@@ -330,5 +353,14 @@ private fun AppOverlays(appController: AppController) {
     // (6-hour cooldown) or download (progress bar → auto-install).
     if (appController.showUpdateDialog) {
         UpdateBottomSheet(appController)
+    }
+
+    // ── 7. Post-install success popup ──
+    // Shown when AppController.showPostInstallSuccess is true (set on startup
+    // if AppUpdatePreferences.getPendingPostInstall() was non-empty). Animates
+    // a "Cleaning up downloaded APK…" → "APK deleted" sequence + auto-dismisses
+    // after ~2 seconds.
+    if (appController.showPostInstallSuccess) {
+        PostInstallSuccessSheet(appController)
     }
 }

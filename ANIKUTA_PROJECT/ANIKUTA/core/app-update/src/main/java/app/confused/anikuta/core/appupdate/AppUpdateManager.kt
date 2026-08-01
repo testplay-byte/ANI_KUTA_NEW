@@ -258,6 +258,13 @@ class AppUpdateManager(
      * Launches the system installer. After the user confirms, the app is
      * updated (and likely restarted).
      *
+     * **Post-install popup:** before launching the installer, this records
+     * the version being installed via [AppUpdatePreferences.setPendingPostInstall].
+     * On the next app startup, [app.confused.anikuta.navigation.AnikutaRoot]
+     * checks the pending-post-install marker — if non-empty, the post-install
+     * success popup is shown (with the "Cleaning up downloaded APK…" animation)
+     * and the marker is cleared.
+     *
      * @param apkPath the absolute path to the APK file. If null, uses the
      *   latest update's APK path.
      * @return true if the installer was launched successfully.
@@ -267,6 +274,21 @@ class AppUpdateManager(
             val update = _latestUpdate.value ?: return false
             downloader.getApkFile(update.versionName).absolutePath
         }
+
+        // ── Record the version we're about to install ──
+        // Look up the version name from the downloaded APK record first
+        // (handles both "install from update sheet" + "install from
+        // About → downloaded versions list" entry points). Falls back to
+        // the latest update's version name if no record is found.
+        val versionName = preferences.getDownloadedApks()
+            .firstOrNull { it.filePath == path }
+            ?.versionName
+            ?: _latestUpdate.value?.versionName
+        if (!versionName.isNullOrEmpty()) {
+            preferences.setPendingPostInstall(versionName)
+            Log.i(TAG, "installDownloadedApk: recorded pending post-install for v$versionName")
+        }
+
         return installer.installApk(path)
     }
 

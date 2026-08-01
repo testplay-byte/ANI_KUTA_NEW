@@ -158,6 +158,6 @@ class AdsPreferences(
         private const val MAX_COOLDOWN_MINUTES = 1440 // 24 hours
         private const val DEFAULT_MIN_STAY_SECONDS = 2
         private const val MAX_MIN_STAY_SECONDS = 60
-        private const val DEFAULT_AD_URL = "https://1118000.xyz/"
+        private const val DEFAULT_AD_URL = "https://www.effectivecpmnetwork.com/y0hd2qft5?key=0b49e8d3e1e05b67c7e565d29b218867"
     }
 }

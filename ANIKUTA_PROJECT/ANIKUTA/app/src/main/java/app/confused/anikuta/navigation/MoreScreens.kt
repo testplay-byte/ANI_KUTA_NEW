@@ -1,5 +1,6 @@
 package app.confused.anikuta.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +29,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.confused.anikuta.core.appupdate.AppUpdateManager
 import app.confused.anikuta.core.designsystem.component.CollapsingHeader
 import app.confused.anikuta.core.designsystem.theme.RobotoFamily
+import org.koin.compose.koinInject
 
 /**
  * More screen — a list with Settings and other options.
@@ -56,6 +61,17 @@ fun MoreScreen(
     onOpenDownloads: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
+
+    // ── Update + download state (for the red dot on Settings) ──
+    // The Settings row shows a red notification dot when:
+    //  - an update is available (latestUpdate != null), OR
+    //  - a download is in progress (downloadProgress != null && !complete && no error)
+    val updateManager = koinInject<AppUpdateManager>()
+    val latestUpdate by updateManager.latestUpdate.collectAsStateWithLifecycle()
+    val downloadProgress by updateManager.downloadProgress.collectAsStateWithLifecycle()
+    val showUpdateDot = latestUpdate != null ||
+        (downloadProgress != null && !downloadProgress!!.isComplete && downloadProgress!!.error == null)
+
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "More", scrollState = scrollState)
         LazyColumn(
@@ -76,6 +92,7 @@ fun MoreScreen(
                     title = "Settings",
                     subtitle = "Theme, display, data management",
                     onClick = onOpenSettings,
+                    showDot = showUpdateDot,
                 )
             }
             // History + Updates entries
@@ -117,6 +134,15 @@ fun SettingsScreen(
     onBack: () -> Unit,
 ) {
     val scrollState = rememberScrollState()
+
+    // ── Update + download state (for the red dot on About & Updates) ──
+    // Same logic as MoreScreen's Settings dot — surfaces the availability of
+    // an update or an in-progress download to the user from the Settings hub.
+    val updateManager = koinInject<AppUpdateManager>()
+    val latestUpdate by updateManager.latestUpdate.collectAsStateWithLifecycle()
+    val downloadProgress by updateManager.downloadProgress.collectAsStateWithLifecycle()
+    val showUpdateDot = latestUpdate != null ||
+        (downloadProgress != null && !downloadProgress!!.isComplete && downloadProgress!!.error == null)
 
     Column(modifier = Modifier.fillMaxSize()) {
         CollapsingHeader(title = "Settings", scrollState = scrollState)
@@ -175,6 +201,7 @@ fun SettingsScreen(
                     title = "About & Updates",
                     subtitle = "App version, check for updates, downloaded versions",
                     onClick = onOpenAbout,
+                    showDot = showUpdateDot,
                 )
             }
         }
@@ -199,6 +226,7 @@ fun MoreRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    showDot: Boolean = false,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -214,12 +242,29 @@ fun MoreRow(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
-            )
+            // Icon + optional red notification dot overlay at the top-end corner.
+            Box {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                if (showDot) {
+                    // 8dp red dot at the top-end corner of the icon — same style
+                    // as an unread-badge indicator. Color is a bright red
+                    // (0xFFFF5252) per the spec.
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(8.dp)
+                            .background(
+                                color = Color(0xFFFF5252),
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                            ),
+                    )
+                }
+            }
             Spacer(modifier = Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

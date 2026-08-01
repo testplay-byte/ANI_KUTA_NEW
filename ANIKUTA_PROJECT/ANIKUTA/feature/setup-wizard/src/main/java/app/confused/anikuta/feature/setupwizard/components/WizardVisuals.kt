@@ -142,7 +142,9 @@ fun WelcomeVisual(palette: WizardPalette, modifier: Modifier = Modifier) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FOLDER — clean folder with floating anime cards + scanning beam
+// FOLDER — clean modern file-manager folder icon with floating anime cards +
+// scanning beam. Redesigned to look like a proper folder (rounded-rectangle
+// body + tab at top-left + accent stripe across the top), NOT a bottle.
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -158,63 +160,142 @@ fun FolderVisual(palette: WizardPalette, selected: Boolean = false, modifier: Mo
         val cy = size.height / 2f
         val fy = float * u
 
-        radialGlow(cx, cy + 20f * u + fy, 75f * u, palette.primary, 0.14f)
+        // ── Folder geometry (modern file-manager folder shape) ──
+        // Body: a large rounded rectangle centered on (cx, cy).
+        // Tab: a smaller rounded rectangle sitting on top-left of the body.
+        // Accent stripe: a thin horizontal strip across the top of the body
+        //   (the "active folder" highlight you see in file managers).
+        val bodyW = 130f * u
+        val bodyH = 96f * u
+        val bodyLeft = cx - bodyW / 2f
+        val bodyTop = cy - bodyH / 2f + 14f * u + fy // shifted down to leave room for the tab
+        val bodyCorner = 14f * u
 
-        // 3 anime cards descending (staggered, clean fade)
+        val tabW = 48f * u
+        val tabH = 18f * u
+        val tabLeft = bodyLeft + 4f * u
+        val tabTop = bodyTop - tabH + 2f * u // overlaps the body slightly
+        val tabCorner = 8f * u
+
+        // Soft glow behind the folder
+        radialGlow(cx, cy + 10f * u + fy, 90f * u, palette.primary, 0.16f)
+
+        // ── Folder tab (top-left) ──
+        // Drawn first so the body sits on top of its bottom edge (covers the
+        // seam). Same fill color as the body so it reads as one shape.
+        rrGradient(
+            Brush.verticalGradient(listOf(palette.surface5, palette.surface4)),
+            tabLeft, tabTop, tabW, tabH, tabCorner,
+        )
+
+        // ── Folder body (rounded rectangle, filled with surface4) ──
+        rrGradient(
+            Brush.verticalGradient(listOf(palette.surface4, palette.surface5)),
+            bodyLeft, bodyTop, bodyW, bodyH, bodyCorner,
+        )
+        // Subtle outline for the modern "card" look
+        rr(palette.surface5.copy(alpha = 0.6f), bodyLeft, bodyTop, bodyW, bodyH, bodyCorner, 1.2f * u)
+
+        // ── Accent stripe across the top of the body ──
+        // This is the primary-colored highlight that makes the folder look
+        // "active" / themed (like a colored folder tab in a file manager).
+        val stripeH = 10f * u
+        val stripeLeft = bodyLeft + 1.2f * u
+        val stripeTop = bodyTop + 1.2f * u
+        val stripeW = bodyW - 2.4f * u
+        // Drawn as a slightly-inset rounded rectangle with the same corner
+        // radius as the body — sits flush inside the body's top edge.
+        drawRoundRect(
+            brush = Brush.horizontalGradient(
+                listOf(palette.primary, palette.primary.copy(alpha = 0.75f)),
+            ),
+            topLeft = Offset(stripeLeft, stripeTop),
+            size = Size(stripeW, stripeH),
+            cornerRadius = CornerRadius(bodyCorner - 2f * u, bodyCorner - 2f * u),
+        )
+
+        // ── Inner content lines (suggest files inside the folder) ──
+        // Three thin horizontal lines, fading from top to bottom.
+        for (i in 0 until 3) {
+            rr(
+                palette.primary.copy(alpha = 0.22f - i * 0.04f),
+                bodyLeft + 18f * u,
+                bodyTop + stripeH + 14f * u + i * 12f * u,
+                bodyW - 36f * u,
+                3f * u,
+                1.5f * u,
+            )
+        }
+
+        // ── Anime cards falling into the folder ──
+        // 3 cards, staggered, animate from above into the folder's top opening.
+        // They fade out as they enter the folder body (so it looks like they
+        // "land" inside rather than covering the folder).
         for (i in 0 until 3) {
             val phase = (cardDrop + i * 0.33f) % 1f
-            val cardX = cx + (i - 1) * 26f * u
-            val startY = cy - 65f * u + fy
-            val endY = cy - 5f * u + fy
+            val cardX = cx + (i - 1) * 22f * u
+            val startY = cy - 75f * u + fy
+            val endY = bodyTop + 14f * u
             val cardY = startY + (endY - startY) * phase
-            val alpha = when { phase < 0.1f -> phase * 10f; phase > 0.88f -> maxOf(0f, 1f - (phase - 0.88f) * 8.3f); else -> 1f }
-            val cw = 30f * u
-            val ch = 42f * u
+            // Fade out as the card enters the folder body (last 25% of the drop).
+            val alpha = when {
+                phase < 0.1f -> phase * 10f
+                phase > 0.75f -> maxOf(0f, 1f - (phase - 0.75f) * 4f)
+                else -> 1f
+            }
+            val cw = 26f * u
+            val ch = 36f * u
 
-            rr(palette.surface5.copy(alpha = alpha), cardX - cw / 2, cardY, cw, ch, 4f * u)
-            rr(palette.primary.copy(alpha = 0.5f * alpha), cardX - cw / 2, cardY, cw, ch * 0.4f, 4f * u)
+            // Card shadow / outline
+            rr(palette.surface5.copy(alpha = 0.5f * alpha), cardX - cw / 2, cardY, cw, ch, 4f * u)
+            // Card body
+            rr(palette.surface2.copy(alpha = alpha), cardX - cw / 2, cardY, cw, ch, 4f * u)
+            // Card accent strip (top 35%)
+            rr(
+                palette.primary.copy(alpha = 0.6f * alpha),
+                cardX - cw / 2, cardY, cw, ch * 0.38f, 4f * u,
+            )
+            // Two small content lines on the card
             for (j in 0 until 2) {
-                drawRect(palette.primary.copy(alpha = 0.2f * alpha), Offset(cardX - cw / 2 + 4f * u, cardY + ch * 0.5f + j * 6f * u), Size(cw - 8f * u, 2f * u))
+                drawRect(
+                    palette.primary.copy(alpha = 0.25f * alpha),
+                    Offset(cardX - cw / 2 + 4f * u, cardY + ch * 0.5f + j * 5f * u),
+                    Size(cw - 8f * u, 2f * u),
+                )
             }
         }
 
-        // Folder back (tab)
-        val backPath = Path().apply {
-            moveTo(cx - 48f * u, cy - 8f * u + fy)
-            lineTo(cx - 18f * u, cy - 8f * u + fy)
-            lineTo(cx - 12f * u, cy - 16f * u + fy)
-            lineTo(cx + 12f * u, cy - 16f * u + fy)
-            lineTo(cx + 18f * u, cy - 8f * u + fy)
-            lineTo(cx + 48f * u, cy - 8f * u + fy)
-            lineTo(cx + 48f * u, cy + 4f * u + fy)
-            lineTo(cx - 48f * u, cy + 4f * u + fy)
-            close()
-        }
-        drawPath(backPath, palette.surface4)
+        // ── Scanning beam (kept from the original) ──
+        // A horizontal line that sweeps top-to-bottom across the folder body.
+        val scanY = bodyTop + 4f * u + scan * (bodyH - 8f * u)
+        drawLine(
+            palette.primary.copy(alpha = 0.55f),
+            Offset(bodyLeft + 6f * u, scanY),
+            Offset(bodyLeft + bodyW - 6f * u, scanY),
+            2.2f * u,
+            StrokeCap.Round,
+        )
+        // Soft glow around the scan line for a "scanning" effect
+        radialGlow(cx, scanY, 18f * u, palette.primary, 0.22f)
 
-        // Folder front pocket
-        val frontTop = cy + 4f * u + fy
-        val frontH = 54f * u
-        rrGradient(Brush.verticalGradient(listOf(palette.surface3, palette.surface5)), cx - 50f * u, frontTop, 100f * u, frontH, 10f * u)
-        rr(palette.primary.copy(alpha = 0.25f), cx - 50f * u, frontTop, 100f * u, frontH, 10f * u, 1.5f * u)
-
-        // Inner content lines
-        for (i in 0 until 3) {
-            rr(palette.primary.copy(alpha = 0.25f - i * 0.05f), cx - 34f * u, frontTop + 12f * u + i * 10f * u, 68f * u, 3f * u, 2f * u)
-        }
-
-        // Scanning beam
-        val scanY = frontTop + scan * frontH
-        drawLine(palette.primary.copy(alpha = 0.4f), Offset(cx - 48f * u, scanY), Offset(cx + 48f * u, scanY), 2f * u, StrokeCap.Round)
-
-        // Check badge
+        // ── Check badge (kept from the original) ──
+        // A circular primary-colored badge with a white checkmark at the
+        // top-right corner of the folder body. Only drawn when selected.
         if (selected) {
-            val bx = cx + 40f * u
-            val by = frontTop - 6f * u
+            val bx = bodyLeft + bodyW - 6f * u
+            val by = bodyTop - 6f * u
             radialGlow(bx, by, 28f * u, palette.primary, 0.3f)
             drawCircle(palette.primary, 20f * u, Offset(bx, by))
-            val cp = Path().apply { moveTo(bx - 8f * u, by); lineTo(bx - 2f * u, by + 6f * u); lineTo(bx + 8f * u, by - 6f * u) }
-            drawPath(cp, palette.background, style = Stroke(3.5f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            val cp = Path().apply {
+                moveTo(bx - 8f * u, by)
+                lineTo(bx - 2f * u, by + 6f * u)
+                lineTo(bx + 8f * u, by - 6f * u)
+            }
+            drawPath(
+                cp,
+                palette.background,
+                style = Stroke(3.5f * u, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
         }
     }
 }

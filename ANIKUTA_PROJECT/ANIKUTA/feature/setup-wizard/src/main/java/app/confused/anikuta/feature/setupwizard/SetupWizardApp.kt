@@ -571,6 +571,12 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
 
     val palette = wizardPaletteFromMaterialTheme()
 
+    // ── Custom-theme popup state ──
+    // Tapping CUSTOM does NOT change the theme — instead, show a popup telling
+    // the user they can configure a custom accent color in Settings → Appearance
+    // → General after completing the wizard.
+    var showCustomPopup by remember { mutableStateOf(false) }
+
     // All presets in a single row: 10 accent-only + 5 full-palette, then CUSTOM
     // at the end. Accent-only presets show a gradient circle; full-palette
     // presets show a mini swatch (bg + card + accent). Both use the same card
@@ -686,7 +692,7 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
                 item {
                     val selected = accentPreset == AccentPreset.CUSTOM
                     Column(
-                        modifier = Modifier.width(110.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) customAccent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) customAccent else Color.Transparent, RoundedCornerShape(16.dp)).clickable { themePrefs.selectCustom() }.padding(10.dp),
+                        modifier = Modifier.width(110.dp).clip(RoundedCornerShape(16.dp)).background(if (selected) customAccent.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant).border(2.dp, if (selected) customAccent else Color.Transparent, RoundedCornerShape(16.dp)).clickable { showCustomPopup = true }.padding(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
@@ -715,6 +721,42 @@ fun ThemeScreen(onBack: () -> Unit, onNext: () -> Unit) {
         }
         // Fixed footer
         ActionRow(back = onBack, next = onNext)
+    }
+
+    // ── Custom-theme popup ──
+    // Tapping CUSTOM doesn't change the theme — instead, this popup tells the
+    // user they can configure a custom accent color later in Settings →
+    // Appearance → General. We DON'T call themePrefs.selectCustom() here (per
+    // spec — the user configures the custom color after completing the wizard).
+    if (showCustomPopup) {
+        AlertDialog(
+            onDismissRequest = { showCustomPopup = false },
+            title = {
+                Text(
+                    "Custom Theme",
+                    fontFamily = RobotoFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                )
+            },
+            text = {
+                Text(
+                    "You can configure a custom accent color in Settings → " +
+                        "Appearance → General after completing the setup wizard.",
+                    fontFamily = RobotoFamily,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showCustomPopup = false }) {
+                    Text(
+                        "OK",
+                        fontFamily = RobotoFamily,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            },
+        )
     }
 }
 

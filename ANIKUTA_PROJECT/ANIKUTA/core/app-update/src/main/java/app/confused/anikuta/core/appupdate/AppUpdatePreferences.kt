@@ -56,6 +56,37 @@ class AppUpdatePreferences(
         },
     )
 
+    /**
+     * The version name of the APK the user is *about to* install.
+     *
+     * Set by [setPendingPostInstall] just before the system installer is
+     * launched (see [AppUpdateManager.installDownloadedApk]). On the next
+     * app startup, [AnikutaRoot] checks [getPendingPostInstall]: if non-empty,
+     * it means the user just installed an update — the post-install success
+     * popup is shown + the value is cleared via [clearPendingPostInstall].
+     */
+    private val pendingPostInstallPref = preferenceStore.getString(KEY_PENDING_POST_INSTALL, "")
+
+    /**
+     * Records the version the user is about to install. Called right before
+     * the system installer is launched.
+     */
+    fun setPendingPostInstall(version: String) {
+        pendingPostInstallPref.set(version)
+    }
+
+    /**
+     * Returns the version name of the most recent "about to install" record,
+     * or an empty string if none. The caller should clear it via
+     * [clearPendingPostInstall] after handling it.
+     */
+    fun getPendingPostInstall(): String = pendingPostInstallPref.get()
+
+    /** Clears the pending-post-install marker (after the popup has been shown). */
+    fun clearPendingPostInstall() {
+        pendingPostInstallPref.set("")
+    }
+
     // ── Enabled ──
 
     fun isUpdateCheckEnabled(): Boolean = enabledPref.get()
@@ -161,6 +192,7 @@ class AppUpdatePreferences(
         private const val KEY_DISMISSED_VERSION = "pref_app_update_dismissed_version"
         private const val KEY_DISMISSED_TIMESTAMP = "pref_app_update_dismissed_timestamp"
         private const val KEY_DOWNLOADED_APKS = "pref_app_update_downloaded_apks"
+        private const val KEY_PENDING_POST_INSTALL = "pref_app_update_pending_post_install"
 
         /** 6 hours in milliseconds. */
         private const val DISMISS_COOLDOWN_MS = 6 * 60 * 60 * 1000L

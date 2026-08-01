@@ -1,7 +1,9 @@
 package app.confused.anikuta.feature.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
@@ -25,6 +29,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -35,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,6 +97,16 @@ fun AboutScreen(
     val lastCheckError by updateManager.lastCheckError.collectAsStateWithLifecycle()
     val downloadedApks by updatePrefs.observeDownloadedApks().collectAsStateWithLifecycle(emptyList())
     val autoCheckEnabled by updatePrefs.observeUpdateCheckEnabled().collectAsStateWithLifecycle(true)
+    // ── Download progress + latest update (for the progress bar + red dot) ──
+    // downloadProgress is non-null while a download is in-flight; we render a
+    // thick progress bar below the "Check for updates" row so the user can see
+    // the live progress without expanding the update sheet.
+    // latestUpdate is non-null when an update has been found — we show a red
+    // notification dot on the "Check for updates" row to flag it.
+    val downloadProgress by updateManager.downloadProgress.collectAsStateWithLifecycle()
+    val latestUpdate by updateManager.latestUpdate.collectAsStateWithLifecycle()
+    val showUpdateDot = latestUpdate != null ||
+        (downloadProgress != null && !downloadProgress!!.isComplete && downloadProgress!!.error == null)
 
     // Get installed version.
     val installedVersionName = remember {
@@ -203,18 +219,37 @@ fun AboutScreen(
                             .padding(horizontal = 16.dp, vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (isChecking) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.width(24.dp).height(24.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Check",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
+                        // Icon + optional red dot when an update is available
+                        // OR a download is in progress (so the user knows to
+                        // open the row / sheet to see status).
+                        Box {
+                            if (isChecking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = "Check",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                            if (showUpdateDot) {
+                                // 8dp red dot at the top-end corner of the icon —
+                                // same style as MoreScreen's MoreRow dot.
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(8.dp)
+                                        .background(
+                                            color = Color(0xFFFF5252),
+                                            shape = CircleShape,
+                                        ),
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -235,6 +270,48 @@ fun AboutScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // ── Live download progress bar (only while downloading) ──
+            // Visible without expanding the update sheet — gives the user a
+            // glance-able progress indicator right inside About.
+            if (downloadProgress != null &&
+                !downloadProgress!!.isComplete &&
+                downloadProgress!!.error == null
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "Downloading update…",
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "${downloadProgress!!.percent ?: 0}%",
+                                fontFamily = RobotoFamily,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { (downloadProgress!!.percent ?: 0) / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }

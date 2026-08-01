@@ -180,6 +180,28 @@ class AppController(
     var showUpdateDialog by mutableStateOf(false)
         private set
 
+    /**
+     * Whether the post-install success popup should be shown.
+     *
+     * Set to true by [showPostInstallPopup] when [AnikutaRoot] detects on
+     * startup that the user just installed an update (via
+     * [AppUpdatePreferences.getPendingPostInstall]). The popup animates a
+     * "Cleaning up downloaded APK…" → "APK deleted" sequence + auto-dismisses
+     * after ~2 seconds (see [PostInstallSuccessSheet]).
+     */
+    var showPostInstallSuccess by mutableStateOf(false)
+        private set
+
+    /** Shows the post-install success popup. */
+    fun showPostInstallPopup() {
+        showPostInstallSuccess = true
+    }
+
+    /** Dismisses the post-install success popup. */
+    fun dismissPostInstallPopup() {
+        showPostInstallSuccess = false
+    }
+
     /** Episodes currently resolving (tapped download, waiting for source response). */
     val resolvingEpisodes = mutableStateMapOf<String, Boolean>()
 
